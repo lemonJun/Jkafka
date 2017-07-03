@@ -1,10 +1,9 @@
 package kafka.network;
 
-/**
- * Created by Administrator on 2017/4/22.
- */
-public class InvalidRequestException extends RuntimeException {
-    public InvalidRequestException(String msg) {
-        super(msg);
+import kafka.common.KafkaException;
+
+public class InvalidRequestException extends KafkaException {
+    public InvalidRequestException(String format, Object... args) {
+        super(format, args);
     }
 }

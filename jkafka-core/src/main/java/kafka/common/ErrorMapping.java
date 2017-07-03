@@ -1,91 +1,77 @@
-package kafka.common;/**
- * Created by zhoulf on 2017/4/25.
- */
+package kafka.common;
 
 import java.nio.ByteBuffer;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.stream.Collectors;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.common.base.Objects;
+import com.google.common.base.Throwables;
+import com.google.common.collect.BiMap;
+
+import kafka.message.InvalidMessageException;
 
 /**
- * A bi-directional mapping between error codes and exceptions
+ * A bi-directional mapping between error codes and exceptions x
  */
-public class ErrorMapping {
-    public static ByteBuffer EmptyByteBuffer = ByteBuffer.allocate(0);
+public abstract class ErrorMapping {
+    public static final ByteBuffer EmptyByteBuffer = ByteBuffer.allocate(0);
 
-    public static Short UnknownCode = -1;
-    public static Short NoError = 0;
-    public static Short OffsetOutOfRangeCode = 1;
-    public static Short InvalidMessageCode = 2;
-    public static Short UnknownTopicOrPartitionCode = 3;
-    public static Short InvalidFetchSizeCode = 4;
-    public static Short LeaderNotAvailableCode = 5;
-    public static Short NotLeaderForPartitionCode = 6;
-    public static Short RequestTimedOutCode = 7;
-    public static Short BrokerNotAvailableCode = 8;
-    public static Short ReplicaNotAvailableCode = 9;
-    public static Short MessageSizeTooLargeCode = 10;
-    public static Short StaleControllerEpochCode = 11;
-    public static Short OffsetMetadataTooLargeCode = 12;
-    public static Short StaleLeaderEpochCode = 13;
-    public static Short OffsetsLoadInProgressCode = 14;
-    public static Short ConsumerCoordinatorNotAvailableCode = 15;
-    public static Short NotCoordinatorForConsumerCode = 16;
-    public static Short InidTopicCode = 17;
-    public static Short MessageSetSizeTooLargeCode = 18;
-    public static Short NotEnoughReplicasCode = 19;
-    public static Short NotEnoughReplicasAfterAppendCode = 20;
+    public static final short UnknownCode = -1;
+    public static final short NoError = 0;
+    public static final short OffsetOutOfRangeCode = 1;
+    public static final short InvalidMessageCode = 2;
+    public static final short UnknownTopicOrPartitionCode = 3;
+    public static final short InvalidFetchSizeCode = 4;
+    public static final short LeaderNotAvailableCode = 5;
+    public static final short NotLeaderForPartitionCode = 6;
+    public static final short RequestTimedOutCode = 7;
+    public static final short BrokerNotAvailableCode = 8;
+    public static final short ReplicaNotAvailableCode = 9;
+    public static final short MessageSizeTooLargeCode = 10;
+    public static final short StaleControllerEpochCode = 11;
+    public static final short OffsetMetadataTooLargeCode = 12;
+    public static final short StaleLeaderEpochCode = 13;
 
-    private static Map<Class<Exception>, Short> exceptionToCode = new HashMap() {{
-        put(OffsetOutOfRangeException.class, OffsetOutOfRangeCode);
-//        put(InvalidMessageException.class,InvalidMessageCode);
-//        put(UnknownTopicOrPartitionException.class,UnknownTopicOrPartitionCode);
-        put(InvalidMessageSizeException.class, InvalidFetchSizeCode);
-//        put(NotLeaderForPartitionException.class,NotLeaderForPartitionCode);
-//        put(LeaderNotAvailableException.class,LeaderNotAvailableCode);
-//        put(RequestTimedOutException.class,RequestTimedOutCode);
-//        put(BrokerNotAvailableException.class,BrokerNotAvailableCode);
-//        put(ReplicaNotAvailableException.class,ReplicaNotAvailableCode);
-        put(MessageSizeTooLargeException.class, MessageSizeTooLargeCode);
-//        put(ControllerMovedException.class,StaleControllerEpochCode);
-//        put(OffsetMetadataTooLargeException.class,OffsetMetadataTooLargeCode);
-//        put(OffsetsLoadInProgressException.class,OffsetsLoadInProgressCode);
-//        put(ConsumerCoordinatorNotAvailableException.class,ConsumerCoordinatorNotAvailableCode);
-//        put(NotCoordinatorForConsumerException.class,NotCoordinatorForConsumerCode);
-//        put(InvalidTopicException.class,InvalidTopicCode);
-        put(MessageSetSizeTooLargeException.class, MessageSetSizeTooLargeCode);
-//        put(NotEnoughReplicasException.class,NotEnoughReplicasCode);
-//        put(NotEnoughReplicasAfterAppendException.class,NotEnoughReplicasAfterAppendCode);
-    }};
+    private static BiMap<Class<? extends Throwable>, Short> exceptionToCode;
 
-    /* invert the mapping */
-    private static final Map<Short, Class<Exception>> codeToException = exceptionToCode.entrySet().stream()
-            .collect(Collectors.toMap(kv -> kv.getValue(), kv -> kv.getKey()));
-
-    public static Short codeFor(Class exception){
-        return exceptionToCode.get(exception);
+    static {
+        exceptionToCode.put(OffsetOutOfRangeException.class, OffsetOutOfRangeCode);
+        exceptionToCode.put(InvalidMessageException.class, InvalidMessageCode);
+        exceptionToCode.put(UnknownTopicOrPartitionException.class, UnknownTopicOrPartitionCode);
+        exceptionToCode.put(InvalidMessageSizeException.class, InvalidFetchSizeCode);
+        exceptionToCode.put(NotLeaderForPartitionException.class, NotLeaderForPartitionCode);
+        exceptionToCode.put(LeaderNotAvailableException.class, LeaderNotAvailableCode);
+        exceptionToCode.put(RequestTimedOutException.class, RequestTimedOutCode);
+        exceptionToCode.put(BrokerNotAvailableException.class, BrokerNotAvailableCode);
+        exceptionToCode.put(ReplicaNotAvailableException.class, ReplicaNotAvailableCode);
+        exceptionToCode.put(MessageSizeTooLargeException.class, MessageSizeTooLargeCode);
+        exceptionToCode.put(ControllerMovedException.class, StaleControllerEpochCode);
+        exceptionToCode.put(OffsetMetadataTooLargeException.class, OffsetMetadataTooLargeCode);
     }
 
-    public void maybeThrowException(Short code) {
-        if (code != 0)
-            try {
-                throw codeToException.get(code).newInstance();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+    public static Short codeFor(Class<? extends Throwable> exception) {
+        return Objects.firstNonNull(exceptionToCode.get(exception), UnknownCode);
     }
 
-    public Exception exceptionFor(Short code) {
+    public static void maybeThrowException(Short code) {
+        Throwable throwable = exceptionFor(code);
+        if (throwable != null) {
+            throw Throwables.propagate(throwable);
+        }
+    }
+
+    static Logger logger = LoggerFactory.getLogger(ErrorMapping.class);
+
+    public static KafkaException exceptionFor(Short code) {
+        Class<? extends Throwable> throwable = exceptionToCode.inverse().get(code);
+        if (throwable == null)
+            return null;
+
         try {
-            Class<Exception> c = codeToException.get(code);
-            if (c == null) {
-                return UnknownCodecException.class.newInstance();
-            }
-            return c.newInstance();
-        } catch (InstantiationException e) {
-            e.printStackTrace();
-        } catch (IllegalAccessException e) {
-            e.printStackTrace();
+            return (KafkaException) throwable.newInstance();
+        } catch (Exception e) {
+            logger.error("create instance of {} error", throwable, e);
         }
         return null;
     }

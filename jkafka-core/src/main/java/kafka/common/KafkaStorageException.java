@@ -1,23 +1,17 @@
 package kafka.common;
 
-/**
- * Created by Administrator on 2017/3/27.
- */
-public class KafkaStorageException extends RuntimeException {
-    private String message;
-    private Throwable t;
+import java.io.IOException;
 
-    public KafkaStorageException(String message, Throwable t) {
-        super(message, t);
-        this.message = message;
-        this.t = t;
+public class KafkaStorageException extends KafkaException {
+    public KafkaStorageException(String format, Object... args) {
+        super(format, args);
     }
 
-    public KafkaStorageException(String message) {
-        this(message, null);
+    public KafkaStorageException(IOException e, String format, Object... args) {
+        super(e, format, args);
     }
 
-    public KafkaStorageException(Throwable t) {
-        this("", t);
+    public KafkaStorageException(Throwable e, String format, Object... args) {
+        super(e, format, args);
     }
 }

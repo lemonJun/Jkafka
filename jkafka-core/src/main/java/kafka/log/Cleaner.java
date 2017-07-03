@@ -1,47 +1,65 @@
-package kafka.log;/**
- * Created by zhoulf on 2017/4/11.
- */
+package kafka.log;
+
+import static com.google.common.base.Preconditions.checkState;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.Date;
 import java.util.List;
-import java.util.stream.Collectors;
 
-import org.apache.commons.collections.CollectionUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
 
-import kafka.common.LogCleaningAbortedException;
-import kafka.func.ActionWithParam;
-import kafka.func.Tuple;
+import kafka.common.OptimisticLockFailureException;
 import kafka.message.ByteBufferMessageSet;
+import kafka.message.ByteBufferMessageSets;
 import kafka.message.Message;
 import kafka.message.MessageAndOffset;
-import kafka.message.MessageSet;
-import kafka.utils.Logging;
-import kafka.utils.Prediction;
+import kafka.message.MessageSets;
+import kafka.utils.Function1;
 import kafka.utils.Throttler;
 import kafka.utils.Time;
+import kafka.utils.Utils;
 
-/**
- * This class holds the actual logic for cleaning a log
- **/
-public class Cleaner extends Logging {
-    public Integer id;
+public class Cleaner {
+    public int id;
     public OffsetMap offsetMap;
-    public Integer ioBufferSize;
-    public Integer maxIoBufferSize;
-    public Double dupBufferLoadFactor;
+    public int ioBufferSize;
+    public int maxIoBufferSize;
+    public double dupBufferLoadFactor;
     public Throttler throttler;
     public Time time;
-    public ActionWithParam<TopicAndPartition> checkDone;
 
+    /**
+     * This class holds the actual logic for cleaning a log
+     *
+     * @param id           An identifier used for logging
+     * @param offsetMap    The map used for deduplication
+     * @param ioBufferSize The size of the buffers to use. Memory usage will be 2x this number as there is a read and write buffer.
+     * @param throttler    The throttler instance to use for limiting I/O rate.
+     * @param time         The time instance
+     */
+    public Cleaner(int id, OffsetMap offsetMap, int ioBufferSize, int maxIoBufferSize, double dupBufferLoadFactor, Throttler throttler, Time time) {
+        this.id = id;
+        this.offsetMap = offsetMap;
+        this.ioBufferSize = ioBufferSize;
+        this.maxIoBufferSize = maxIoBufferSize;
+        this.dupBufferLoadFactor = dupBufferLoadFactor;
+        this.throttler = throttler;
+        this.time = time;
 
-    /* cleaning stats - one instance for the current (or next) cleaning cycle and one for the last completed cycle */
-    Tuple<CleanerStats, CleanerStats> statsUnderlying;
+        logger = LoggerFactory.getLogger(Cleaner.class + "-" + id);
+        stats = new CleanerStats(time);
+        readBuffer = ByteBuffer.allocate(ioBufferSize);
+        writeBuffer = ByteBuffer.allocate(ioBufferSize);
+    }
+
+    Logger logger;
+
+    /* stats on this cleaning */
     public CleanerStats stats;
 
     /* buffer used for read i/o */
@@ -51,116 +69,85 @@ public class Cleaner extends Logging {
     private ByteBuffer writeBuffer;
 
     /**
-     * @param id           An identifier used for logging
-     * @param offsetMap    The map used for deduplication
-     * @param ioBufferSize The size of the buffers to use. Memory usage will be 2x this number as there is a read and write buffer.
-     * @param throttler    The throttler instance to use for limiting I/O rate.
-     * @param time         The time instance
-     */
-    public Cleaner(Integer id, OffsetMap offsetMap, Integer ioBufferSize, Integer maxIoBufferSize, Double dupBufferLoadFactor, Throttler throttler, Time time, ActionWithParam<TopicAndPartition> checkDone) {
-        this.id = id;
-        this.offsetMap = offsetMap;
-        this.ioBufferSize = ioBufferSize;
-        this.maxIoBufferSize = maxIoBufferSize;
-        this.dupBufferLoadFactor = dupBufferLoadFactor;
-        this.throttler = throttler;
-        this.time = time;
-        this.checkDone = checkDone;
-        this.logIdent = "Cleaner " + id + ": ";
-        loggerName(LogCleaner.class.getName());
-        statsUnderlying = Tuple.of(new CleanerStats(time), new CleanerStats(time));
-        stats = statsUnderlying.v1;
-        readBuffer = ByteBuffer.allocate(ioBufferSize);
-        writeBuffer = ByteBuffer.allocate(ioBufferSize);
-    }
-
-    /**
      * Clean the given log
      *
      * @param cleanable The log to be cleaned
      * @return The first offset not cleaned
      */
-    public Long clean(LogToClean cleanable) throws IOException, InterruptedException {
+    public long clean(LogToClean cleanable) throws InterruptedException {
         stats.clear();
-        info(String.format("Beginning cleaning of log %s.", cleanable.log.name));
+        logger.info("Beginning cleaning of log {}.", cleanable.log.name());
         Log log = cleanable.log;
+        int truncateCount = log.numberOfTruncates();
 
-        // build the offset map;
-        info(String.format("Building offset map for %s...", cleanable.log.name));
-        Long upperBoundOffset = log.activeSegment().baseOffset;
-        Long endOffset = buildOffsetMap(log, cleanable.firstDirtyOffset, upperBoundOffset, offsetMap) + 1;
+        // build the offset map
+        logger.info("Building offset map for {}...", cleanable.log.name());
+        long upperBoundOffset = log.activeSegment().baseOffset;
+        long endOffset = buildOffsetMap(log, cleanable.firstDirtyOffset, upperBoundOffset, offsetMap) + 1;
         stats.indexDone();
 
-        // figure out the timestamp below which it is safe to remove delete tombstones;
-        // this position is defined to be a configurable time beneath the last modified time of the last clean segment;
-        List<LogSegment> list = Lists.newArrayList(log.logSegments(0L, cleanable.firstDirtyOffset));
-        Long deleteHorizonMs;
-        if (CollectionUtils.isEmpty(list)) {
-            deleteHorizonMs = 0L;
-        } else {
-            deleteHorizonMs = list.get(list.size() - 1).lastModified() - log.config.deleteRetentionMs;
-        }
+        // figure out the timestamp below which it is safe to remove delete tombstones
+        // this position is defined to be a configurable time beneath the last modified time of the last clean segment
+        LogSegment seg = Utils.lastOption(log.logSegments(0, cleanable.firstDirtyOffset));
+        long deleteHorizonMs = seg == null ? 0L : (seg.lastModified() - log.config.deleteRetentionMs);
 
-        // group the segments and clean the groups;
-        info(String.format("Cleaning log %s (discarding tombstones prior to %s)...", log.name, new Date(deleteHorizonMs)));
-        for (List<LogSegment> group : groupSegmentsBySize(log.logSegments(0L, endOffset), log.config.segmentSize, log.config.maxIndexSize))
-            cleanSegments(log, group, offsetMap, deleteHorizonMs);
-
-        // record buffer utilization;
-        stats.bufferUtilization = offsetMap.utilization();
+        // group the segments and clean the groups
+        logger.info("Cleaning log {} (discarding tombstones prior to {})...", log.name(), new Date(deleteHorizonMs));
+        for (List<LogSegment> group : groupSegmentsBySize(log.logSegments(0, endOffset), log.config.segmentSize, log.config.maxIndexSize))
+            cleanSegments(log, group, offsetMap, truncateCount, deleteHorizonMs);
 
         stats.allDone();
-
         return endOffset;
     }
 
     /**
      * Clean a group of segments into a single replacement segment
      *
-     * @param log             The log being cleaned
-     * @param segments        The group of segments being cleaned
-     * @param map             The offset map to use for cleaning segments
-     * @param deleteHorizonMs The time to retain delete tombstones
+     * @param log                   The log being cleaned
+     * @param segments              The group of segments being cleaned
+     * @param map                   The offset map to use for cleaning segments
+     * @param expectedTruncateCount A count used to check if the log is being truncated and rewritten under our feet
+     * @param deleteHorizonMs       The time to retain delete tombstones
      */
-    public void cleanSegments(Log log,
-                              List<LogSegment> segments,
-                              OffsetMap map,
-                              Long deleteHorizonMs) throws IOException {
-        // create a new segment with the suffix .cleaned appended to both the log and index name;
-        File logFile = new File(segments.get(0).log.file.getPath() + Log.CleanedFileSuffix);
+    void cleanSegments(Log log, List<LogSegment> segments, OffsetMap map, int expectedTruncateCount, long deleteHorizonMs) throws InterruptedException {
+        // create a new segment with the suffix .cleaned appended to both the log and index name
+        File logFile = new File(Utils.head(segments).log.file.getPath() + Logs.CleanedFileSuffix);
         logFile.delete();
-        File indexFile = new File(segments.get(0).index.file.getPath() + Log.CleanedFileSuffix);
+        File indexFile = new File(Utils.head(segments).index.file.getPath() + Logs.CleanedFileSuffix);
         indexFile.delete();
         FileMessageSet messages = new FileMessageSet(logFile);
-        OffsetIndex index = new OffsetIndex(indexFile, segments.get(0).baseOffset, segments.get(0).index.maxIndexSize);
-        LogSegment cleaned = new LogSegment(messages, index, segments.get(0).baseOffset, segments.get(0).indexIntervalBytes, log.config.randomSegmentJitter, time);
+        OffsetIndex index = new OffsetIndex(indexFile, Utils.head(segments).baseOffset, Utils.head(segments).index.maxIndexSize);
+        LogSegment cleaned = new LogSegment(messages, index, Utils.head(segments).baseOffset, Utils.head(segments).indexIntervalBytes, time);
 
-        try {
-            // clean segments into the new destination segment;
-            for (LogSegment old : segments) {
-                boolean retainDeletes = old.lastModified() > deleteHorizonMs;
-                info(String.format("Cleaning segment %s in log %s (last modified %s) into %s, %s deletes.", old.baseOffset, log.name, new Date(old.lastModified()), cleaned.baseOffset, retainDeletes ? "retaining" : "discarding"));
-                cleanInto(log.topicAndPartition, old, cleaned, map, retainDeletes);
+        // clean segments into the new destination segment
+        for (LogSegment old : segments) {
+            boolean retainDeletes = old.lastModified() > deleteHorizonMs;
+            logger.info("Cleaning segment {} in log {} (last modified {}) into {}, {} deletes.", old.baseOffset, log.name(), new Date(old.lastModified()), cleaned.baseOffset, (retainDeletes ? "retaining" : "discarding"));
+            cleanInto(old, cleaned, map, retainDeletes);
+        }
+
+        // trim excess index
+        index.trimToValidSize();
+
+        // flush new segment to disk before swap
+        cleaned.flush();
+
+        // update the modification date to retain the last modified date of the original files
+        long modified = Utils.last(segments).lastModified();
+        cleaned.lastModified(modified);
+
+        // swap in new segment
+        logger.info("Swapping in cleaned segment {} for segment(s) {} in log {}.", cleaned.baseOffset, Utils.mapList(segments, new Function1<LogSegment, Long>() {
+            @Override
+            public Long apply(LogSegment _) {
+                return _.baseOffset;
             }
-
-            // trim excess index;
-            index.trimToValidSize();
-
-            // flush new segment to disk before swap;
-            cleaned.flush();
-
-            // update the modification date to retain the last modified date of the original files;
-            Long modified = segments.get(segments.size() - 1).lastModified();
-            cleaned.setLastModified(modified);
-
-            // swap in new segment;
-            info(String.format("Swapping in cleaned segment %d for segment(s) %s in log %s.", cleaned.baseOffset, segments.stream().map(s -> s.baseOffset).collect(Collectors.toList()), log.name));
-            log.replaceSegments(cleaned, segments);
-        } catch (LogCleaningAbortedException e) {
+        }), log.name());
+        try {
+            log.replaceSegments(cleaned, segments, expectedTruncateCount);
+        } catch (OptimisticLockFailureException e) {
             cleaned.delete();
             throw e;
-        } catch (InterruptedException e) {
-            error(e.getMessage(),e);
         }
     }
 
@@ -172,49 +159,48 @@ public class Cleaner extends Logging {
      * @param dest          The cleaned log segment
      * @param map           The key=>offset mapping
      * @param retainDeletes Should delete tombstones be retained while cleaning this segment
-     *                      <p>
-     *                      Implement TODO proper compression support
+     *                      <p/>
+     *                      TODO: Implement proper compression support
      */
-    void cleanInto(TopicAndPartition topicAndPartition, LogSegment source,
-                   LogSegment dest, OffsetMap map, Boolean retainDeletes) throws IOException, InterruptedException {
-        Integer position = 0;
+    private void cleanInto(LogSegment source, LogSegment dest, OffsetMap map, boolean retainDeletes) throws InterruptedException {
+        int position = 0;
         while (position < source.log.sizeInBytes()) {
-            checkDone.invoke(topicAndPartition);
-            // read a chunk of messages and copy any that are to be retained to the write buffer to be written out;
+            checkDone();
+            // read a chunk of messages and copy any that are to be retained to the write buffer to be written out
             readBuffer.clear();
             writeBuffer.clear();
             ByteBufferMessageSet messages = new ByteBufferMessageSet(source.log.readInto(readBuffer, position));
-            throttler.maybeThrottle((double) messages.sizeInBytes());
-            // check each message to see if it is to be retained;
-            Integer messagesRead = 0;
+            throttler.maybeThrottle(messages.sizeInBytes());
+            // check each message to see if it is to be retained
+            int messagesRead = 0;
             for (MessageAndOffset entry : messages) {
                 messagesRead += 1;
-                Integer size = MessageSet.entrySize(entry.message);
+                int size = MessageSets.entrySize(entry.message);
                 position += size;
                 stats.readMessage(size);
                 ByteBuffer key = entry.message.key();
-                Prediction.require(key != null, String.format("Found null key in log segment %s which is marked as dedupe.", source.log.file.getAbsolutePath()));
-                Long foundOffset = map.get(key);
-        /* two cases in which we can get rid of a message:
-         *   1) if there exists a message with the same key but higher offset
-         *   2) if the message is a delete "tombstone" marker and enough time has passed
-         */
+                checkState(key != null, String.format("Found null key in log segment %s which is marked as dedupe.", source.log.file.getAbsolutePath()));
+                long foundOffset = map.get(key);
+                /* two cases in which we can get rid of a message:
+                 *   1) if there exists a message with the same key but higher offset
+                 *   2) if the message is a delete "tombstone" marker and enough time has passed
+                 */
                 boolean redundant = foundOffset >= 0 && entry.offset < foundOffset;
                 boolean obsoleteDelete = !retainDeletes && entry.message.isNull();
                 if (!redundant && !obsoleteDelete) {
-                    ByteBufferMessageSet.writeMessage(writeBuffer, entry.message, entry.offset);
+                    ByteBufferMessageSets.writeMessage(writeBuffer, entry.message, entry.offset);
                     stats.recopyMessage(size);
                 }
             }
-            // if any messages are to be retained, write them out;
+            // if any messages are to be retained, write them out
             if (writeBuffer.position() > 0) {
                 writeBuffer.flip();
                 ByteBufferMessageSet retained = new ByteBufferMessageSet(writeBuffer);
-                dest.append(retained.head().offset, retained);
-                throttler.maybeThrottle((double) writeBuffer.limit());
+                dest.append(Utils.head(retained).offset, retained);
+                throttler.maybeThrottle(writeBuffer.limit());
             }
 
-            // if we read bytes but didn't get even one complete message, our I/O buffer is too small, grow it and try again;
+            // if we read bytes but didn't get even one complete message, our I/O buffer is too small, grow it and try again
             if (readBuffer.limit() > 0 && messagesRead == 0)
                 growBuffers();
         }
@@ -227,8 +213,8 @@ public class Cleaner extends Logging {
     public void growBuffers() {
         if (readBuffer.capacity() >= maxIoBufferSize || writeBuffer.capacity() >= maxIoBufferSize)
             throw new IllegalStateException(String.format("This log contains a message larger than maximum allowable size of %s.", maxIoBufferSize));
-        Integer newSize = Math.min(this.readBuffer.capacity() * 2, maxIoBufferSize);
-        info("Growing cleaner I/O buffers from " + readBuffer.capacity() + "bytes to " + newSize + " bytes.");
+        int newSize = Math.min(this.readBuffer.capacity() * 2, maxIoBufferSize);
+        logger.info("Growing cleaner I/O buffers from " + readBuffer.capacity() + "bytes to " + newSize + " bytes.");
         this.readBuffer = ByteBuffer.allocate(newSize);
         this.writeBuffer = ByteBuffer.allocate(newSize);
     }
@@ -253,26 +239,24 @@ public class Cleaner extends Logging {
      * @param maxIndexSize the maximum size in bytes for the total of all index data in a group
      * @return A list of grouped segments
      */
-    List<List<LogSegment>> groupSegmentsBySize(Collection<LogSegment> segments, Integer maxSize, Integer maxIndexSize) {
-        List<LogSegment> segs = Lists.newArrayList(segments);
+    List<List<LogSegment>> groupSegmentsBySize(Iterable<LogSegment> segments, int maxSize, int maxIndexSize) {
         List<List<LogSegment>> grouped = Lists.newArrayList();
+        List<LogSegment> segs = Lists.newArrayList(segments);
         while (!segs.isEmpty()) {
-            List<LogSegment> group = Lists.newArrayList(segs.get(0));
-            Long logSize = segs.get(0).size();
-            Integer indexSize = segs.get(0).index.sizeInBytes();
-            segs = segs.subList(1, segs.size());
-            while (!segs.isEmpty() &&
-                    logSize + segs.get(0).size() < maxSize &&
-                    indexSize + segs.get(0).index.sizeInBytes() < maxIndexSize) {
-//                group = segs.get(0)::group;
-                logSize += segs.get(0).size();
-                indexSize += segs.get(0).index.sizeInBytes();
-                segs = segs.subList(1, segs.size());
+            List<LogSegment> group = Lists.newArrayList(Utils.head(segs));
+            long logSize = Utils.head(segs).size();
+            int indexSize = Utils.head(segs).index.sizeInBytes();
+            segs = Utils.tail(segs);
+            while (!segs.isEmpty() && logSize + Utils.head(segs).size() < maxSize && indexSize + Utils.head(segs).index.sizeInBytes() < maxIndexSize) {
+                group.add(Utils.head(segs));
+                logSize += Utils.head(segs).size();
+                indexSize += Utils.head(segs).index.sizeInBytes();
+                segs = Utils.tail(segs);
             }
-//            grouped:: = group.reverse;
+            grouped.add(group);
         }
-//        grouped.reverse;
-        return null;
+
+        return grouped;
     }
 
     /**
@@ -284,22 +268,22 @@ public class Cleaner extends Logging {
      * @param map   The map in which to store the mappings
      * @return The final offset the map covers
      */
-    Long buildOffsetMap(Log log, Long start, Long end, OffsetMap map) throws IOException, InterruptedException {
+    long buildOffsetMap(Log log, long start, long end, OffsetMap map) throws InterruptedException {
         map.clear();
-        List<LogSegment> dirty = Lists.newArrayList(log.logSegments(start, end));
-        info(String.format("Building offset map for log %s for %d segments in offset range [%d, %d).", log.name, dirty.size(), start, end));
+        Collection<LogSegment> dirty = log.logSegments(start, end);
+        logger.info("Building offset map for log {} for {} segments in offset range [{}, {}).", log.name(), dirty.size(), start, end);
 
         // Add all the dirty segments. We must take at least map.slots * load_factor,
         // but we may be able to fit more (if there is lots of duplication in the dirty section of the log)
-        Long offset = dirty.get(0).baseOffset;
-        Prediction.require(offset == start, String.format("Last clean offset is %d but segment base offset is %d for log %s.", start, offset, log.name));
-        Long minStopOffset = (long) (start + map.slots() * this.dupBufferLoadFactor);
+        long offset = Utils.head(dirty).baseOffset;
+        checkState(offset == start, String.format("Last clean offset is %d but segment base offset is %d for log %s.", start, offset, log.name()));
+        long minStopOffset = (long) (start + map.slots() * this.dupBufferLoadFactor);
         for (LogSegment segment : dirty) {
-            checkDone.invoke(log.topicAndPartition);
+            checkDone();
             if (segment.baseOffset <= minStopOffset || map.utilization() < this.dupBufferLoadFactor)
-                offset = buildOffsetMapForSegment(log.topicAndPartition, segment, map);
+                offset = buildOffsetMap(segment, map);
         }
-        info(String.format("Offset map for log %s complete.", log.name));
+        logger.info("Offset map for log {} complete.", log.name());
         return offset;
     }
 
@@ -310,130 +294,37 @@ public class Cleaner extends Logging {
      * @param map     The map in which to store the key=>offset mapping
      * @return The final offset covered by the map
      */
-    private Long buildOffsetMapForSegment(TopicAndPartition topicAndPartition, LogSegment segment, OffsetMap map) throws IOException, InterruptedException {
-        Integer position = 0;
-        Long offset = segment.baseOffset;
+    private long buildOffsetMap(LogSegment segment, OffsetMap map) throws InterruptedException {
+        int position = 0;
+        long offset = segment.baseOffset;
         while (position < segment.log.sizeInBytes()) {
-            checkDone.invoke(topicAndPartition);
+            checkDone();
             readBuffer.clear();
             ByteBufferMessageSet messages = new ByteBufferMessageSet(segment.log.readInto(readBuffer, position));
-            throttler.maybeThrottle(new Double(messages.sizeInBytes()));
-            Integer startPosition = position;
+            throttler.maybeThrottle(messages.sizeInBytes());
+            int startPosition = position;
             for (MessageAndOffset entry : messages) {
                 Message message = entry.message;
-                Prediction.require(message.hasKey());
-                Integer size = MessageSet.entrySize(message);
+                checkState(message.hasKey());
+                int size = MessageSets.entrySize(message);
                 position += size;
                 map.put(message.key(), entry.offset);
                 offset = entry.offset;
                 stats.indexMessage(size);
             }
-            // if we didn't read even one complete message, our read buffer may be too small;
+            // if we didn't read even one complete message, our read buffer may be too small
             if (position == startPosition)
                 growBuffers();
         }
         restoreBuffers();
         return offset;
     }
-}
-
-class CleanerConfig {
-    public Integer numThreads = 1;
-    public Long dedupeBufferSize = 4 * 1024 * 1024L;
-    public Double dedupeBufferLoadFactor = 0.9d;
-    public Integer ioBufferSize = 1024 * 1024;
-    public Integer maxMessageSize = 32 * 1024 * 1024;
-    public Double maxIoBytesPerSecond = java.lang.Double.MAX_VALUE;
-    public Long backOffMs = 15 * 1000L;
-    public Boolean enableCleaner = true;
-    public String hashAlgorithm = "MD5";
 
     /**
-     * Configuration parameters for the log cleaner
-     *
-     * @param numThreads             The number of cleaner threads to run
-     * @param dedupeBufferSize       The total memory used for log deduplication
-     * @param dedupeBufferLoadFactor The maximum percent full for the deduplication buffer
-     * @param maxMessageSize         The maximum size of a message that can appear in the log
-     * @param maxIoBytesPerSecond    The maximum read and write I/O that all cleaner threads are allowed to do
-     * @param backOffMs              The amount of time to wait before rechecking if no logs are eligible for cleaning
-     * @param enableCleaner          Allows completely disabling the log cleaner
-     * @param hashAlgorithm          The hash algorithm to use in key comparison.
+     * If we aren't running any more throw an AllDoneException
      */
-    public CleanerConfig(Integer numThreads, Long dedupeBufferSize, Double dedupeBufferLoadFactor, Integer ioBufferSize, Integer maxMessageSize, Double maxIoBytesPerSecond, Long backOffMs, Boolean enableCleaner, String hashAlgorithm) {
-        this.numThreads = numThreads;
-        this.dedupeBufferSize = dedupeBufferSize;
-        this.dedupeBufferLoadFactor = dedupeBufferLoadFactor;
-        this.ioBufferSize = ioBufferSize;
-        this.maxMessageSize = maxMessageSize;
-        this.maxIoBytesPerSecond = maxIoBytesPerSecond;
-        this.backOffMs = backOffMs;
-        this.enableCleaner = enableCleaner;
-        this.hashAlgorithm = hashAlgorithm;
-    }
-
-    public CleanerConfig() {
-    }
-
-    public CleanerConfig(Boolean enableCleaner) {
-        this.enableCleaner = enableCleaner;
-    }
-}
-
-class CleanerStats {
-    public Time time;
-
-    /**
-     * A simple struct for collecting stats about log cleaning
-     */
-    public CleanerStats(Time time) {
-        this.time = time;
-        clear();
-        elapsedSecs = (endTime - startTime) / 1000.0;
-        elapsedIndexSecs = (mapCompleteTime - startTime) / 1000.0;
-
-    }
-
-    public Long startTime, mapCompleteTime, endTime, bytesRead, bytesWritten, mapBytesRead, mapMessagesRead, messagesRead, messagesWritten = 0L;
-    public Double bufferUtilization = 0.0d;
-
-    public void readMessage(Integer size) {
-        messagesRead += 1;
-        bytesRead += size;
-    }
-
-    public void recopyMessage(Integer size) {
-        messagesWritten += 1;
-        bytesWritten += size;
-    }
-
-    public void indexMessage(Integer size) {
-        mapMessagesRead += 1;
-        mapBytesRead += size;
-    }
-
-    public void indexDone() {
-        mapCompleteTime = time.milliseconds();
-    }
-
-    public void allDone() {
-        endTime = time.milliseconds();
-    }
-
-    public Double elapsedSecs;
-
-    public Double elapsedIndexSecs;
-
-    public void clear() {
-        startTime = time.milliseconds();
-        mapCompleteTime = -1L;
-        endTime = -1L;
-        bytesRead = 0L;
-        bytesWritten = 0L;
-        mapBytesRead = 0L;
-        mapMessagesRead = 0L;
-        messagesRead = 0L;
-        messagesWritten = 0L;
-        bufferUtilization = 0.0d;
+    private void checkDone() throws InterruptedException {
+        if (Thread.currentThread().isInterrupted())
+            throw new InterruptedException();
     }
 }

@@ -1,13 +1,14 @@
-package kafka.common;/**
- * Created by zhoulf on 2017/3/22.
- */
+package kafka.common;
 
 /**
- * @author
- * @create 2017-03-22 21:11
- **/
-public class UnknownCodecException extends RuntimeException {
-    public UnknownCodecException(String msg){
-        super(msg);
+ * Indicates the client has requested a range no longer available on the server
+ */
+public class UnknownCodecException extends KafkaException {
+    public UnknownCodecException(String message) {
+        super(message);
+    }
+
+    public UnknownCodecException(String message, Object... args) {
+        super(message, args);
     }
 }

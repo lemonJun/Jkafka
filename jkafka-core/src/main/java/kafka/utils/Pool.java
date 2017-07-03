@@ -1,33 +1,35 @@
 package kafka.utils;
 
-import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-import com.google.common.collect.Lists;
+import com.google.common.base.Function;
 import com.google.common.collect.Maps;
 
 import kafka.common.KafkaException;
-import kafka.func.Handler;
-import kafka.func.Tuple;
 
-public class Pool<K, V> implements Iterable<Tuple<K, V>> {
-    private ConcurrentHashMap<K, V> pool = new ConcurrentHashMap<K, V>();
-    private Object createLock = new Object();
-    public Optional<Handler<K, V>> valueFactory;
+public class Pool<K, V> implements Iterable<Map.Entry<K, V>> {
+    public Function<K, V> valueFactory;
+
     public Pool() {
-        this.valueFactory = Optional.empty();
     }
-    public Pool(Optional<Handler<K, V>> valueFactory) {
+
+    public Pool(Function<K, V> valueFactory) {
         this.valueFactory = valueFactory;
     }
 
+    private ConcurrentHashMap<K, V> pool = new ConcurrentHashMap<K, V>();
+    private Object createLock = new Object();
+
     public Pool(Map<K, V> m) {
-        m.forEach((k, v) -> pool.put(k, v));
+        this();
+
+        for (Map.Entry<K, V> entry : m.entrySet()) {
+            pool.put(entry.getKey(), entry.getValue());
+        }
     }
 
     public V put(K k, V v) {
@@ -38,16 +40,6 @@ public class Pool<K, V> implements Iterable<Tuple<K, V>> {
         pool.putIfAbsent(k, v);
     }
 
-
-    public List<Tuple<K,V>>list(){
-        List list = Lists.newArrayList();
-        Iterator<Tuple<K, V>> it = iterator();
-        while(it.hasNext()){
-            list.add(it.next());
-        }
-        return list;
-    }
-
     /**
      * Gets the value associated with the given key. If there is no associated
      * value, then create the value using the pool's value factory and return the
@@ -56,28 +48,27 @@ public class Pool<K, V> implements Iterable<Tuple<K, V>> {
      *
      * @param key The key to lookup.
      * @return The final value associated with the key. This may be different from
-     * the value created by the factory if another thread successfully
-     * put a value.
+     *         the value created by the factory if another thread successfully
+     *         put a value.
      */
     public V getAndMaybePut(K key) {
-        if (!valueFactory.isPresent())
+        if (valueFactory == null)
             throw new KafkaException("Empty value factory in pool.");
+
         V curr = pool.get(key);
-        if (curr == null) {
-            synchronized (createLock) {
-                curr = pool.get(key);
-                if (curr == null) {
-                    pool.put(key, valueFactory.get().handle(key));
-                }
-                return pool.get(key);
-            }
-        } else {
+        if (curr != null)
             return curr;
+
+        synchronized (createLock) {
+            curr = pool.get(key);
+            if (curr == null)
+                pool.put(key, valueFactory.apply(key));
+            return pool.get(key);
         }
     }
 
-    public void contains(K id) {
-        pool.containsKey(id);
+    public boolean contains(K id) {
+        return pool.containsKey(id);
     }
 
     public V get(K key) {
@@ -92,39 +83,39 @@ public class Pool<K, V> implements Iterable<Tuple<K, V>> {
         return pool.keySet();
     }
 
-    public Iterable<V> values() {
-        return new ArrayList<>(pool.values());
+    public Collection<V> values() {
+        return pool.values();
     }
 
     public void clear() {
         pool.clear();
     }
 
-    public Integer getSize() {
+    public int size() {
         return pool.size();
     }
 
-
     @Override
-    public Iterator<Tuple<K, V>> iterator() {
-        return new Iterator<Tuple<K, V>>() {
-
-            private Iterator<Map.Entry<K, V>> iter = pool.entrySet().iterator();
-
+    public Iterator<Map.Entry<K, V>> iterator() {
+        final Iterator<Map.Entry<K, V>> iterator = pool.entrySet().iterator();
+        return new Iterator<Map.Entry<K, V>>() {
+            @Override
             public boolean hasNext() {
-                return iter.hasNext();
+                return iterator.hasNext();
             }
 
-            public Tuple next() {
-                Map.Entry<K, V> entry = iter.next();
-                return new Tuple(entry.getKey(), entry.getValue());
+            @Override
+            public Map.Entry<K, V> next() {
+                return iterator.next();
+            }
+
+            @Override
+            public void remove() {
             }
         };
     }
 
-    public Map<K,V> toMap() {
-        Map<K,V>map = Maps.newHashMap();
-        map.putAll(pool);
-        return map;
+    public Map<K, V> toMap() {
+        return Maps.newHashMap(pool);
     }
 }

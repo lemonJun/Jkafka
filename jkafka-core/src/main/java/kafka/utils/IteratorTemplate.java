@@ -7,7 +7,11 @@ import java.util.NoSuchElementException;
  * Transliteration of the iterator template in google collections. To implement an iterator
  * override makeNext and call allDone() when there is no more items
  */
-public abstract class IteratorTemplate<T> implements Iterator {
+public abstract class IteratorTemplate<T> implements Iterator<T> {
+    public static enum State {
+        DONE, READY, NOT_READY, FAILED;
+    }
+
     private State state = State.NOT_READY;
     private T nextItem = null;
 
@@ -17,6 +21,7 @@ public abstract class IteratorTemplate<T> implements Iterator {
         state = State.NOT_READY;
         if (nextItem == null)
             throw new IllegalStateException("Expected item but none found.");
+
         return nextItem;
     }
 
@@ -57,20 +62,12 @@ public abstract class IteratorTemplate<T> implements Iterator {
         return null;
     }
 
+    @Override
     public void remove() {
         throw new UnsupportedOperationException("Removal not supported");
     }
-
 
     protected void resetState() {
         state = State.NOT_READY;
     }
 }
-
-enum State {
-    DONE, READY, NOT_READY, FAILED
-}
-
-
-
-

@@ -1,10 +1,15 @@
 package kafka.common;
 
-/**
- * Created by Administrator on 2017/4/2.
- */
-public class MessageSizeTooLargeException extends RuntimeException {
-    public MessageSizeTooLargeException(String msg) {
-        super(msg);
+public class MessageSizeTooLargeException extends KafkaException {
+    public MessageSizeTooLargeException() {
+        this(null);
+    }
+
+    public MessageSizeTooLargeException(String message) {
+        super(message);
+    }
+
+    public MessageSizeTooLargeException(String format, Object... args) {
+        super(format, args);
     }
 }

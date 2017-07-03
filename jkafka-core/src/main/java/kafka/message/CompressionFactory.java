@@ -1,6 +1,4 @@
-package kafka.message;/**
- * Created by zhoulf on 2017/3/24.
- */
+package kafka.message;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -11,47 +9,34 @@ import java.util.zip.GZIPOutputStream;
 import org.xerial.snappy.SnappyInputStream;
 import org.xerial.snappy.SnappyOutputStream;
 
-import kafka.utils.Logging;
+import kafka.common.KafkaException;
 
-/**
- * @author
- * @create 2017-03-24 11:20
- **/
-public class CompressionFactory {
-    private static final Logging logger = Logging.getLogger(CompressionFactory.class.getName());
-    public static OutputStream outputStream(CompressionCodec compressionCodec, OutputStream stream) {
+public abstract class CompressionFactory {
+    public static OutputStream apply(CompressionCodec compressionCodec, OutputStream stream) {
         try {
-            switch (compressionCodec) {
-                case GZIPCompressionCodec:
-                    return new GZIPOutputStream(stream);
-                case SnappyCompressionCodec:
-                    return new SnappyOutputStream(stream);
-                case LZ4CompressionCodec:
-                    return new KafkaLZ4BlockOutputStream(stream);
-                default:
-                    throw new kafka.common.UnknownCodecException("Unknown Codec: " + compressionCodec);
-            }
+            if (compressionCodec == DefaultCompressionCodec.instance)
+                return new GZIPOutputStream(stream);
+            if (compressionCodec == GZIPCompressionCodec.instance)
+                return new GZIPOutputStream(stream);
+            if (compressionCodec == SnappyCompressionCodec.instance)
+                return new SnappyOutputStream(stream);
         } catch (IOException e) {
-            logger.error(e.getMessage(),e);
+            throw new KafkaException(e);
         }
-        return null;
+        throw new kafka.common.UnknownCodecException("Unknown Codec: " + compressionCodec);
     }
 
-    public static InputStream inputStream(CompressionCodec compressionCodec, InputStream stream) {
+    public static InputStream apply(CompressionCodec compressionCodec, InputStream stream) {
         try {
-            switch (compressionCodec) {
-                case GZIPCompressionCodec:
-                    return new GZIPInputStream(stream);
-                case SnappyCompressionCodec:
-                    return new SnappyInputStream(stream);
-                case LZ4CompressionCodec:
-                    return new KafkaLZ4BlockInputStream(stream);
-                default:
-                    throw new kafka.common.UnknownCodecException("Unknown Codec: " + compressionCodec);
-            }
+            if (compressionCodec == DefaultCompressionCodec.instance)
+                return new GZIPInputStream(stream);
+            if (compressionCodec == GZIPCompressionCodec.instance)
+                return new GZIPInputStream(stream);
+            if (compressionCodec == SnappyCompressionCodec.instance)
+                return new SnappyInputStream(stream);
         } catch (IOException e) {
-            logger.error(e.getMessage(),e);
+            throw new KafkaException(e);
         }
-        return null;
+        throw new kafka.common.UnknownCodecException("Unknown Codec: " + compressionCodec);
     }
 }

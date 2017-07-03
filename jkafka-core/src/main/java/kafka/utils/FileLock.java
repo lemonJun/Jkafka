@@ -1,6 +1,4 @@
-package kafka.utils;/**
- * Created by zhoulf on 2017/4/17.
- */
+package kafka.utils;
 
 import java.io.File;
 import java.io.IOException;
@@ -8,77 +6,91 @@ import java.io.RandomAccessFile;
 import java.nio.channels.FileChannel;
 import java.nio.channels.OverlappingFileLockException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import kafka.common.KafkaException;
+
 /**
  * A file lock a la flock/funlock
- * <p>
+ * <p/>
  * The given path will be created and opened if it doesn't exist.
  */
-public class FileLock extends Logging {
-    public File file;
+public class FileLock {
+    public final File file;
 
-    public FileLock(File file) throws IOException {
+    public FileLock(File file) {
         this.file = file;
-        init();
-    }
 
-    public void init() throws IOException {
-        file.createNewFile(); // create the file if it doesn't exist;
-        channel = new RandomAccessFile(file, "rw").getChannel();
+        try {
+            file.createNewFile(); // create the file if it doesn't exist
+            channel = new RandomAccessFile(file, "rw").getChannel();
+        } catch (IOException e) {
+            throw new KafkaException(e);
+        }
     }
-
 
     private FileChannel channel;
     private java.nio.channels.FileLock flock = null;
 
+    Logger logger = LoggerFactory.getLogger(FileLock.class);
+
     /**
      * Lock the file or throw an exception if the lock is already held
      */
-    public void lock() throws IOException {
-        synchronized (this) {
-            trace("Acquiring lock on " + file.getAbsolutePath());
-            flock = channel.lock();
+    public void lock() {
+        try {
+            synchronized (this) {
+                logger.trace("Acquiring lock on {}", file.getAbsolutePath());
+                flock = channel.lock();
+            }
+        } catch (IOException e) {
+            throw new KafkaException(e);
         }
     }
 
     /**
      * Try to lock the file and return true if the locking succeeds
      */
-    public Boolean tryLock() {
+    public boolean tryLock() {
         synchronized (this) {
-            trace("Acquiring lock on " + file.getAbsolutePath());
+            logger.trace("Acquiring lock on {}", file.getAbsolutePath());
             try {
-                // weirdly this method will return null if the lock is held by another;
-                // process, but will throw an exception if the lock is held by this process;
-                // so we have to handle both cases;
+                // weirdly this method will return null if the lock is held by another
+                // process, but will throw an exception if the lock is held by this process
+                // so we have to handle both cases
                 flock = channel.tryLock();
                 return flock != null;
-            } catch (IOException e) {
-                error(e.getMessage(),e);
             } catch (OverlappingFileLockException e) {
                 return false;
+            } catch (IOException e) {
+                throw new KafkaException(e);
             }
         }
-        return false;
     }
 
     /**
      * Unlock the lock if it is held
      */
-    public void unlock() throws IOException {
+    public void unlock() {
         synchronized (this) {
-            trace("Releasing lock on " + file.getAbsolutePath());
+            logger.trace("Releasing lock on {}", file.getAbsolutePath());
             if (flock != null)
-                flock.release();
+                try {
+                    flock.release();
+                } catch (IOException e) {
+                    throw new KafkaException(e);
+                }
         }
     }
 
     /**
      * Destroy this lock, closing the associated FileChannel
      */
-    public void destroy() throws IOException {
+    public void destroy() {
         synchronized (this) {
             unlock();
-            channel.close();
+            Utils.closeQuietly(channel);
         }
     }
 }

@@ -1,23 +1,27 @@
-package kafka.utils;/**
- * Created by zhoulf on 2017/3/29.
- */
+package kafka.utils;
 
 /**
- * @author
- * @create 2017-03-29 11:00
- **/
-public class SystemTime extends Time {
+ * The normal system implementation of time functions
+ */
+public class SystemTime implements Time {
+    public static final SystemTime instance = new SystemTime();
 
-    public Long milliseconds() {
+    @Override
+    public long milliseconds() {
         return System.currentTimeMillis();
     }
 
-
-    public Long nanoseconds() {
+    @Override
+    public long nanoseconds() {
         return System.nanoTime();
     }
 
-    public void sleep(Long ms) throws InterruptedException {
-        Thread.sleep(ms);
+    @Override
+    public void sleep(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+
+        }
     }
 }

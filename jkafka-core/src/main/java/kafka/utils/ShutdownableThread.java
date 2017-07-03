@@ -1,52 +1,52 @@
-package kafka.utils;/**
- * Created by zhoulf on 2017/4/13.
- */
+package kafka.utils;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * @author
- * @create 2017-04-13 44 10
- **/
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import kafka.common.KafkaException;
+
 public abstract class ShutdownableThread extends Thread {
     public String name;
-    public Boolean isInterruptible = true;
-    public Logging logger = new Logging();
+    public boolean isInterruptible;
 
-    public ShutdownableThread(java.lang.String name, java.lang.Boolean isInterruptible) {
-        this.name = name;
-        this.isInterruptible = isInterruptible;
-        this.setDaemon(false);
-        logger.logIdent = "[" + name + "], ";
+    protected ShutdownableThread(String name) {
+        this(name, true);
     }
 
+    protected ShutdownableThread(String name, boolean isInterruptible) {
+        super(name);
+        this.name = name;
+        this.isInterruptible = isInterruptible;
 
+        this.setDaemon(false);
+        logger = LoggerFactory.getLogger(ShutdownableThread.class + "[" + name + "], ");
+    }
+
+    Logger logger;
     public AtomicBoolean isRunning = new AtomicBoolean(true);
     private CountDownLatch shutdownLatch = new CountDownLatch(1);
 
-    public void shutdown() throws InterruptedException {
-        initiateShutdown();
+    public void shutdown() {
+        logger.info("Shutting down");
+        isRunning.set(false);
+        if (isInterruptible)
+            interrupt();
         awaitShutdown();
-    }
-
-    public Boolean initiateShutdown() {
-        if (isRunning.compareAndSet(true, false)) {
-            logger.info("Shutting down");
-            isRunning.set(false);
-            if (isInterruptible)
-                interrupt();
-            return true;
-        } else ;
-        return false;
+        logger.info("Shutdown completed");
     }
 
     /**
-     * After calling initiateShutdown(), use this API to wait until the shutdown is complete
+     * After calling shutdown(), use this API to wait until the shutdown is complete
      */
-    public void awaitShutdown() throws InterruptedException {
-        shutdownLatch.await();
-        logger.info("Shutdown completed");
+    public void awaitShutdown() {
+        try {
+            shutdownLatch.await();
+        } catch (InterruptedException e) {
+            throw new KafkaException(e);
+        }
     }
 
     public abstract void doWork();
@@ -58,7 +58,7 @@ public abstract class ShutdownableThread extends Thread {
             while (isRunning.get()) {
                 doWork();
             }
-        } catch (Exception e) {
+        } catch (Throwable e) {
             if (isRunning.get())
                 logger.error("Error due to ", e);
         }

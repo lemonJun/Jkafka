@@ -1,13 +1,13 @@
-package kafka.message;/**
- * Created by zhoulf on 2017/3/22.
- */
+package kafka.message;
 
-/**
- * @author
- * @create 2017-03-22 20:39
- **/
-public class InvalidMessageException extends RuntimeException {
-    public InvalidMessageException(String message) {
-        super(message);
+import kafka.common.KafkaException;
+
+public class InvalidMessageException extends KafkaException {
+    public InvalidMessageException(String format, Object... args) {
+        super(format, args);
+    }
+
+    public InvalidMessageException() {
+        super("");
     }
 }

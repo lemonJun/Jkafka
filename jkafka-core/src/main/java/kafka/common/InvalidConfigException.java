@@ -1,10 +1,11 @@
 package kafka.common;
 
-/**
- * Created by Administrator on 2017/4/2.
- */
-public class InvalidConfigException extends RuntimeException {
-    public InvalidConfigException(String msg) {
-        super(msg);
+public class InvalidConfigException extends KafkaException {
+    public InvalidConfigException(String format, Object... args) {
+        super(format, args);
+    }
+
+    public InvalidConfigException(String message) {
+        super(message);
     }
 }

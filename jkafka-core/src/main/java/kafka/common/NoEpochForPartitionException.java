@@ -1,13 +1,11 @@
-package kafka.common;/**
- * Created by zhoulf on 2017/5/15.
- */
+package kafka.common;
 
 /**
- * @author
- * @create 2017-05-15 15:28
- **/
-public class NoEpochForPartitionException extends RuntimeException {
-    public NoEpochForPartitionException(String msg) {
-        super(msg);
+ * Thrown when a get epoch request is made for partition, but no epoch exists for that partition
+ */
+public class NoEpochForPartitionException extends KafkaException {
+
+    public NoEpochForPartitionException(String format, Object... args) {
+        super(format, args);
     }
 }

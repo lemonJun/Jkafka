@@ -1,90 +1,96 @@
-package kafka.utils;/**
- * Created by zhoulf on 2017/3/22.
- */
+package kafka.utils;
 
+import java.io.Closeable;
 import java.io.EOFException;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.PrintWriter;
 import java.io.RandomAccessFile;
+import java.io.StringReader;
+import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
+import java.lang.management.ManagementFactory;
+import java.lang.reflect.Array;
+import java.lang.reflect.Constructor;
 import java.nio.ByteBuffer;
+import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.channels.GatheringByteChannel;
 import java.nio.channels.ReadableByteChannel;
+import java.nio.channels.Selector;
 import java.nio.charset.Charset;
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
-import java.util.stream.Collectors;
-import java.util.zip.CRC32;
+import java.util.concurrent.locks.ReentrantLock;
 
+import javax.management.MBeanServer;
+import javax.management.ObjectName;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.common.base.Predicate;
+import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.Sets;
+import com.google.common.collect.Table;
 
-import kafka.func.Action;
-import kafka.func.ActionWithParam;
-import kafka.func.ActionWithThrow;
-import kafka.func.Fun;
-import kafka.func.Handler;
-import kafka.func.Tuple;
+import kafka.common.KafkaException;
+import kafka.common.KafkaStorageException;
+import kafka.log.LogToClean;
 
 /**
  * General helper functions!
- * <p>
+ * <p/>
  * This is for general helper functions that aren't specific to Kafka logic. Things that should have been included in
  * the standard library etc.
- * <p>
+ * <p/>
  * If you are making a new helper function and want to add it to this class please ensure the following:
  * 1. It has documentation
  * 2. It is the most general possible utility, not just the thing you needed in one particular place
  * 3. You have tests for it if it is nontrivial in any way
  */
-public class Utils {
-    private static Logging logger = Logging.getLogger(Utils.class.getName());
+public abstract class Utils {
+    static Logger logger = LoggerFactory.getLogger(Utils.class);
 
     /**
-     * Wrap the given function in a java.lang.Runnable
+     * Create a daemon thread
      *
-     * @param fun A function
-     * @return A Runnable that just executes the function
+     * @param runnable The runnable to execute in the background
+     * @return The unstarted thread
      */
-    public static Runnable runnable(Action fun) {
-        return () -> fun.invoke();
+    public static Thread daemonThread(Runnable runnable) {
+        return newThread(runnable, true);
     }
-//
-//        /**
-//         * Create a daemon thread
-//         * @param runnable The runnable to execute in the background
-//         * @return The unstarted thread
-//         */
-//        public Thread  daemonThread(Runnable runnable)
-//                newThread(runnable, true);
-//
-//        /**
-//         * Create a daemon thread
-//         * @param name The name of the thread
-//         * @param runnable The runnable to execute in the background
-//         * @return The unstarted thread
-//         */
-//        public Thread  daemonThread(String name, Runnable runnable)
-//                newThread(name, runnable, true);
-//
-//        /**
-//         * Create a daemon thread
-//         * @param name The name of the thread
-//         * @param fun The runction to execute in the thread
-//         * @return The unstarted thread
-//         */
-//        public Thread  daemonThread(String name, fun: () => Unit)
-//                daemonThread(name, runnable(fun));
-//
+
+    /**
+     * Create a daemon thread
+     *
+     * @param name     The name of the thread
+     * @param runnable The runnable to execute in the background
+     * @return The unstarted thread
+     */
+    public static Thread daemonThread(String name, Runnable runnable) {
+        return newThread(name, runnable, true);
+    }
 
     /**
      * Create a new thread
@@ -94,35 +100,38 @@ public class Utils {
      * @param daemon   Should the thread block JVM shutdown?
      * @return The unstarted thread
      */
-    public static Thread newThread(String name, Runnable runnable, Boolean daemon) {
+    public static Thread newThread(String name, Runnable runnable, boolean daemon) {
         Thread thread = new Thread(runnable, name);
         thread.setDaemon(daemon);
         thread.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
             @Override
             public void uncaughtException(Thread t, Throwable e) {
-                logger.error("Uncaught exception in thread '" + t.getName() + "':", e);
+                logger.error("Uncaught exception in thread '{}':", t.getName(), e);
             }
         });
+
         return thread;
     }
-//
-//        /**
-//         * Create a new thread
-//         * @param runnable The work for the thread to do
-//         * @param daemon Should the thread block JVM shutdown?
-//         * @return The unstarted thread
-//         */
-//        public Thread  newThread(Runnable runnable, Boolean daemon) {
-//                Integer thread = new Thread(runnable);
-//                thread.setDaemon(daemon);
-//                thread.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
-//                    def uncaughtException(Thread t, Throwable e) {
-//                        error("Uncaught exception in thread '" + t.getName + "':", e);
-//                    }
-//                });
-//                thread;
-//        }
-//
+
+    /**
+     * Create a new thread
+     *
+     * @param runnable The work for the thread to do
+     * @param daemon   Should the thread block JVM shutdown?
+     * @return The unstarted thread
+     */
+    public static Thread newThread(Runnable runnable, boolean daemon) {
+        Thread thread = new Thread(runnable);
+        thread.setDaemon(daemon);
+        thread.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+            @Override
+            public void uncaughtException(Thread t, Throwable e) {
+                logger.error("Uncaught exception in thread '{}':", t.getName(), e);
+            }
+        });
+
+        return thread;
+    }
 
     /**
      * Read the given byte buffer into a byte array
@@ -134,7 +143,7 @@ public class Utils {
     /**
      * Read a byte array from the given offset and size in the buffer
      */
-    public static byte[] readBytes(ByteBuffer buffer, Integer offset, Integer size) {
+    public static byte[] readBytes(ByteBuffer buffer, int offset, int size) {
         byte[] dest = new byte[size];
         if (buffer.hasArray()) {
             System.arraycopy(buffer.array(), buffer.arrayOffset() + offset, dest, 0, size);
@@ -145,35 +154,45 @@ public class Utils {
         }
         return dest;
     }
-//
-//        /**
-//         * Read a properties file from the given path
-//         * @param filename The path of the file to read
-//         */
-//        public Properties  loadProps(String filename) {
-//                Integer props = new Properties();
-//                var InputStream propStream = null;
-//        try {
-//            propStream = new FileInputStream(filename);
-//            props.load(propStream);
-//        } finally {
-//            if(propStream != null)
-//                propStream.close;
-//        }
-//        props;
-//   }
-//
+
+    /**
+     * Read a properties file from the given path
+     *
+     * @param filename The path of the file to read
+     */
+    public static Properties loadProps(String filename) {
+        FileInputStream propStream = null;
+        Properties props = new Properties();
+        try {
+            propStream = new FileInputStream(filename);
+            props.load(propStream);
+        } catch (IOException e) {
+            throw new KafkaException(e, "error load props %s", filename);
+        } finally {
+            closeQuietly(propStream);
+        }
+
+        return props;
+    }
+
+    public static void closeQuietly(Closeable closeable) {
+        try {
+            closeable.close();
+        } catch (IOException e) {
+            logger.warn("try to close {} error", closeable, e);
+        }
+    }
 
     /**
      * Open a channel for the given file
      */
-    public static FileChannel openChannel(File file, Boolean mutable) throws FileNotFoundException {
-        if (mutable)
-            return new RandomAccessFile(file, "rw").getChannel();
-        else
-            return new FileInputStream(file).getChannel();
+    public static FileChannel openChannel(File file, boolean mutable) {
+        try {
+            return mutable ? new RandomAccessFile(file, "rw").getChannel() : new FileInputStream(file).getChannel();
+        } catch (FileNotFoundException e) {
+            throw new KafkaException(e, "try to openChannel %s error", file, e);
+        }
     }
-
 
     /**
      * Do the given action and log any exceptions thrown without rethrowing them
@@ -181,36 +200,47 @@ public class Utils {
      * @param log    The log method to use for logging. E.g. logger.warn
      * @param action The action to execute
      */
-    public static void swallow(ActionWithThrow action, ActionWithParam<Throwable> log) {
+    public static void swallow(Callable2<Object, Throwable> log, Runnable action) {
         try {
-            action.invoke();
-        } catch (Exception e) {
-            if (log != null)
-                log.invoke(e);
+            action.run();
+        } catch (Throwable e) {
+            log.apply(e.getMessage(), e);
         }
     }
 
-    public static void swallow(ActionWithThrow action) {
-        swallow(action, null);
+    public static void swallow(Runnable action) {
+        try {
+            action.run();
+        } catch (Throwable e) {
+            logger.warn(e.getMessage(), e);
+        }
     }
-//
-//        /**
-//         * Test if two byte buffers are equal. In this case equality means having
-//         * the same bytes from the current position to the limit
-//         */
-//        public Boolean  equal(ByteBuffer b1, ByteBuffer b2) {
-//        // two byte buffers are equal if their position is the same,
-//        // their remaining bytes are the same, and their contents are the same;
-//        if(b1.position != b2.position)
-//            return false;
-//        if(b1.remaining != b2.remaining)
-//            return false;
-//        for(i <- 0 until b1.remaining);
-//        if(b1.get(i) != b2.get(i))
-//            return false;
-//        return true;
-//  }
-//
+
+    /**
+     * Test if two byte buffers are equal. In this case equality means having
+     * the same bytes from the current position to the limit
+     */
+    public static boolean equal(ByteBuffer b1, ByteBuffer b2) {
+        // two byte buffers are equal if their position is the same,
+        // their remaining bytes are the same, and their contents are the same
+        if (b1.position() != b2.position())
+            return false;
+        if (b1.remaining() != b2.remaining())
+            return false;
+        for (int i = 0, ii = b1.remaining(); i < ii; ++i)
+            if (b1.get(i) != b2.get(i))
+                return false;
+        return true;
+    }
+
+    /**
+     * Translate the given buffer into a string
+     *
+     * @param buffer The buffer to translate
+     */
+    public static String readString(ByteBuffer buffer) {
+        return readString(buffer, Charset.defaultCharset().toString());
+    }
 
     /**
      * Translate the given buffer into a string
@@ -219,32 +249,24 @@ public class Utils {
      * @param encoding The encoding to use in translating bytes to characters
      */
     public static String readString(ByteBuffer buffer, String encoding) {
-        if (encoding == null) {
-            encoding = Charset.defaultCharset().toString();
-        }
         byte[] bytes = new byte[buffer.remaining()];
         buffer.get(bytes);
         try {
             return new String(bytes, encoding);
         } catch (UnsupportedEncodingException e) {
-            e.printStackTrace();
+            throw new KafkaException(e, "readString error");
         }
-        return null;
     }
 
-    public static String readString(ByteBuffer buffer) {
-        return readString(buffer, null);
+    /**
+     * Print an error message and shutdown the JVM
+     *
+     * @param message The error message
+     */
+    public static void croak(String message) {
+        System.err.println(message);
+        System.exit(1);
     }
-//
-//        /**
-//         * Print an error message and shutdown the JVM
-//         * @param message The error message
-//         */
-//        def croak(String message) {
-//            System.err.println(message);
-//            System.exit(1);
-//        }
-//
 
     /**
      * Recursively delete the given file/directory and any subfiles (if any exist)
@@ -261,7 +283,8 @@ public class Utils {
      * @param files sequence of files to be deleted
      */
     public static void rm(List<String> files) {
-        files.stream().forEach(f -> rm(new File(f)));
+        for (String f : files)
+            rm(new File(f));
     }
 
     /**
@@ -274,56 +297,59 @@ public class Utils {
             return;
         } else if (file.isDirectory()) {
             File[] files = file.listFiles();
-            if (files != null) {
-                for (File f : files)
-                    rm(f);
-            }
+            for (File f : files)
+                rm(f);
+
             file.delete();
         } else {
             file.delete();
         }
     }
-//
-//        /**
-//         * Register the given mbean with the platform mbean server,
-//         * unregistering any mbean that was there before. Note,
-//         * this method will not throw an exception if the registration
-//         * fails (since there is nothing you can do and it isn't fatal),
-//         * instead it just returns false indicating the registration failed.
-//         * @param mbean The object to register as an mbean
-//         * @param name The name to register this mbean with
-//         * @return true if the registration succeeded
-//         */
-//        public Boolean  registerMBean(Object mbean, String name) {
-//        try {
-//            Integer mbs = ManagementFactory.getPlatformMBeanServer();
-//            mbs synchronized {
-//                Integer objName = new ObjectName(name);
-//                if(mbs.isRegistered(objName))
-//                    mbs.unregisterMBean(objName);
-//                mbs.registerMBean(mbean, objName);
-//                true;
-//            }
-//        } catch {
-//            case Exception e => {
-//                error("Failed to register Mbean " + name, e);
-//                false;
-//            }
-//        }
-//  }
-//
-//        /**
-//         * Unregister the mbean with the given name, if there is one registered
-//         * @param name The mbean name to unregister
-//         */
-//        def unregisterMBean(String name) {
-//            Integer mbs = ManagementFactory.getPlatformMBeanServer();
-//            mbs synchronized {
-//                Integer objName = new ObjectName(name);
-//                if(mbs.isRegistered(objName))
-//                    mbs.unregisterMBean(objName);
-//            }
-//        }
+
+    /**
+     * Register the given mbean with the platform mbean server,
+     * unregistering any mbean that was there before. Note,
+     * this method will not throw an exception if the registration
+     * fails (since there is nothing you can do and it isn't fatal),
+     * instead it just returns false indicating the registration failed.
+     *
+     * @param mbean The object to register as an mbean
+     * @param name  The name to register this mbean with
+     * @return true if the registration succeeded
+     */
+    public static boolean registerMBean(Object mbean, String name) {
+        try {
+            MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
+            synchronized (mbs) {
+                ObjectName objName = new ObjectName(name);
+                if (mbs.isRegistered(objName))
+                    mbs.unregisterMBean(objName);
+                mbs.registerMBean(mbean, objName);
+                return true;
+            }
+        } catch (Exception e) {
+            logger.error("Failed to register Mbean {}", name, e);
+            return false;
+        }
+    }
+
+    /**
+     * Unregister the mbean with the given name, if there is one registered
+     *
+     * @param name The mbean name to unregister
+     */
+    public static void unregisterMBean(String name) {
+        MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
+        try {
+            synchronized (mbs) {
+                ObjectName objName = new ObjectName(name);
+                if (mbs.isRegistered(objName))
+                    mbs.unregisterMBean(objName);
+            }
+        } catch (Exception e) {
+            logger.error("Failed to unregister Mbean {}", name, e);
+        }
+    }
 
     /**
      * Read an unsigned integer from the current position in the buffer,
@@ -332,10 +358,9 @@ public class Utils {
      * @param buffer The buffer to read from
      * @return The integer read, as a long to avoid signedness
      */
-    public static Long readUnsignedInt(ByteBuffer buffer) {
+    public static long readUnsignedInt(ByteBuffer buffer) {
         return buffer.getInt() & 0xffffffffL;
     }
-
 
     /**
      * Read an unsigned integer from the given position without modifying the buffers
@@ -345,7 +370,7 @@ public class Utils {
      * @param index  the index from which to read the integer
      * @return The integer read, as a long to avoid signedness
      */
-    public static Long readUnsignedInt(ByteBuffer buffer, Integer index) {
+    public static long readUnsignedInt(ByteBuffer buffer, int index) {
         return buffer.getInt(index) & 0xffffffffL;
     }
 
@@ -355,357 +380,9 @@ public class Utils {
      * @param buffer The buffer to write to
      * @param value  The value to write
      */
-    public static void writetUnsignedInt(ByteBuffer buffer, Long value) {
+    public static void writetUnsignedInt(ByteBuffer buffer, long value) {
         buffer.putInt((int) (value & 0xffffffffL));
     }
-
-    /**
-     * Write the given long value as a 4 byte unsigned integer. Overflow is ignored.
-     *
-     * @param buffer The buffer to write to
-     * @param index  The position in the buffer at which to begin writing
-     * @param value  The value to write
-     */
-    public static void writeUnsignedInt(ByteBuffer buffer, int index, Long value) {
-        buffer.putInt(index, (int) (value & 0xffffffffL));
-    }
-
-    /**
-     * Compute the CRC32 of the byte array
-     *
-     * @param bytes The array to compute the checksum for
-     * @return The CRC32
-     */
-    public static Long crc32(byte[] bytes) {
-        return crc32(bytes, 0, bytes.length);
-    }
-
-
-    /**
-     * Compute the CRC32 of the segment of the byte array given by the specificed size and offset
-     *
-     * @param bytes  The bytes to checksum
-     * @param offset the offset at which to begin checksumming
-     * @param size   the number of bytes to checksum
-     * @return The CRC32
-     */
-    public static Long crc32(byte[] bytes, int offset, int size) {
-        CRC32 crc = new CRC32();
-        crc.update(bytes, offset, size);
-        return crc.getValue();
-    }
-
-    /**
-     * Compute the hash code for the given items
-     */
-    public static Integer hashcode(Object... as) {
-        if (as == null)
-            return 0;
-        int h = 1;
-        int i = 0;
-        while (i < as.length) {
-            if (as[i] != null) {
-                h = 31 * h + as[i].hashCode();
-                i += 1;
-            }
-        }
-        return h;
-    }
-//
-//    /**
-//     * Group the given values by keys extracted with the given function
-//     */
-//    def groupby[
-//    K,V](Iterable vals[V],V f=>K):Map[K,List[V]]=
-//
-//    {
-//        Integer m = new mutable.HashMap[K, List[ V]];
-//        for (v< -vals) {
-//            Integer k = f(v);
-//            m.get(k) match {
-//                case Some(List l[V])=>m.put(k, v::l);
-//                case None =>m.put(k, List(v));
-//            }
-//        }
-//        m;
-//    }
-//
-
-    /**
-     * Read some bytes into the provided buffer, and return the number of bytes read. If the
-     * channel has been closed or we get -1 on the read for any reason, throw an EOFException
-     */
-    public static Integer read(ReadableByteChannel channel, ByteBuffer buffer) throws IOException {
-        int result = channel.read(buffer);
-        if (result == -1) {
-            throw new EOFException("Received -1 when reading from channel, socket has likely been closed.");
-        }
-        return new Integer(result);
-    }
-//
-//    /**
-//     * Throw an exception if the given value is null, else return it. You can use this like:
-//     * Integer myValue = Utils.notNull(expressionThatShouldntBeNull)
-//     */
-//    def notNull[
-//    V](V v)=
-//
-//    {
-//        if (v == null);
-//            throw new KafkaException("Value cannot be null.");
-//        else;
-//            v;
-//    }
-//
-//    /**
-//     * Get the stack trace from an exception as a string
-//     */
-//    def stackTrace(Throwable e);
-//
-//    :String=
-//
-//    {
-//        Integer sw = new StringWriter;
-//        Integer pw = new PrintWriter(sw);
-//        e.printStackTrace(pw);
-//        sw.toString();
-//    }
-//
-
-    /**
-     * This method gets comma separated values which contains key,value pairs and returns a map of
-     * key value pairs. the format of allCSVal is val1 key1, val2 key2 ....
-     */
-    public static Map<String, String> parseCsvMap(String str) {
-        HashMap map = Maps.newHashMap();
-        if ("".equals(str))
-            return map;
-        List<String[]> keyVals = Arrays.asList(str.split("\\s*,\\s*")).stream().map(s -> s.split("\\s*:\\s*")).collect(Collectors.toList());
-        for (String[] arr : keyVals) {
-            map.put(arr[0], arr[1]);
-        }
-        return map;
-    }
-//
-
-    /**
-     * Parse a comma separated string into a sequence of strings.
-     * Whitespace surrounding the comma will be removed.
-     */
-    public static List<String> parseCsvList(String csvList) {
-        if (csvList == null || csvList.isEmpty())
-            return Collections.EMPTY_LIST;
-        else {
-            return Arrays.asList(csvList.split("\\s*,\\s*")).stream().filter(v -> !v.equals("")).collect(Collectors.toList());
-        }
-    }
-//
-//    /**
-//     * Create an instance of the class with the given class name
-//     */
-//    def createObject[
-//    T<:AnyRef](String className,AnyRef args*):T=
-//
-//    {
-//        Integer klass = Class.forName(className).asInstanceOf[Class[T]];
-//        Integer constructor = klass.getConstructor(args.map(_.getClass):_ *);
-//        constructor.newInstance(_ args *).asInstanceOf[T];
-//    }
-//
-//    /**
-//     * Is the given string null or empty ("")?
-//     */
-//    def nullOrEmpty(String s);
-//
-//    :Boolean=s==null||s.equals("");
-//
-//    /**
-//     * Create a circular (looping) iterator over a collection.
-//     *
-//     * @param coll An iterable over the underlying collection.
-//     * @return A circular iterator over the collection.
-//     */
-//    def circularIterator[
-//    T](Iterable coll[T])=
-//
-//    {
-//        Integer Stream stream[T] =
-//        for (forever< -Stream.continually(1); t < -coll) yield t;
-//        stream.iterator;
-//    }
-//
-//    /**
-//     * Attempt to read a file as a string
-//     */
-//    def readFileAsString(String path, Charset charset=Charset.defaultCharset();
-//
-//    ):String=
-//
-//    {
-//        Integer stream = new FileInputStream(new File(path));
-//        try {
-//            Integer fc = stream.getChannel();
-//            Integer bb = fc.map(FileChannel.MapMode.READ_ONLY, 0, fc.size());
-//            charset.decode(bb).toString();
-//        } finally {
-//            stream.close();
-//        }
-//    }
-//
-
-    /**
-     * Get the absolute value of the given number. If the number is Int.MinValue return 0.
-     * This is different from java.lang.Math.abs or scala.math.abs in that they return Int.MinValue (!).
-     */
-    public static int abs(Integer n) {
-        if (n == Integer.MIN_VALUE) return 0;
-        else return Math.abs(n);
-    }
-
-
-    /**
-     * Replace the given string suffix with the new suffix. If the string doesn't end with the given suffix throw an exception.
-     */
-    public static String replaceSuffix(String s, String oldSuffix, String newSuffix) {
-        if (!s.endsWith(oldSuffix))
-            throw new IllegalArgumentException(String.format("Expected string to end with '%s' but string is '%s'", oldSuffix, s));
-        return s.substring(0, s.length() - oldSuffix.length()) + newSuffix;
-    }
-
-    //
-//    /**
-//     * Create a file with the given path
-//     *
-//     * @param path The path to create
-//     * @return The created file
-//     * @throws KafkaStorageException If the file create fails
-//     */
-//    def createFile(String path);
-//
-//    :File=
-//
-//    {
-//        Integer f = new File(path);
-//        Integer created = f.createNewFile();
-//        if (!created);
-//            throw new KafkaStorageException(String.format("Failed to create file %s.",path));
-//        f;
-//    }
-//
-//    /**
-//     * Turn a properties map into a string
-//     */
-//    def asString(Properties props);
-//
-//    :String=
-//
-//    {
-//        Integer writer = new StringWriter();
-//        props.store(writer, "");
-//        writer.toString;
-//    }
-//
-//    /**
-//     * Read some properties with the given default values
-//     */
-//    def readProps(String s, Properties defaults);
-//
-//    :Properties=
-//
-//    {
-//        Integer reader = new StringReader(s);
-//        Integer props = new Properties(defaults);
-//        props.load(reader);
-//        props;
-//    }
-//
-
-    /**
-     * Read a big-endian integer from a byte array
-     */
-    public static Integer readInt(byte[] bytes, Integer offset) {
-        return ((bytes[offset] & 0xFF) << 24) |
-                ((bytes[offset + 1] & 0xFF) << 16) |
-                ((bytes[offset + 2] & 0xFF) << 8) |
-                (bytes[offset + 3] & 0xFF);
-    }
-
-    //
-//    /**
-//     * Execute the given function inside the lock
-//     */
-    public static <T> T inLock(Lock lock, Fun<T> process) {
-        lock.lock();
-        try {
-            return process.invoke();
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    public static void inLock(Lock lock, Action action) {
-        lock.lock();
-        try {
-            action.invoke();
-        } finally {
-            lock.unlock();
-        }
-    }
-
-//
-//    def inReadLock[
-//    T](ReadWriteLock lock)(fun:=>T):T=inLock[T](lock.readLock)(fun);
-//
-//    def inWriteLock[
-//    T](ReadWriteLock lock)(fun:=>T):T=inLock[T](lock.writeLock)(fun);
-//
-//
-//    //JSON strings need to be escaped based on ECMA-404 standard http://json.org;
-//    def JSONEscapeString(String s);
-//
-//    :String=
-//
-//    {
-//        s.map {
-//        case '"' =>"\\\"";
-//        case '\\' =>"\\\\";
-//        case '/' =>"\\/";
-//        case '\b' =>"\\b";
-//        case '\f' =>"\\f";
-//        case '\n' =>"\\n";
-//        case '\r' =>"\\r";
-//        case '\t' =>"\\t";
-//      /* We'll unicode escape any control characters. These include:
-//       * 0x0 -> 0x1f  : ASCII Control (C0 Control Codes)
-//       * 0x7f         : ASCII DELETE
-//       * 0x80 -> 0x9f : C1 Control Codes
-//       *
-//       * Per RFC4627, section 2.5, we're not technically required to
-//       * encode the C1 codes, but we do to be safe.
-//       */
-//        case c if ((c >= '\u0000' && c <= '\u001f') || (c >= '\u007f' && c <= '\u009f'))=>String.format("\\u%04x",Int c);
-//        case c =>c;
-//    }.mkString;
-//    }
-//
-//    /**
-//     * Returns a list of duplicated items
-//     */
-//    def duplicates[
-//    T](Traversable s[T]):Iterable[T]=
-//
-//    {
-//        s.groupBy(identity);
-//                .map {
-//        case (k,l)=>(k, l.size)}
-//        .filter {
-//        case (k,l)=>(l > 1);
-//    }
-//        .keys;
-//    }
-
-    /*********************************************************************************/
-
 
     /**
      * Write the given long value as a 4 byte unsigned integer. Overflow is ignored.
@@ -719,141 +396,1091 @@ public class Utils {
     }
 
     /**
-     * Write an unsigned integer in little-endian format to the {@link OutputStream}.
+     * Compute the CRC32 of the byte array
      *
-     * @param out   The stream to write to
-     * @param value The value to write
+     * @param bytes The array to compute the checksum for
+     * @return The CRC32
      */
-    public static void writeUnsignedIntLE(OutputStream out, int value) throws IOException {
-        out.write(value >>> 8 * 0);
-        out.write(value >>> 8 * 1);
-        out.write(value >>> 8 * 2);
-        out.write(value >>> 8 * 3);
+    public long crc32(byte[] bytes) {
+        return crc32(bytes, 0, bytes.length);
     }
 
     /**
-     * Write an unsigned integer in little-endian format to a byte array
-     * at a given offset.
+     * Compute the CRC32 of the segment of the byte array given by the specificed size and offset
      *
-     * @param buffer The byte array to write to
-     * @param offset The position in buffer to write to
-     * @param value  The value to write
+     * @param bytes  The bytes to checksum
+     * @param offset the offset at which to begin checksumming
+     * @param size   the number of bytes to checksum
+     * @return The CRC32
      */
-    public static void writeUnsignedIntLE(byte[] buffer, int offset, int value) {
-        buffer[offset++] = (byte) (value >>> 8 * 0);
-        buffer[offset++] = (byte) (value >>> 8 * 1);
-        buffer[offset++] = (byte) (value >>> 8 * 2);
-        buffer[offset] = (byte) (value >>> 8 * 3);
+    public static long crc32(byte[] bytes, int offset, int size) {
+        Crc32 crc = new Crc32();
+        crc.update(bytes, offset, size);
+        return crc.getValue();
     }
 
     /**
-     * Read an unsigned integer from the given position without modifying the buffers position
-     *
-     * @param buffer the buffer to read from
-     * @param index  the index from which to read the integer
-     * @return The integer read, as a long to avoid signedness
+     * Compute the hash code for the given items
      */
-    public static long readUnsignedInt(ByteBuffer buffer, int index) {
-        return buffer.getInt(index) & 0xffffffffL;
-    }
-
-    /**
-     * Read an unsigned integer stored in little-endian format from the {@link InputStream}.
-     *
-     * @param in The stream to read from
-     * @return The integer read (MUST BE TREATED WITH SPECIAL CARE TO AVOID SIGNEDNESS)
-     */
-    public static int readUnsignedIntLE(InputStream in) throws IOException {
-        return (in.read() << 8 * 0)
-                | (in.read() << 8 * 1)
-                | (in.read() << 8 * 2)
-                | (in.read() << 8 * 3);
-    }
-
-    /**
-     * Read an unsigned integer stored in little-endian format from a byte array
-     * at a given offset.
-     *
-     * @param buffer The byte array to read from
-     * @param offset The position in buffer to read from
-     * @return The integer read (MUST BE TREATED WITH SPECIAL CARE TO AVOID SIGNEDNESS)
-     */
-    public static int readUnsignedIntLE(byte[] buffer, int offset) {
-        return (buffer[offset++] << 8 * 0)
-                | (buffer[offset++] << 8 * 1)
-                | (buffer[offset++] << 8 * 2)
-                | (buffer[offset] << 8 * 3);
-    }
-
-    public static <T, K> Map<K, List<T>> groupBy(Iterable<T> it, Handler<T, K> handler) {
-        Map<K, List<T>> result = Maps.newHashMap();
-        for (T t : it) {
-            K key = handler.handle(t);
-            List<T> itemList = result.getOrDefault(key, Lists.newArrayList());
-            itemList.add(t);
-            result.put(key, itemList);
-        }
-        return result;
-    }
-
-    public static <K, V, V2> Map<V2, Map<K, V>> groupByValue(Map<K, V> map, Handler<V, V2> handler) {
-        Map<V2, Map<K, V>> maps = Maps.newHashMap();
-        for (Map.Entry<K, V> entry : map.entrySet()) {
-            V2 tag = handler.handle(entry.getValue());
-            Map<K, V> m = maps.getOrDefault(tag, Maps.newHashMap());
-            m.put(entry.getKey(), entry.getValue());
-            maps.put(tag, m);
-        }
-        return maps;
-    }
-
-    public static <K, V, K2> Map<K2, Map<K, V>> groupByKey(Map<K, V> map, Handler<K, K2> handler) {
-        Map<K2, Map<K, V>> maps = Maps.newHashMap();
-        for (Map.Entry<K, V> entry : map.entrySet()) {
-            K2 tag = handler.handle(entry.getKey());
-            Map<K, V> m = maps.getOrDefault(tag, Maps.newHashMap());
-            m.put(entry.getKey(), entry.getValue());
-            maps.put(tag, m);
-        }
-        return maps;
-    }
-
-    public static <K, V, V2> Map<K, V2> map(Map<K, V> map, Handler<V, V2> handler) {
-        Map<K, V2> result = Maps.newHashMap();
-        if (map != null) {
-            for (Map.Entry<K, V> entry : map.entrySet()) {
-                result.put(entry.getKey(), handler.handle(entry.getValue()));
+    public static int hashcode(Object... as) {
+        if (as == null)
+            return 0;
+        int h = 1;
+        int i = 0;
+        while (i < as.length) {
+            if (as[i] != null) {
+                h = 31 * h + as[i].hashCode();
+                i += 1;
             }
         }
-        return result;
+        return h;
     }
 
-    public static <K, V, K2> Map<K2, V> mapKey(Map<K, V> map, Handler<K, K2> handler) {
-        Map<K2, V> result = Maps.newHashMap();
-        if (map != null) {
-            for (Map.Entry<K, V> entry : map.entrySet()) {
-                result.put(handler.handle(entry.getKey()), entry.getValue());
+    /**
+     * Group the given values by keys extracted with the given function
+     */
+    public static <K, V> Multimap<K, V> groupby(Iterable<V> vals, Function1<V, K> f) {
+        Multimap<K, V> m = HashMultimap.create();
+        for (V v : vals) {
+            K k = f.apply(v);
+            m.put(k, v);
+        }
+
+        return m;
+    }
+
+    /**
+     * Read some bytes into the provided buffer, and return the number of bytes read. If the
+     * channel has been closed or we get -1 on the read for any reason, throw an EOFException
+     */
+    public static int read(ReadableByteChannel channel, ByteBuffer buffer) {
+        int read;
+        try {
+            read = channel.read(buffer);
+            if (read == -1)
+                throw new EOFException("Received -1 when reading from channel, socket has likely been closed.");
+        } catch (IOException e) {
+            throw new KafkaException(e);
+        }
+
+        return read;
+    }
+
+    /**
+     * Throw an exception if the given value is null, else return it. You can use this like:
+     * val myValue = Utils.notNull(expressionThatShouldntBeNull)
+     */
+    public static <V> V notNull(V v) {
+        if (v == null)
+            throw new KafkaException("Value cannot be null.");
+
+        return v;
+    }
+
+    /**
+     * Parse a host and port out of a string
+     */
+    public Tuple2<String, Integer> parseHostPort(String hostport) {
+        String[] splits = hostport.split(":");
+        return Tuple2.make(splits[0], Integer.parseInt(splits[1]));
+    }
+
+    /**
+     * Get the stack trace from an exception as a string
+     */
+    public static String stackTrace(Throwable e) {
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        e.printStackTrace(pw);
+        return sw.toString();
+    }
+
+    /**
+     * This method gets comma separated values which contains key,value pairs and returns a map of
+     * key value pairs. the format of allCSVal is key1:val1, key2:val2 ....
+     */
+    public static Map<String, String> parseCsvMap(String str) {
+        Map<String, String> map = new HashMap<String, String>();
+        if ("".equals(str))
+            return map;
+
+        String[] split = str.split("\\s*,\\s*");
+        for (String kvStr : split) {
+            String[] kv = kvStr.split("\\s*:\\s*");
+            map.put(kv[0], kv[1]);
+        }
+
+        return map;
+    }
+
+    /**
+     * Parse a comma separated string into a sequence of strings.
+     * Whitespace surrounding the comma will be removed.
+     */
+    public static List<String> parseCsvList(String csvList) {
+        List<String> list = new ArrayList<String>();
+        if (csvList == null || csvList.isEmpty())
+            return list;
+
+        String[] split = csvList.split("\\s*,\\s*");
+        for (String v : split) {
+            if (!v.equals(""))
+                list.add(v);
+        }
+
+        return list;
+    }
+
+    /**
+     * Create an instance of the class with the given class name
+     */
+    public static <T> T createObject(String className, Object... args) {
+        try {
+            Class<T> klass = (Class<T>) Class.forName(className);
+            Class<?>[] argClasses = new Class<?>[args.length];
+            for (int i = 0, ii = args.length; i < ii; ++i) {
+                Object arg = args[i];
+                argClasses[i] = arg.getClass();
             }
+
+            Constructor<T> constructor = klass.getConstructor(argClasses);
+            return constructor.newInstance(args);
+        } catch (Exception e) {
+            throw new KafkaException(e, "create instance of %s error", className);
         }
+
+    }
+
+    /**
+     * Is the given string null or empty ("")?
+     */
+    public static boolean nullOrEmpty(String s) {
+        return s == null || s.equals("");
+    }
+
+    /**
+     * Create a circular (looping) iterator over a collection.
+     *
+     * @param coll An iterable over the underlying collection.
+     * @return A circular iterator over the collection.
+     */
+    public static <T> Iterable<T> circularIterator(Iterable<T> coll) {
+        return Iterables.cycle(coll);
+    }
+
+    /**
+     * Attempt to read a file as a string
+     */
+    public static String readFileAsString(String path) {
+        return readFileAsString(path, Charset.defaultCharset());
+    }
+
+    public static String readFileAsString(String path, Charset charset) {
+        FileInputStream stream = null;
+
+        try {
+            stream = new FileInputStream(new File(path));
+            FileChannel fc = stream.getChannel();
+            MappedByteBuffer bb = fc.map(FileChannel.MapMode.READ_ONLY, 0, fc.size());
+            return charset.decode(bb).toString();
+        } catch (IOException ex) {
+            throw new KafkaException(ex, "readFileAsString %s error", path);
+        } finally {
+            closeQuietly(stream);
+        }
+    }
+
+    /**
+     * Get the absolute value of the given number. If the number is Int.MinValue return 0.
+     * This is different from java.lang.Math.abs or scala.math.abs in that they return Int.MinValue (!).
+     */
+    public static int abs(int n) {
+        return n & 0x7fffffff;
+    }
+
+    /**
+     * Replace the given string suffix with the new suffix. If the string doesn't end with the given suffix throw an exception.
+     */
+    public static String replaceSuffix(String s, String oldSuffix, String newSuffix) {
+        if (!s.endsWith(oldSuffix))
+            throw new IllegalArgumentException(String.format("Expected string to end with '%s' but string is '%s'", oldSuffix, s));
+
+        return s.substring(0, s.length() - oldSuffix.length()) + newSuffix;
+    }
+
+    /**
+     * Create a file with the given path
+     *
+     * @param path The path to create
+     * @return The created file
+     * @throw KafkaStorageException If the file create fails
+     */
+    public static File createFile(String path) {
+        File f = new File(path);
+        boolean created = false;
+        try {
+            created = f.createNewFile();
+        } catch (IOException e) {
+            throw new KafkaStorageException(e, "Failed to create file %s.", path);
+        }
+        if (!created)
+            throw new KafkaStorageException("Failed to create file %s.", path);
+
+        return f;
+    }
+
+    /**
+     * Turn a properties map into a string
+     */
+    public static String asString(Properties props) {
+        StringWriter writer = new StringWriter();
+        try {
+            props.store(writer, "");
+        } catch (IOException e) {
+            throw new KafkaException(e, "asString error");
+        }
+        return writer.toString();
+    }
+
+    /**
+     * Read some properties with the given default values
+     */
+    public static Properties readProps(String s, Properties defaults) {
+        StringReader reader = new StringReader(s);
+        Properties props = new Properties(defaults);
+        try {
+            props.load(reader);
+        } catch (IOException e) {
+            throw new KafkaException(e, "readProps error");
+        }
+
+        return props;
+    }
+
+    /**
+     * Read a big-endian integer from a byte array
+     */
+    public static int readInt(byte[] bytes, int offset) {
+        return ((bytes[offset] & 0xFF) << 24) | ((bytes[offset + 1] & 0xFF) << 16) | ((bytes[offset + 2] & 0xFF) << 8) | (bytes[offset + 3] & 0xFF);
+    }
+
+    /**
+     * Execute the given function inside the lock
+     */
+    public static <T> T inLock(Lock lock, Function0<T> fun) {
+        lock.lock();
+        try {
+            return fun.apply();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public static void inLock(Lock lock, Callable0 fun) {
+        lock.lock();
+        try {
+            fun.apply();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public static void readChannel(FileChannel channel, ByteBuffer buffer, int position) {
+        try {
+            channel.read(buffer, position);
+        } catch (IOException e) {
+            throw new KafkaException(e);
+        }
+    }
+
+    public static void force(FileChannel channel, boolean metaData) {
+        try {
+            channel.force(metaData);
+        } catch (IOException e) {
+            throw new KafkaException(e);
+        }
+    }
+
+    public static void truncate(FileChannel channel, int targetSize) {
+        try {
+            channel.truncate(targetSize);
+        } catch (IOException e) {
+            throw new KafkaException(e);
+        }
+    }
+
+    public static void position(FileChannel channel, int targetSize) {
+        try {
+            channel.position(targetSize);
+        } catch (IOException e) {
+            throw new KafkaException(e);
+        }
+    }
+
+    public static void read(FileChannel channel, ByteBuffer buffer, int position) {
+        try {
+            channel.read(buffer, position);
+        } catch (IOException e) {
+            throw new KafkaException(e);
+        }
+    }
+
+    public static <K, V> Tuple2<K, V> head(Map<K, V> map) {
+        for (Map.Entry<K, V> entry : map.entrySet()) {
+            return Tuple2.make(entry.getKey(), entry.getValue());
+        }
+        return null;
+    }
+
+    public static <S> S head(Iterable<S> current) {
+        for (S s : current) {
+            return s;
+        }
+
+        return null;
+    }
+
+    public static <S> List<S> tail(List<S> current) {
+        return current != null && current.size() > 1 ? current.subList(1, current.size()) : Lists.<S> newArrayList();
+    }
+
+    public static <S> List<S> tail(Iterable<S> current) {
+        List<S> tail = Lists.newArrayList();
+        int i = 0;
+        for (S s : current) {
+            if (i > 0)
+                tail.add(s);
+            i++;
+        }
+
+        return tail;
+    }
+
+    public static long write(GatheringByteChannel channel, ByteBuffer... byteBuffers) {
+        try {
+            return channel.write(byteBuffers);
+        } catch (IOException e) {
+            throw new KafkaException(e);
+        }
+    }
+
+    public static <T, K, V> Table<T, K, V> groupBy(Map<K, V> map, Function2<K, V, T> function) {
+        Table<T, K, V> result = HashBasedTable.create();
+
+        for (Map.Entry<K, V> entry : map.entrySet()) {
+            result.put(function.apply(entry.getKey(), entry.getValue()), entry.getKey(), entry.getValue());
+        }
+
         return result;
     }
 
-    public static <T> int size(Iterable<T> iterable) {
-        Iterator<T> it = iterable.iterator();
-        int size = 0;
-        while (it.hasNext()) {
-            it.next();
-            size++;
+    public static <T, K, V> Table<T, K, Collection<V>> groupBy(Multimap<K, V> map, Function2<K, Collection<V>, T> function) {
+        Table<T, K, Collection<V>> result = HashBasedTable.create();
+
+        for (K key : map.keySet()) {
+            result.put(function.apply(key, map.get(key)), key, map.get(key));
         }
-        return size;
+
+        return result;
     }
 
+    public static <K, V> Multimap<K, V> groupBy(Iterable<V> set, Function1<V, Tuple2<K, V>> function) {
+        Multimap<K, V> result = HashMultimap.create();
 
-    public static <K, V> Map<K, V> toMap(List<Tuple<K, V>> list) {
+        for (V v : set) {
+            Tuple2<K, V> apply = function.apply(v);
+            result.put(apply._1, apply._2);
+        }
+
+        return result;
+    }
+
+    public static <T, K, V, R> R foldLeft(Table<T, K, V> table, R initValue, Function3<R, T, Map<K, V>, R> foldFunction) {
+        R foldingValue = initValue;
+        for (T t : table.rowKeySet()) {
+            Map<K, V> column = table.row(t);
+
+            foldingValue = foldFunction.apply(foldingValue, t, column);
+        }
+
+        return foldingValue;
+    }
+
+    public static <K, V, R> R foldLeft(Map<K, V> map, R initValue, Function3<R, K, V, R> foldFunction) {
+        R foldingValue = initValue;
+        for (Map.Entry<K, V> entry : map.entrySet()) {
+            foldingValue = foldFunction.apply(foldingValue, entry.getKey(), entry.getValue());
+        }
+
+        return foldingValue;
+    }
+
+    public static <K, V, R> R foldLeft(Multimap<K, V> map, R initValue, Function3<R, K, Collection<V>, R> foldFunction) {
+        R foldingValue = initValue;
+        for (K k : map.keySet()) {
+            Collection<V> vs = map.get(k);
+
+            foldingValue = foldFunction.apply(foldingValue, k, vs);
+        }
+
+        return foldingValue;
+    }
+
+    public static <T, R> R foldLeft(Iterable<T> values, R initValue, Function2<R, T, R> foldFunction) {
+        R foldingValue = initValue;
+        for (T value : values) {
+            foldingValue = foldFunction.apply(foldingValue, value);
+        }
+
+        return foldingValue;
+    }
+
+    public static <T> boolean exists(Collection<T> values, Function1<T, Boolean> existsFunc) {
+        for (T value : values) {
+            if (existsFunc.apply(value))
+                return true;
+        }
+
+        return false;
+    }
+
+    public static <K, V, K1, V1> Multimap<K1, V1> map(Multimap<K, V> map, Function2<K, Collection<V>, Tuple2<K1, Collection<V1>>> func) {
+        Multimap<K1, V1> mm = HashMultimap.create();
+
+        for (K key : map.keySet()) {
+            Tuple2<K1, Collection<V1>> apply = func.apply(key, map.get(key));
+            mm.putAll(apply._1, apply._2);
+        }
+
+        return mm;
+    }
+
+    //    public static <K, V, K1, V1> Multimap<K1, V1> map(Multimap<K, V> map, Function2<K, V, Tuple2<K1, V1>> func) {
+    //        Multimap<K1, V1> mm = HashMultimap.create();
+    //
+    //        for (Map.Entry<K, V> entry : map.entries()) {
+    //            Tuple2<K1, V1> apply = func.apply(entry.getKey(), entry.getValue());
+    //            mm.put(apply._1, apply._2);
+    //        }
+    //
+    //
+    //        return mm;
+    //    }
+
+    public static <K, V, K1, V1> Map<K1, V1> map(Map<K, V> map, Function2<K, V, Tuple2<K1, V1>> func) {
+        Map<K1, V1> ret = Maps.newHashMap();
+        for (Map.Entry<K, V> entry : map.entrySet()) {
+            Tuple2<K1, V1> tuple = func.apply(entry.getKey(), entry.getValue());
+            ret.put(tuple._1, tuple._2);
+        }
+        return ret;
+    }
+
+    public static <V, K1, V1> Map<K1, V1> map(Iterable<V> list, Function1<V, Tuple2<K1, V1>> func) {
+        Map<K1, V1> ret = Maps.newHashMap();
+        for (V v : list) {
+            Tuple2<K1, V1> tuple = func.apply(v);
+            ret.put(tuple._1, tuple._2);
+        }
+        return ret;
+    }
+
+    public static <V, K1, V1> Map<K1, V1> maps(Iterable<V> list, Function1<V, Map<K1, V1>> func) {
+        Map<K1, V1> ret = Maps.newHashMap();
+        for (V v : list) {
+            Map<K1, V1> map = func.apply(v);
+            ret.putAll(map);
+        }
+        return ret;
+    }
+
+    public static <K, V, V1> List<V1> mapList(Map<K, V> map, Function2<K, V, V1> func) {
+        List<V1> v1s = Lists.newArrayList();
+        for (Map.Entry<K, V> entry : map.entrySet()) {
+            V1 v1 = func.apply(entry.getKey(), entry.getValue());
+            v1s.add(v1);
+        }
+        return v1s;
+    }
+
+    public static <V, V1> List<V1> mapList(Iterable<V> coll, Function1<V, V1> func) {
+        List<V1> v1s = Lists.newArrayList();
+        for (V v : coll) {
+            V1 v1 = func.apply(v);
+            v1s.add(v1);
+        }
+        return v1s;
+    }
+
+    public static <V, V1> List<V1> mapLists(Iterable<V> coll, Function1<V, Collection<V1>> func) {
+        List<V1> v1s = Lists.newArrayList();
+        for (V v : coll) {
+            Collection<V1> vs = func.apply(v);
+            v1s.addAll(vs);
+        }
+        return v1s;
+    }
+
+    public static <V, V1> List<V1> mapList(V[] coll, Function1<V, V1> func) {
+        List<V1> v1s = Lists.newArrayList();
+        for (V v : coll) {
+            V1 v1 = func.apply(v);
+            v1s.add(v1);
+        }
+        return v1s;
+    }
+
+    public static <K, V, V1> List<V1> mapList(Multimap<K, V> coll, Function2<K, Collection<V>, V1> func) {
+        List<V1> v1s = Lists.newArrayList();
+        for (K k : coll.keySet()) {
+            V1 v1 = func.apply(k, coll.get(k));
+            v1s.add(v1);
+        }
+        return v1s;
+    }
+
+    public static <V, V1> Set<V1> mapSet(Collection<V> coll, Function1<V, V1> func) {
+        Set<V1> v1s = Sets.newHashSet();
+        for (V v : coll) {
+            V1 v1 = func.apply(v);
+            v1s.add(v1);
+        }
+        return v1s;
+    }
+
+    public static <K, V, V1> Set<V1> mapSet(Multimap<K, V> coll, Function2<K, Collection<V>, V1> func) {
+        Set<V1> v1s = Sets.newHashSet();
+        for (K k : coll.keySet()) {
+            V1 v1 = func.apply(k, coll.get(k));
+            v1s.add(v1);
+        }
+        return v1s;
+    }
+
+    public static <V, V1> List<V1> mapLists(Collection<V> coll, Function1<V, Collection<V1>> func) {
+        List<V1> v1s = Lists.newArrayList();
+        for (V v : coll) {
+            Collection<V1> v1 = func.apply(v);
+            v1s.addAll(v1);
+        }
+        return v1s;
+    }
+
+    public static <V, V1> List<V1> mapList(Collection<V> coll, Map<V, V1> map) {
+        List<V1> v1s = Lists.newArrayList();
+        for (V v : coll) {
+            v1s.add(map.get(v));
+        }
+        return v1s;
+    }
+
+    public static <R, C, V, V1> List<V1> mapList(Table<R, C, V> map, Function2<R, Map<C, V>, V1> func) {
+        List<V1> v1s = Lists.newArrayList();
+        for (R row : map.rowKeySet()) {
+            Map<C, V> rowValue = map.row(row);
+            V1 v1 = func.apply(row, rowValue);
+            v1s.add(v1);
+        }
+        return v1s;
+    }
+
+    public static <K, V> Map<K, V> flatMap(int from, int count, Function0<Tuple2<K, V>> func) {
         Map<K, V> map = Maps.newHashMap();
-        for (Tuple<K, V> kv : list) {
-            map.put(kv.v1, kv.v2);
+
+        for (int i = from; i < from + count; ++i) {
+            Tuple2<K, V> apply = func.apply();
+            map.put(apply._1, apply._2);
+        }
+
+        return map;
+    }
+
+    public static <K, V> Map<K, V> flatMaps(int from, int count, Function0<Map<K, V>> func) {
+        Map<K, V> map = Maps.newHashMap();
+
+        for (int i = from; i < from + count; ++i) {
+            Map<K, V> apply = func.apply();
+            map.putAll(apply);
+        }
+
+        return map;
+    }
+
+    public static <K, V> Map<K, V> map(int from, int count, Function0<Tuple2<K, V>> func) {
+        Map<K, V> map = Maps.newHashMap();
+
+        for (int i = from; i < from + count; ++i) {
+            Tuple2<K, V> apply = func.apply();
+            map.put(apply._1, apply._2);
+        }
+
+        return map;
+    }
+
+    public static <K, K1, V> void foreach(Table<K1, K, V> table, Callable2<K1, Map<K, V>> func) {
+        for (K1 row : table.rowKeySet()) {
+            func.apply(row, table.row(row));
+        }
+    }
+
+    public static <K, V> void foreach(Map<K, V> map, Callable2<K, V> func) {
+        for (Map.Entry<K, V> entry : map.entrySet()) {
+            func.apply(entry.getKey(), entry.getValue());
+        }
+    }
+
+    public static <K, V> void foreach(Multimap<K, V> map, Callable2<K, Collection<V>> func) {
+        for (K k : map.keySet()) {
+            Collection<V> vs = map.get(k);
+
+            func.apply(k, vs);
+        }
+    }
+
+    public static <V> void foreach(Iterable<V> coll, Callable1<V> func) {
+        for (V v : coll) {
+            func.apply(v);
+        }
+    }
+
+    public static <V> void foreach(Iterator<V> coll, Callable1<V> func) {
+        while (coll.hasNext()) {
+            func.apply(coll.next());
+        }
+    }
+
+    public static List<Integer> flatList(int from, int count) {
+        return flatList(from, count, 1);
+    }
+
+    public static List<Integer> flatList(int from, int to, int by) {
+        return flatList(from, to, by, new Function1<Integer, Integer>() {
+            @Override
+            public Integer apply(Integer arg) {
+                return arg;
+            }
+        });
+    }
+
+    public static <T> List<T> flatList(int from, int count, Function1<Integer, T> fun) {
+        return flatList(from, count + from, 1, fun);
+    }
+
+    public static <T> List<T> flatList(int from, int to, int by, Function1<Integer, T> fun) {
+        List<T> ret = Lists.newArrayList();
+        for (int i = from; i < to; i += by) {
+            ret.add(fun.apply(i));
+        }
+
+        return ret;
+    }
+
+    public static <T> List<T> flatList(long from, long count, Function1<Long, T> fun) {
+        List<T> ret = Lists.newArrayList();
+        for (long i = from; i < from + count; ++i) {
+            ret.add(fun.apply(i));
+        }
+
+        return ret;
+    }
+
+    public static <T> List<T> flatLists(int from, int count, Function1<Integer, List<T>> fun) {
+        List<T> ret = Lists.newArrayList();
+        for (int i = from; i < from + count; ++i) {
+            ret.addAll(fun.apply(i));
+        }
+
+        return ret;
+    }
+
+    public static <T> Set<T> flatSet(int from, int count, Function1<Integer, T> fun) {
+        Set<T> ret = Sets.newHashSet();
+        for (int i = from; i < from + count; ++i) {
+            ret.add(fun.apply(i));
+        }
+
+        return ret;
+    }
+
+    public static <S> S lastOption(Iterable<S> ms) {
+        S last = null;
+        for (S s : ms) {
+            last = s;
+        }
+
+        return last;
+
+    }
+
+    public static <K, V> Multimap<K, V> filter(Multimap<K, V> coll, Predicate<Map.Entry<K, V>> predicate) {
+        Multimap<K, V> map = HashMultimap.create();
+        for (Map.Entry<K, V> s : coll.entries()) {
+            if (predicate.apply(s))
+                map.put(s.getKey(), s.getValue());
         }
         return map;
+    }
+
+    public static <K, V> Map<K, V> filter(Map<K, V> coll, Predicate<Map.Entry<K, V>> predicate) {
+        Map<K, V> map = Maps.newHashMap();
+        for (Map.Entry<K, V> s : coll.entrySet()) {
+            if (predicate.apply(s))
+                map.put(s.getKey(), s.getValue());
+        }
+        return map;
+    }
+
+    public static <K, V> Map<K, V> filter(Map<K, V> coll, Predicate2<K, V> predicate) {
+        Map<K, V> map = Maps.newHashMap();
+        for (Map.Entry<K, V> s : coll.entrySet()) {
+            if (predicate.apply(s.getKey(), s.getValue()))
+                map.put(s.getKey(), s.getValue());
+        }
+        return map;
+    }
+
+    public static <K, V> Multimap<K, V> filter(Multimap<K, V> coll, Predicate2<K, Collection<V>> predicate) {
+        Multimap<K, V> map = HashMultimap.create();
+        for (K k : coll.keySet()) {
+            Collection<V> vs = coll.get(k);
+            if (predicate.apply(k, vs))
+                map.putAll(k, vs);
+        }
+        return map;
+    }
+
+    public static <S> List<S> filter(Iterable<S> coll, Predicate<S> predicate) {
+        List<S> list = Lists.newArrayList();
+        for (S s : coll) {
+            if (predicate.apply(s))
+                list.add(s);
+        }
+        return list;
+    }
+
+    public static <K, V> V getOrElse(Map<K, V> map, K topic, V defaultValue) {
+        V v = map.get(topic);
+        return v == null ? defaultValue : v;
+    }
+
+    public static <S> S last(List<S> list) {
+        if (list.size() > 0)
+            return list.get(list.size() - 1);
+
+        throw new KafkaException("list is empty, last is not available");
+    }
+
+    public static LogToClean max(List<LogToClean> dirtyLogs) {
+        Collections.sort(dirtyLogs);
+        return last(dirtyLogs);
+    }
+
+    public static <A, B> List<Tuple2<A, B>> zip(List<A> lista, List<B> listb) {
+        List<Tuple2<A, B>> list = Lists.newArrayList();
+        for (int i = 0, ii = lista.size(), jj = listb.size(); i < ii && i < jj; ++i) {
+            list.add(Tuple2.make(lista.get(i), listb.get(i)));
+        }
+
+        return list;
+    }
+
+    public static <A, B, T1, T2> List<Tuple2<T1, T2>> zip(List<A> lista, List<B> listb, Function2<A, B, Tuple2<T1, T2>> func) {
+        List<Tuple2<T1, T2>> list = Lists.newArrayList();
+        for (int i = 0, ii = lista.size(), jj = listb.size(); i < ii && i < jj; ++i) {
+            list.add(func.apply(lista.get(i), listb.get(i)));
+        }
+
+        return list;
+    }
+
+    public static <T> List<T> take(Iterable<T> items, int n) {
+        List<T> list = Lists.newArrayList();
+        int num = 0;
+        for (T s : items) {
+            if (++num > n)
+                break;
+            list.add(s);
+        }
+        return list;
+    }
+
+    public static <T> List<Tuple2<T, Integer>> zipWithIndex(List<T> values) {
+        return zipWithIndex(values, 0);
+    }
+
+    public static <T> List<Tuple2<T, Integer>> zipWithIndex(List<T> values, int from) {
+        List<Tuple2<T, Integer>> list = Lists.newArrayList();
+        for (int i = 0, ii = values.size(); i < ii; ++i) {
+            list.add(Tuple2.make(values.get(i), i + from));
+        }
+
+        return list;
+    }
+
+    public static boolean forall(int from, int size, int step, Predicate<Integer> predicate) {
+        for (int i = from; i < from + size; i += step) {
+            if (!predicate.apply(i))
+                return false;
+        }
+
+        return true;
+
+    }
+
+    public static <T> boolean forall(Iterable<T> coll, Predicate<T> predicate) {
+        for (T t : coll) {
+            if (!predicate.apply(t))
+                return false;
+        }
+
+        return true;
+    }
+
+    public static <T> int indexWhere(Iterable<T> coll, Predicate<Integer> predicate) {
+        int i = -1;
+        for (T t : coll) {
+            ++i;
+            if (predicate.apply(i))
+                return i;
+        }
+
+        return -1;
+    }
+
+    public static <T> List<T> dropRight(List<T> list, int n) {
+        List<T> ret = Lists.newArrayList();
+
+        int i = 0;
+        int size = list.size();
+        for (T t : list) {
+            if (i + n <= size)
+                break;
+            ret.add(t);
+        }
+
+        return ret;
+    }
+
+    public static List<Tuple2<Integer, Integer>> zip(int start, int num, int start1, int num1) {
+        List<Tuple2<Integer, Integer>> list = Lists.newArrayList();
+
+        for (int i = start, j = start1; i < start + num && j < start1 + num1; ++i, ++j) {
+            list.add(Tuple2.make(i, j));
+        }
+
+        return list;
+
+    }
+
+    public static int select(Selector selector, int timeout) {
+        try {
+            return selector.select(timeout);
+        } catch (IOException e) {
+            throw new KafkaException(e);
+        }
+    }
+
+    public static <T> T take(BlockingQueue<T> queue) {
+        try {
+            return queue.take();
+        } catch (InterruptedException e) {
+            throw new KafkaException(e);
+        }
+    }
+
+    public static <T> Set<T> filterSet(Set<T> sets, Predicate<T> predicate) {
+        Set<T> ret = Sets.newHashSet();
+
+        for (T t : sets) {
+            if (predicate.apply(t))
+                ret.add(t);
+        }
+
+        return ret;
+
+    }
+
+    public static <T> void put(BlockingQueue<T> queue, T item) {
+        try {
+            queue.put(item);
+        } catch (InterruptedException e) {
+            throw new KafkaException(e);
+        }
+
+    }
+
+    public static <K, V> V getOrElseUpdate(Map<K, V> map, K k, V v) {
+        V v1 = map.get(k);
+        if (v1 != null)
+            return v1;
+
+        map.put(k, v);
+        return v;
+    }
+
+    public static <T> Set<T> minus(Set<T> from, Collection<T> substraction) {
+        Set<T> ret = Sets.newHashSet(from);
+        ret.removeAll(substraction);
+
+        return ret;
+    }
+
+    public static <K, V> void removeAll(Map<K, V> map, Set<K> keys) {
+        for (K k : keys) {
+            map.remove(k);
+        }
+    }
+
+    public static <K, V> Map<K, V> minus(Map<K, V> map, K k) {
+        Map<K, V> m = Maps.newHashMap(map);
+        m.remove(k);
+        return m;
+    }
+
+    public static <K, V, V1> Multimap<K, V> mapValues(Map<K, V1> map, Function1<V1, Collection<V>> function1) {
+        Multimap<K, V> m = HashMultimap.create();
+
+        for (Map.Entry<K, V1> entry : map.entrySet()) {
+            m.putAll(entry.getKey(), function1.apply(entry.getValue()));
+        }
+
+        return m;
+    }
+
+    public static <K, V> Multimap<K, V> multimap(Map<K, Collection<V>> map) {
+        Multimap<K, V> m = HashMultimap.create();
+
+        for (Map.Entry<K, Collection<V>> entry : map.entrySet()) {
+            m.putAll(entry.getKey(), entry.getValue());
+        }
+
+        return m;
+    }
+
+    public static <T> Set<T> and(Set<T> set, Collection<T> all) {
+        Set<T> result = Sets.newHashSet(set);
+
+        result.addAll(all);
+
+        return result;
+    }
+
+    public static <K, V> Tuple2<K, Collection<V>> head(Multimap<K, V> mm) {
+        for (K k : mm.keySet()) {
+            return Tuple2.make(k, mm.get(k));
+        }
+
+        return null;
+    }
+
+    public static <T> T[] takeRight(T[] list, int size) {
+        if (size >= list.length) {
+            return list;
+        }
+
+        T[] ret = (T[]) Array.newInstance(list[0].getClass(), size);
+        int offset = list.length - size;
+        for (int i = offset; i < list.length; ++i) {
+            ret[i - offset] = list[i];
+        }
+
+        return ret;
+    }
+
+    public static <T> boolean subsetOf(Set<T> set1, Set<T> set2) {
+        Set<T> set = Sets.newHashSet(set1);
+
+        set.removeAll(set2);
+
+        return set.isEmpty();
+    }
+
+    public static <K, V> List<Tuple2<K, Collection<V>>> toList(Multimap<K, V> mm) {
+        List<Tuple2<K, Collection<V>>> list = Lists.newArrayList();
+
+        for (K k : mm.keySet()) {
+            list.add(Tuple2.make(k, mm.get(k)));
+        }
+
+        return list;
+    }
+
+    public static <T> List<T> sortWith(List<T> list, Comparator<T> comparator) {
+        List<T> result = Lists.newArrayList(list);
+
+        Collections.sort(result, comparator);
+
+        return result;
+    }
+
+    public static <T> int count(Iterable<T> iterable, Predicate<T> predicate) {
+        int count = 0;
+        for (T t : iterable) {
+            if (predicate.apply(t))
+                ++count;
+        }
+
+        return count;
+    }
+
+    public static <T1, T> List<T> zipWithIndex(List<T1> list, Function2<T1, Integer, T> function2) {
+        List<T> result = Lists.newArrayList();
+        for (int i = 0, ii = list.size(); i < ii; ++i) {
+            result.add(function2.apply(list.get(i), i));
+        }
+
+        return result;
+    }
+
+    public static void await(Condition condition, long l, TimeUnit timeUnit) {
+        try {
+            condition.await(l, timeUnit);
+        } catch (InterruptedException e) {
+            throw new KafkaException(e);
+        }
+    }
+
+    public static void lockInterruptibly(ReentrantLock reentrantLock) {
+        try {
+            reentrantLock.lockInterruptibly();
+        } catch (InterruptedException e) {
+            throw new KafkaException(e);
+        }
+    }
+
+    public static void await(Condition cond) {
+        try {
+            cond.await();
+        } catch (InterruptedException e) {
+            throw new KafkaException(e);
+        }
+    }
+
+    public static void sleep(int ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            // ignore
+        }
+    }
+
+    public static String getHostName() {
+        return "TODO";
+    }
+
+    public static <T> T poll(BlockingQueue<T> channel, int timeoutMs, TimeUnit timeunit) {
+        try {
+            return channel.poll(timeoutMs, timeunit);
+        } catch (InterruptedException e) {
+            throw new KafkaException(e);
+        }
+    }
+
+    public static <T> T newInstance(Class<?> clazz) {
+        try {
+            return (T) clazz.newInstance();
+        } catch (Exception e) {
+            throw new KafkaException(e);
+        }
     }
 }

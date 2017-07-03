@@ -1,64 +1,52 @@
 package kafka.api;
 
-import java.nio.Buffer;
-import java.util.HashMap;
 import java.util.Map;
 
+import com.google.common.collect.Maps;
+
 import kafka.common.KafkaException;
-import kafka.func.Handler;
-import kafka.func.Tuple;
+import kafka.utils.Tuple2;
 
-/**
- * Created by Administrator on 2017/4/21.
- */
 public class RequestKeys {
-    public static final Short ProduceKey = 0;
-    public static final Short FetchKey = 1;
-    public static final Short OffsetsKey = 2;
-    public static final Short MetadataKey = 3;
-    public static final Short LeaderAndIsrKey = 4;
-    public static final Short StopReplicaKey = 5;
-    public static final Short UpdateMetadataKey = 6;
-    public static final Short ControlledShutdownKey = 7;
-    public static final Short OffsetCommitKey = 8;
-    public static final Short OffsetFetchKey = 9;
-    public static final Short ConsumerMetadataKey = 10;
-    public static final Short JoinGroupKey = 11;
-    public static final Short HeartbeatKey = 12;
+    public static final short ProduceKey = 0;
+    public static final short FetchKey = 1;
+    public static final short OffsetsKey = 2;
+    public static final short MetadataKey = 3;
+    public static final short LeaderAndIsrKey = 4;
+    public static final short StopReplicaKey = 5;
+    public static final short UpdateMetadataKey = 6;
+    public static final short ControlledShutdownKey = 7;
+    public static final short OffsetCommitKey = 8;
+    public static final short OffsetFetchKey = 9;
 
-    public static Map<Short, Tuple<String, Handler<Buffer, RequestOrResponse>>> keyToNameAndDeserializerMap =
-            new HashMap() {
-                {
-                    put(ProduceKey, Tuple.of("Produce", ProducerRequest.readFrom));
-//                    put(FetchKey, Tuple.of("Fetch", FetchRequest.readFrom));
-//                    put(OffsetsKey, Tuple.of("Offsets", OffsetRequest.readFrom));
-//                    put(MetadataKey, Tuple.of("Metadata", TopicMetadataRequest.readFrom));
-//                    put(LeaderAndIsrKey, Tuple.of("LeaderAndIsr", LeaderAndIsrRequest.readFrom));
-//                    put(StopReplicaKey, Tuple.of("StopReplica", StopReplicaRequest.readFrom));
-//                    put(UpdateMetadataKey, Tuple.of("ControlledShutdown", ControlledShutdownRequest.readFrom));
-//                    put(ControlledShutdownKey, Tuple.of("Produce", ProducerRequest.readFrom));
-//                    put(OffsetCommitKey, Tuple.of("OffsetCommit", OffsetCommitRequest.readFrom));
-//                    put(OffsetFetchKey, Tuple.of("OffsetFetch", OffsetFetchRequest.readFrom));
-//                    put(ConsumerMetadataKey, Tuple.of("ConsumerMetadata", ConsumerMetadataRequest.readFrom));
-//                    put(JoinGroupKey, Tuple.of("ConsumerMetadata", ConsumerMetadataRequest.readFrom));
-//                    put(HeartbeatKey, Tuple.of("Heartbeat", HeartbeatRequestAndHeader.readFrom));
-                }
-            };
+    public static Map<Short, Tuple2<String, RequestReader>> keyToNameAndDeserializerMap = Maps.newHashMap();
+
+    static {
+        keyToNameAndDeserializerMap.put(ProduceKey, Tuple2.make("Produce", ProducerRequestReader.instance));
+        keyToNameAndDeserializerMap.put(FetchKey, Tuple2.make("Fetch", FetchRequestReader.instance));
+        keyToNameAndDeserializerMap.put(OffsetsKey, Tuple2.make("Offsets", OffsetRequestReader.instance));
+        keyToNameAndDeserializerMap.put(MetadataKey, Tuple2.make("Metadata", TopicMetadataRequestReader.instance));
+        keyToNameAndDeserializerMap.put(LeaderAndIsrKey, Tuple2.make("LeaderAndIsr", LeaderAndIsrRequestReader.instance));
+        keyToNameAndDeserializerMap.put(StopReplicaKey, Tuple2.make("StopReplica", StopReplicaRequestReader.instance));
+        keyToNameAndDeserializerMap.put(UpdateMetadataKey, Tuple2.make("UpdateMetadata", UpdateMetadataRequestReader.instance));
+        keyToNameAndDeserializerMap.put(ControlledShutdownKey, Tuple2.make("ControlledShutdown", ControlledShutdownRequestReader.instance));
+        keyToNameAndDeserializerMap.put(OffsetCommitKey, Tuple2.make("OffsetCommit", OffsetCommitRequestReader.instance));
+        keyToNameAndDeserializerMap.put(OffsetFetchKey, Tuple2.make("OffsetFetch", OffsetFetchRequestReader.instance));
+    }
 
     public static String nameForKey(Short key) {
-        Tuple<String, Handler<Buffer, RequestOrResponse>> t = keyToNameAndDeserializerMap.get(key);
-        if (t != null) {
-            return t.v1;
-        }
-        throw new KafkaException(String.format("Wrong request type %d", key));
+        Tuple2<String, RequestReader> nameAndSerializer = keyToNameAndDeserializerMap.get(key);
+        if (nameAndSerializer == null)
+            throw new KafkaException("Wrong request type %d", key);
+
+        return nameAndSerializer._1;
     }
 
-    public static Handler<Buffer, RequestOrResponse> deserializerForKey(Short key) {
-        Tuple<String, Handler<Buffer, RequestOrResponse>> t = keyToNameAndDeserializerMap.get(key);
-        if (t != null) {
-            return t.v2;
-        }
-        throw new KafkaException(String.format("Wrong request type %d", key));
-    }
+    public static RequestReader deserializerForKey(Short key) {
+        Tuple2<String, RequestReader> nameAndSerializer = keyToNameAndDeserializerMap.get(key);
+        if (nameAndSerializer == null)
+            throw new KafkaException("Wrong request type %d", key);
 
+        return nameAndSerializer._2;
+    }
 }

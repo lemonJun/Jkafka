@@ -1,34 +1,30 @@
 package kafka.utils;
 
-import java.util.Collections;
+import static com.google.common.base.Preconditions.checkState;
+
+import java.util.Enumeration;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.stream.Collectors;
+import java.util.Set;
 
-import com.google.common.collect.Sets;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import kafka.func.Handler;
-import kafka.func.Tuple;
-import kafka.message.CompressionCodec;
-
-/**
- * Created by Administrator on 2017/4/3.
- */
-public class VerifiableProperties extends Logging {
-    public Properties props;
-    private HashSet referenceSet = Sets.newHashSet();
+public class VerifiableProperties {
+    public final Properties props;
 
     public VerifiableProperties(Properties props) {
         this.props = props;
     }
 
+    private Set<String> referenceSet = new HashSet<String>();
+
     public VerifiableProperties() {
-        this.props = new Properties();
+        this(new Properties());
     }
 
-    public Boolean containsKey(String name) {
+    public boolean containsKey(String name) {
         return props.containsKey(name);
     }
 
@@ -41,96 +37,85 @@ public class VerifiableProperties extends Logging {
     /**
      * Read a required integer property value or throw an exception if no such property is found
      */
-    public Integer getInt(String name) {
+    public int getInt(String name) {
         return Integer.parseInt(getString(name));
     }
 
-    public Integer getIntInRange(String name, Tuple<Integer, Integer> range) {
-        Prediction.require(containsKey(name), "Missing required property '" + name + "'");
+    public int getIntInRange(String name, Range<Integer> range) {
+        checkState(containsKey(name), "Missing required property '" + name + "'");
         return getIntInRange(name, -1, range);
     }
 
     /**
      * Read an integer from the properties instance
      *
-     * @param name The property name
-     * @param def  The default value to use if the property is not found
+     * @param name         The property name
+     * @param defaultValue The defaultValue value to use if the property is not found
      * @return the integer value
      */
-    public Integer getInt(String name, Integer def) {
-        return getIntInRange(name, def, Tuple.of(Integer.MIN_VALUE, Integer.MAX_VALUE));
+    public int getInt(String name, int defaultValue) {
+        return getIntInRange(name, defaultValue, Range.make(Integer.MIN_VALUE, Integer.MAX_VALUE));
     }
 
-    public Short getShort(String name, Short def) {
-        return getShortInRange(name, def, Tuple.of(Short.MIN_VALUE, Short.MAX_VALUE));
+    public Short getShort(String name, Short defaultValue) {
+        return getShortInRange(name, defaultValue, Range.make(Short.MIN_VALUE, Short.MAX_VALUE));
     }
-
 
     /**
      * Read an integer from the properties instance. Throw an exception
      * if the value is not in the given range (inclusive)
      *
-     * @param name  The property name
-     * @param def   The default value to use if the property is not found
-     * @param range The range in which the value must fall (inclusive)
+     * @param name         The property name
+     * @param defaultValue The defaultValue value to use if the property is not found
+     * @param range        The range in which the value must fall (inclusive)
      * @return the integer value
      * @throws IllegalArgumentException If the value is not in the given range
      */
-    public Integer getIntInRange(String name, Integer def, Tuple<Integer, Integer> range) {
-        Integer v;
-        if (containsKey(name))
-            v = getInt(name);
-        else
-            v = def;
-        Prediction.require(v >= range.v1 && v <= range.v2, name + " has value " + v + " which is not in the range " + range + ".");
+    public int getIntInRange(String name, int defaultValue, Range<Integer> range) {
+        int v = containsKey(name) ? Integer.parseInt(getProperty(name)) : defaultValue;
+
+        checkState(v >= range._1 && v <= range._2, name + " has value " + v + " which is not in the range " + range + ".");
+
         return v;
     }
 
-    public Short getShortInRange(String name, Short def, Tuple<Short, Short> range) {
-        Short v;
-        if (containsKey(name))
-            v = Short.parseShort(getProperty(name));
-        else
-            v = def;
-        Prediction.require(v >= range.v1 && v <= range.v2, name + " has value " + v + " which is not in the range " + range + ".");
+    public short getShortInRange(String name, short defaultValue, Range<Short> range) {
+        short v = containsKey(name) ? Short.parseShort(getProperty(name)) : defaultValue;
+        checkState(v >= range._1 && v <= range._2, name + " has value " + v + " which is not in the range " + range + ".");
         return v;
     }
 
     /**
      * Read a required long property value or throw an exception if no such property is found
      */
-    public Long getLong(String name) {
+    public long getLong(String name) {
         return Long.parseLong(getString(name));
     }
 
     /**
      * Read an long from the properties instance
      *
-     * @param name The property name
-     * @param def  The default value to use if the property is not found
+     * @param name         The property name
+     * @param defaultValue The defaultValue value to use if the property is not found
      * @return the long value
      */
-    public Long getLong(String name, Long def) {
-        return getLongInRange(name, def, Tuple.of(Long.MIN_VALUE, Long.MAX_VALUE));
+    public long getLong(String name, long defaultValue) {
+        return getLongInRange(name, defaultValue, Range.make(Long.MIN_VALUE, Long.MAX_VALUE));
     }
 
     /**
      * Read an long from the properties instance. Throw an exception
      * if the value is not in the given range (inclusive)
      *
-     * @param name  The property name
-     * @param def   The default value to use if the property is not found
-     * @param range The range in which the value must fall (inclusive)
+     * @param name         The property name
+     * @param defaultValue The defaultValue value to use if the property is not found
+     * @param range        The range in which the value must fall (inclusive)
      * @return the long value
      * @throws IllegalArgumentException If the value is not in the given range
      */
-    public Long getLongInRange(String name, Long def, Tuple<Long, Long> range) {
-        Long v;
-        if (containsKey(name))
-            v = getLong(name);
-        else
-            v = def;
-        Prediction.require(v >= range.v1 && v <= range.v2, name + " has value " + v + " which is not in the range " + range + ".");
+    public long getLongInRange(String name, long defaultValue, Range<Long> range) {
+        long v = containsKey(name) ? Long.parseLong(getProperty(name)) : defaultValue;
+        checkState(v >= range._1 && v <= range._2, name + " has value " + v + " which is not in the range " + range + ".");
         return v;
     }
 
@@ -139,9 +124,9 @@ public class VerifiableProperties extends Logging {
      *
      * @param name The property name
      * @return the value
-     * @throws IllegalArgumentException If the given property is not present
+     * @throw IllegalArgumentException If the given property is not present
      */
-    public Double getDouble(String name) {
+    public double getDouble(String name) {
         return Double.parseDouble(getString(name));
     }
 
@@ -149,109 +134,92 @@ public class VerifiableProperties extends Logging {
      * Get an optional argument as a double
      *
      * @param name The property name
-     * @param def  The default value for the property if not present
+     * @defaultValue The defaultValue value for the property if not present
      */
-    public Double getDouble(String name, Double def) {
-        if (containsKey(name))
-            return getDouble(name);
-        else
-            return def;
+    public double getDouble(String name, double defaultValue) {
+        return containsKey(name) ? getDouble(name) : defaultValue;
     }
 
     /**
      * Read a boolean value from the properties instance
      *
-     * @param name The property name
-     * @param def  The default value to use if the property is not found
+     * @param name         The property name
+     * @param defaultValue The defaultValue value to use if the property is not found
      * @return the boolean value
      */
-    public Boolean getBoolean(String name, Boolean def) {
+    public boolean getBoolean(String name, boolean defaultValue) {
         if (!containsKey(name))
-            return def;
+            return defaultValue;
         else {
             String v = getProperty(name);
-            Prediction.require(v == "true" || v == "false", "Unacceptable value for property '" + name + "', boolean values must be either 'true' or 'false");
+            checkState(v == "true" || v == "false", "Unacceptable value for property '" + name + "', boolean values must be either 'true' or 'false");
             return Boolean.parseBoolean(v);
         }
     }
 
-    public Boolean getBoolean(String name) {
+    public boolean getBoolean(String name) {
         return Boolean.parseBoolean(getString(name));
     }
 
     /**
-     * Get a string property, or, if no such property is defined, return the given default value
+     * Get a string property, or, if no such property is defined, return the given defaultValue value
      */
-    public String getString(String name, String def) {
-        if (containsKey(name))
-            return getProperty(name);
-        else
-            return def;
+    public String getString(String name, String defaultValue) {
+        return (containsKey(name)) ? getProperty(name) : defaultValue;
     }
 
     /**
      * Get a string property or throw and exception if no such property is defined.
      */
     public String getString(String name) {
-        Prediction.require(containsKey(name), "Missing required property '" + name + "'");
+        checkState(containsKey(name), "Missing required property '" + name + "'");
         return getProperty(name);
     }
 
+    /**
+     * Get a Map[String, String] from a property list in the form k1:v2, k2:v2, ...
+     */
     public Map<String, String> getMap(String name) {
-        return getMap(name, s -> true);
+        return getMap(name, new Function1<String, Boolean>() {
+            @Override
+            public Boolean apply(String arg) {
+                return true;
+            }
+        });
     }
 
-    /**
-     * Get a Map<String, String> from a property list in the form v2 k1, v2 k2, ...
-     */
-    public Map<String, String> getMap(String name, Handler<String, Boolean> valid) {
+    public Map<String, String> getMap(String name, Function1<String, Boolean> valid) {
         try {
             Map<String, String> m = Utils.parseCsvMap(getString(name, ""));
-            // TODO: 2017/4/4     case (key,value)=>  if (!valid.process(value))
-            m.forEach((key, value) -> {
-                if (!valid.handle(key))
+            for (Map.Entry<String, String> entry : m.entrySet()) {
+                String key = entry.getKey();
+                String value = entry.getValue();
+                if (!valid.apply(value))
                     throw new IllegalArgumentException(String.format("Invalid entry '%s' = '%s' for property '%s'", key, value, name));
-            });
+            }
             return m;
         } catch (Exception e) {
             throw new IllegalArgumentException(String.format("Error parsing configuration property '%s': %s", name, e.getMessage()));
         }
     }
 
-    /**
-     * Parse compression codec from a property list in either. Codecs may be specified as integers, or as strings.
-     * See <[kafka.message.CompressionCodec]> for more details.
-     *
-     * @param name The property name
-     * @param def  Default compression codec
-     * @return compression codec
-     */
-    // TODO: 2017/4/4  def unused
-    public CompressionCodec getCompressionCodec(String name, CompressionCodec def) {
-        String prop = getString(name, CompressionCodec.NoCompressionCodec.name);
-        try {
-            return CompressionCodec.getCompressionCodec(Integer.parseInt(prop));
-        } catch (NumberFormatException nfe) {
-            return CompressionCodec.getCompressionCodec(prop);
-        }
-    }
+    Logger logger = LoggerFactory.getLogger(VerifiableProperties.class);
 
     public void verify() {
-        info("Verifying properties");
-        List<String> propNames = Collections.list(props.propertyNames()).stream()
-                .map(p -> p.toString()).sorted().collect(Collectors.toList());
-
-        for (String key : propNames) {
+        logger.info("Verifying properties");
+        Enumeration<?> enumeration = props.propertyNames();
+        while (enumeration.hasMoreElements()) {
+            String key = (String) enumeration.nextElement();
             if (!referenceSet.contains(key) && !key.startsWith("external"))
-                warn(String.format("Property %s is not valid", key));
+                logger.warn("Property {} is not valid", key);
             else
-                info(String.format("Property %s is overridden to %s", key, props.getProperty(key)));
+                logger.info("Property {} is overridden to {}", key, props.getProperty(key));
         }
+
     }
 
     @Override
     public String toString() {
         return props.toString();
     }
-
 }

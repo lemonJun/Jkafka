@@ -1,48 +1,42 @@
-package kafka.common;/**
- * Created by zhoulf on 2017/5/16.
- */
+package kafka.common;
 
-import kafka.func.Tuple3;
+import kafka.utils.Tuple3;
 
 /**
- * @author
- * @create 2017-05-16 9:51
- **/
+ * Convenience case class since (topic, partition) pairs are ubiquitous.
+ */
 public class OffsetMetadataAndError {
-    public static OffsetMetadataAndError NoOffset = new OffsetMetadataAndError(OffsetAndMetadata.InvalidOffset, OffsetAndMetadata.NoMetadata, ErrorMapping.NoError);
-    public static OffsetMetadataAndError OffsetsLoading = new OffsetMetadataAndError(OffsetAndMetadata.InvalidOffset, OffsetAndMetadata.NoMetadata, ErrorMapping.OffsetsLoadInProgressCode);
-    public static OffsetMetadataAndError NotOffsetManagerForGroup = new OffsetMetadataAndError(OffsetAndMetadata.InvalidOffset, OffsetAndMetadata.NoMetadata, ErrorMapping.NotCoordinatorForConsumerCode);
-    public static OffsetMetadataAndError UnknownTopicOrPartition = new OffsetMetadataAndError(OffsetAndMetadata.InvalidOffset, OffsetAndMetadata.NoMetadata, ErrorMapping.UnknownTopicOrPartitionCode);
+    public static final long InvalidOffset = -1L;
+    public static final String NoMetadata = "";
 
-    public Long offset;
+    public long offset;
     public String metadata;
-    public Short error;
+    public short error;
 
-    public OffsetMetadataAndError(Long offset, String metadata, Short error) {
+    public OffsetMetadataAndError(long offset) {
+        this(offset, NoMetadata, ErrorMapping.NoError);
+    }
+
+    public OffsetMetadataAndError(long offset, String metadata) {
+        this(offset, metadata, ErrorMapping.NoError);
+    }
+
+    public OffsetMetadataAndError(long offset, String metadata, short error) {
         this.offset = offset;
         this.metadata = metadata;
         this.error = error;
-        if (metadata == null) this.metadata = OffsetAndMetadata.NoMetadata;
-        if (error == null) this.error = ErrorMapping.NoError;
     }
 
-
-    public OffsetMetadataAndError(OffsetAndMetadata offsetMetadata, Short error) {
-        this(offsetMetadata.offset, offsetMetadata.metadata, error);
-    }
-
-    public OffsetMetadataAndError(Short error) {
-        this(OffsetAndMetadata.InvalidOffset, OffsetAndMetadata.NoMetadata, error);
+    public OffsetMetadataAndError(Tuple3<Long, String, Short> tuple) {
+        this(tuple._1, tuple._2, tuple._3);
     }
 
     public Tuple3<Long, String, Short> asTuple() {
-        return Tuple3.of(offset, metadata, error);
+        return Tuple3.make(offset, metadata, error);
     }
 
     @Override
     public String toString() {
-        return String.format("OffsetMetadataAndError<%d,%s,%d>", offset, metadata, error);
+        return String.format("OffsetAndMetadata[%d,%s,%d]", offset, metadata, error);
     }
 }
-
-

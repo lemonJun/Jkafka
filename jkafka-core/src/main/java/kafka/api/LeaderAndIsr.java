@@ -2,34 +2,59 @@ package kafka.api;
 
 import java.util.List;
 
-import com.alibaba.fastjson.JSON;
 import com.google.common.collect.ImmutableMap;
 
+import kafka.utils.Json;
+
 public class LeaderAndIsr {
+    public final int leader;
+    public final int leaderEpoch;
+    public final List<Integer> isr;
+    public int zkVersion;
 
-    public static Integer initialLeaderEpoch = 0;
-    public static Integer initialZKVersion = 0;
-    public static Integer NoLeader = -1;
-    public static Integer LeaderDuringDelete = -2;
-
-    public Integer leader;
-    public Integer leaderEpoch;
-    public java.util.List<Integer> isr;
-    public Integer zkVersion;
-
-    public LeaderAndIsr(Integer leader, Integer leaderEpoch, List<Integer> isr, Integer zkVersion) {
+    public LeaderAndIsr(int leader, int leaderEpoch, List<Integer> isr, int zkVersion) {
         this.leader = leader;
         this.leaderEpoch = leaderEpoch;
         this.isr = isr;
         this.zkVersion = zkVersion;
     }
 
-    public LeaderAndIsr(Integer leader, List<Integer> isr) {
-        this(leader, LeaderAndIsr.initialLeaderEpoch, isr, LeaderAndIsr.initialZKVersion);
+    public LeaderAndIsr(int leader, List<Integer> isr) {
+        this(leader, LeaderAndIsrs.initialLeaderEpoch, isr, LeaderAndIsrs.initialZKVersion);
     }
 
     @Override
     public String toString() {
-        return JSON.toJSONString(ImmutableMap.of("leader", leader, "leader_epoch", leaderEpoch, "isr", isr));
+        return Json.encode(ImmutableMap.of("leader", leader, "leader_epoch", leaderEpoch, "isr", isr));
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
+
+        LeaderAndIsr that = (LeaderAndIsr) o;
+
+        if (leader != that.leader)
+            return false;
+        if (leaderEpoch != that.leaderEpoch)
+            return false;
+        if (zkVersion != that.zkVersion)
+            return false;
+        if (isr != null ? !isr.equals(that.isr) : that.isr != null)
+            return false;
+
+        return true;
+    }
+
+    @Override
+    public int hashCode() {
+        int result = leader;
+        result = 31 * result + leaderEpoch;
+        result = 31 * result + (isr != null ? isr.hashCode() : 0);
+        result = 31 * result + zkVersion;
+        return result;
     }
 }

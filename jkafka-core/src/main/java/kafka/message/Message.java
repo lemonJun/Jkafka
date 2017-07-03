@@ -1,67 +1,47 @@
-package kafka.message;/**
- * Created by zhoulf on 2017/3/22.
- */
+package kafka.message;
 
 import java.nio.ByteBuffer;
 
 import kafka.utils.Utils;
 
 /**
- * @author
- * @create 2017-03-22 20:03
- **/
+ * A message. The format of an N byte message is the following:
+ * <p/>
+ * 1. 4 byte CRC32 of the message
+ * 2. 1 byte "magic" identifier to allow format changes, value is 2 currently
+ * 3. 1 byte "attributes" identifier to allow annotations on the message independent of the version (e.g. compression enabled, type of codec used)
+ * 4. 4 byte key length, containing length K
+ * 5. K byte key
+ * 6. 4 byte payload length, containing length V
+ * 7. V byte payload
+ * <p/>
+ * Default constructor wraps an existing ByteBuffer with the Message object with no change to the contents.
+ */
 public class Message {
-    public static final int CrcLength = 4;
-    public static final int MagicLength = 1;
-    public static final int AttributesLength = 1;
-    public static final int KeySizeLength = 4;
-    public static final int ValueSizeLength = 4;
-
-    public static final int CrcOffset = 0;
-    public static final int MagicOffset = CrcOffset + CrcLength;
-    public static final int AttributesOffset = MagicOffset + MagicLength;
-    public static final int KeySizeOffset = AttributesOffset + AttributesLength;
-    public static final int KeyOffset = KeySizeOffset + KeySizeLength;
-
-    public static final int MessageOverhead = KeyOffset + ValueSizeLength;
-    public static final int MinHeaderSize = CrcLength + MagicLength + AttributesLength + KeySizeLength + ValueSizeLength;
-    public static final byte CurrentMagicValue = 0;
-
-    public static final int CompressionCodeMask = 0x07;//0111
-    public static final int NoCompression = 0;
-
-    public ByteBuffer buffer;
+    public final ByteBuffer buffer;
 
     public Message(ByteBuffer buffer) {
         this.buffer = buffer;
     }
 
-    public Message(byte[] content,
-                   byte[] key,
-                   CompressionCodec codec,
-                   int payloadOffset,
-                   int payloadSize) {
-        int _payloadSize;
-        if (content == null) {
-            _payloadSize = 0;
-        } else if (payloadSize >= 0) {
-            _payloadSize = payloadSize;
-        } else {
-            _payloadSize = content.length - payloadOffset;
-        }
-        buffer = ByteBuffer.allocate(Message.CrcLength +
-                Message.MagicLength +
-                Message.AttributesLength +
-                Message.KeySizeLength +
-                ((key == null) ? 0 : key.length) +
-                Message.ValueSizeLength + _payloadSize);
+    /**
+     * A constructor to create a Message
+     *
+     * @param bytes         The payload of the message
+     * @param codec         The compression codec used on the contents of the message (if any)
+     * @param key           The key of the message (null, if none)
+     * @param payloadOffset The offset into the payload array used to extract payload
+     * @param payloadSize   The size of the payload to use
+     */
+    public Message(byte[] bytes, byte[] key, CompressionCodec codec, int payloadOffset, int payloadSize) {
+        this(ByteBuffer.allocate(Messages.CrcLength + Messages.MagicLength + Messages.AttributesLength + Messages.KeySizeLength + (key == null ? 0 : key.length) + Messages.ValueSizeLength + (bytes == null ? 0 : (payloadSize >= 0 ? payloadSize : bytes.length - payloadOffset))));
+
         // skip crc, we will fill that in at the end
-        buffer.position(MagicOffset);
-        buffer.put(CurrentMagicValue);
+        buffer.position(Messages.MagicOffset);
+        buffer.put(Messages.CurrentMagicValue);
         byte attributes = 0;
-        if (codec.codec > 0) {
-            attributes = new Integer(attributes | (CompressionCodeMask & codec.codec)).byteValue();
-        }
+        if (codec.codec() > 0)
+            attributes = (byte) (attributes | (Messages.CompressionCodeMask & codec.codec()));
         buffer.put(attributes);
         if (key == null) {
             buffer.putInt(-1);
@@ -69,59 +49,52 @@ public class Message {
             buffer.putInt(key.length);
             buffer.put(key, 0, key.length);
         }
-        int writePayLoadSize;
-        if (content == null) {
-            writePayLoadSize = -1;
-        } else if (payloadSize >= 0) {
-            writePayLoadSize = payloadSize;
-        } else {
-            writePayLoadSize = content.length - payloadOffset;
-        }
-        buffer.putInt(writePayLoadSize);
-        if (content != null) {
-            buffer.put(content, payloadOffset, writePayLoadSize);
-        }
+        final int size = (bytes == null) ? -1 : (payloadSize >= 0 ? payloadSize : bytes.length - payloadOffset);
+
+        buffer.putInt(size);
+        if (bytes != null)
+            buffer.put(bytes, payloadOffset, size);
         buffer.rewind();
 
         // now compute the checksum and fill it in
-        Utils.writeUnsignedInt(buffer, CrcOffset, computeChecksum());
+        Utils.writeUnsignedInt(buffer, Messages.CrcOffset, computeChecksum());
     }
 
     public Message(byte[] bytes, byte[] key, CompressionCodec codec) {
-        this(bytes, key, codec, 0, -1);
+        this(bytes, key, codec, /*payloadOffset =*/ 0, /*payloadSize =*/ -1);
     }
 
     public Message(byte[] bytes, CompressionCodec codec) {
-        this(bytes, null, codec, 0, -1);
+        this(bytes, /*key = */null, codec = codec);
     }
 
     public Message(byte[] bytes, byte[] key) {
-        this(bytes, key, CompressionCodec.NoCompressionCodec, 0, -1);
+        this(bytes, /*key = */key, /*codec = */NoCompressionCodec.instance);
     }
 
     public Message(byte[] bytes) {
-        this(bytes, null, CompressionCodec.NoCompressionCodec, 0, -1);
+        this(bytes = bytes, /*key = */null, /*codec = */NoCompressionCodec.instance);
     }
 
     /**
      * Compute the checksum of the message from the message contents
      */
-    public Long computeChecksum() {
-        return Utils.crc32(buffer.array(), buffer.arrayOffset() + MagicOffset, buffer.limit() - MagicOffset);
+    public long computeChecksum() {
+        return Utils.crc32(buffer.array(), buffer.arrayOffset() + Messages.MagicOffset, buffer.limit() - Messages.MagicOffset);
     }
 
     /**
      * Retrieve the previously computed CRC for this message
      */
-    public Long checksum() {
-        return Utils.readUnsignedInt(buffer, CrcOffset);
+    public long checksum() {
+        return Utils.readUnsignedInt(buffer, Messages.CrcOffset);
     }
 
     /**
      * Returns true if the crc stored with the message matches the crc computed off the message contents
      */
     public boolean isValid() {
-        return checksum().equals(computeChecksum());
+        return checksum() == computeChecksum();
     }
 
     /**
@@ -129,7 +102,7 @@ public class Message {
      */
     public void ensureValid() {
         if (!isValid())
-            throw new InvalidMessageException("Message is corrupt (stored crc = " + checksum() + ", computed crc = " + computeChecksum() + ")");
+            throw new InvalidMessageException("Message is corrupt (stored crc = %d, computed crc = %d)", checksum(), computeChecksum());
     }
 
     /**
@@ -143,7 +116,7 @@ public class Message {
      * The length of the key in bytes
      */
     public int keySize() {
-        return buffer.getInt(Message.KeySizeOffset);
+        return buffer.getInt(Messages.KeySizeOffset);
     }
 
     /**
@@ -157,10 +130,8 @@ public class Message {
      * The position where the payload size is stored
      */
     private int payloadSizeOffset() {
-        return Message.KeyOffset + Math.max(0, keySize());
+        return Messages.KeyOffset + Math.max(0, keySize());
     }
-
-    ;
 
     /**
      * The length of the message value in bytes
@@ -172,7 +143,7 @@ public class Message {
     /**
      * Is the payload of this message null
      */
-    public Boolean isNull() {
+    public boolean isNull() {
         return payloadSize() < 0;
     }
 
@@ -180,22 +151,21 @@ public class Message {
      * The magic version of this message
      */
     public byte magic() {
-        return buffer.get(MagicOffset);
+        return buffer.get(Messages.MagicOffset);
     }
-
 
     /**
      * The attributes stored with this message
      */
-    public Byte attributes() {
-        return buffer.get(AttributesOffset);
+    public byte attributes() {
+        return buffer.get(Messages.AttributesOffset);
     }
 
     /**
      * The compression codec used with this message
      */
     public CompressionCodec compressionCodec() {
-        return CompressionCodec.getCompressionCodec(buffer.get(AttributesOffset) & CompressionCodeMask);
+        return CompressionCodecs.getCompressionCodec(buffer.get(Messages.AttributesOffset) & Messages.CompressionCodeMask);
     }
 
     /**
@@ -205,14 +175,12 @@ public class Message {
         return sliceDelimited(payloadSizeOffset());
     }
 
-
     /**
      * A ByteBuffer containing the message key
      */
     public ByteBuffer key() {
-        return sliceDelimited(KeySizeOffset);
+        return sliceDelimited(Messages.KeySizeOffset);
     }
-
 
     /**
      * Read a size-delimited byte buffer starting at the given offset
@@ -231,34 +199,20 @@ public class Message {
         }
     }
 
-    @Override
     public String toString() {
-        return String.format("Message(magic = %d, attributes = %d, crc = %d, key = %s, payload = %s)",
-                magic(), attributes(), checksum(), key(), payload());
+        return String.format("Message(magic = %d, attributes = %d, crc = %d, key = %s, payload = %s)", magic(), attributes(), checksum(), key(), payload());
     }
 
+    @Override
     public boolean equals(Object any) {
         if (any instanceof Message) {
-            return this.buffer.equals(((Message) any).buffer);
+            return buffer.equals(((Message) any).buffer);
         }
         return false;
     }
 
-//    @Override
-//    public boolean equals(Object obj) {
-//        if (obj instanceof Message) {
-//            Message m = (Message) obj;
-//            return getSizeInBytes() == m.getSizeInBytes()//
-//                    && attributes() == m.attributes()//
-//                    && checksum() == m.checksum()//
-//                    && payload() == m.payload()//
-//                    && magic() == m.magic();
-//        }
-//        return false;
-//    }
-
+    @Override
     public int hashCode() {
         return buffer.hashCode();
     }
-
 }

@@ -1,128 +1,95 @@
-package kafka.log;/**
- * Created by zhoulf on 2017/4/17.
- */
+package kafka.log;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import kafka.annotation.threadsafe;
+import com.google.common.base.Predicate;
+import com.google.common.collect.HashMultiset;
+import com.google.common.collect.Multiset;
+import com.google.common.collect.Table;
+
 import kafka.common.KafkaException;
-import kafka.func.Action;
-import kafka.func.Tuple;
-import kafka.server.BrokerState;
-import kafka.server.BrokerStates;
+import kafka.common.TopicAndPartition;
+import kafka.server.OffsetCheckpoint;
+import kafka.utils.Callable1;
+import kafka.utils.Callable2;
 import kafka.utils.FileLock;
-import kafka.utils.Logging;
+import kafka.utils.Function1;
+import kafka.utils.Function2;
 import kafka.utils.Pool;
 import kafka.utils.Scheduler;
+import kafka.utils.ThreadSafe;
 import kafka.utils.Time;
+import kafka.utils.Tuple2;
 import kafka.utils.Utils;
 
-/**
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- * <p>
- * http://www.apache.org/licenses/LICENSE-2.0
- * <p>
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-@threadsafe
-public class LogManager extends Logging {
+@ThreadSafe
+public class LogManager {
     public List<File> logDirs;
     public Map<String, LogConfig> topicConfigs;
     public LogConfig defaultConfig;
     public CleanerConfig cleanerConfig;
-    public Integer ioThreads;
     public Long flushCheckMs;
     public Long flushCheckpointMs;
     public Long retentionCheckMs;
     public Scheduler scheduler;
-    public BrokerState brokerState;
     private Time time;
-    //////////////////////////////////////
-    public String RecoveryPointCheckpointFile = "recovery-point-offset-checkpoint";
-    public String LockFile = ".lock";
-    public Long InitialTaskDelayMs = 30 * 1000L;
-    private Object logCreationOrDeletionLock = new Object();
-    private Pool<TopicAndPartition, Log> logs = new Pool<>();
-
-
-    private List<FileLock> dirLocks;
-    private Map<File, OffsetCheckpoint> recoveryPointCheckpoints;
 
     /**
      * The entry point to the kafka log management subsystem. The log manager is responsible for log creation, retrieval, and cleaning.
      * All read and write operations are delegated to the individual log instances.
-     * <p>
+     * <p/>
      * The log manager maintains logs in one or more directories. New logs are created in the data directory
      * with the fewest logs. No attempt is made to move partitions after the fact or balance based on
      * size or I/O rate.
-     * <p>
+     * <p/>
      * A background thread handles log retention by periodically truncating excess log segments.
      */
-    public LogManager(File[] logDirs, Map<String, LogConfig> topicConfigs, LogConfig defaultConfig, CleanerConfig cleanerConfig, java.lang.Integer ioThreads, Long flushCheckMs, Long flushCheckpointMs, Long retentionCheckMs, Scheduler scheduler, BrokerState brokerState, Time time) throws Exception {
-        this(Lists.newArrayList(logDirs), topicConfigs, defaultConfig, cleanerConfig, ioThreads, flushCheckMs, flushCheckpointMs,
-                retentionCheckMs, scheduler, brokerState, time);
-    }
-
-    public LogManager(List<File> logDirs, Map<String, LogConfig> topicConfigs, LogConfig defaultConfig, CleanerConfig cleanerConfig, java.lang.Integer ioThreads, Long flushCheckMs, Long flushCheckpointMs, Long retentionCheckMs, Scheduler scheduler, BrokerState brokerState, Time time) throws IOException {
+    public LogManager(List<File> logDirs, Map<String, LogConfig> topicConfigs, LogConfig defaultConfig, CleanerConfig cleanerConfig, Long flushCheckMs, Long flushCheckpointMs, Long retentionCheckMs, Scheduler scheduler, Time time) {
         this.logDirs = logDirs;
         this.topicConfigs = topicConfigs;
         this.defaultConfig = defaultConfig;
         this.cleanerConfig = cleanerConfig;
-        this.ioThreads = ioThreads;
         this.flushCheckMs = flushCheckMs;
         this.flushCheckpointMs = flushCheckpointMs;
         this.retentionCheckMs = retentionCheckMs;
         this.scheduler = scheduler;
-        this.brokerState = brokerState;
         this.time = time;
-        init();
-    }
 
-    public void init() throws IOException {
         createAndValidateLogDirs(logDirs);
         dirLocks = lockLogDirs(logDirs);
-        recoveryPointCheckpoints = logDirs.stream().map(dir -> {
-            try {
-                return Tuple.of(dir, new OffsetCheckpoint(new File(dir, RecoveryPointCheckpointFile)));
-            } catch (IOException e) {
-               error(e.getMessage(),e);
-            }
-            return null;
-        }).collect(Collectors.toMap(t -> t.v1, t -> t.v2));
-        loadLogs();
 
-        if (cleanerConfig.enableCleaner)
-            cleaner = new LogCleaner(cleanerConfig, logDirs, logs, time);
+        recoveryPointCheckpoints = Utils.map(logDirs, new Function1<File, Tuple2<File, OffsetCheckpoint>>() {
+            @Override
+            public Tuple2<File, OffsetCheckpoint> apply(File dir) {
+                return Tuple2.make(dir, new OffsetCheckpoint(new File(dir, RecoveryPointCheckpointFile)));
+            }
+        });
+
+        loadLogs(logDirs);
+        cleaner = cleanerConfig.enableCleaner ? new LogCleaner(cleanerConfig, logDirs, logs, time) : null;
     }
 
+    public static final String RecoveryPointCheckpointFile = "recovery-point-offset-checkpoint";
+    public static final String LockFile = ".lock";
+    public int InitialTaskDelayMs = 30 * 1000;
+    private Object logCreationLock = new Object();
+    private Pool<TopicAndPartition, Log> logs = new Pool<TopicAndPartition, Log>();
 
-    // public, so we can access this from kafka.admin.DeleteTopicTest;
-    LogCleaner cleaner = null;
+    private List<FileLock> dirLocks;
+    private Map<File, OffsetCheckpoint> recoveryPointCheckpoints;
+
+    Logger logger = LoggerFactory.getLogger(LogManager.class);
+
+    private LogCleaner cleaner;
 
     /**
      * Create and check validity of the given directories, specifically:
@@ -133,20 +100,22 @@ public class LogManager extends Logging {
      * </ol>
      */
     private void createAndValidateLogDirs(List<File> dirs) {
-        if (dirs.stream().map(dir -> {
-            try {
-                return dir.getCanonicalPath();
-            } catch (IOException e) {
-                error(e.getMessage(),e);
+        if (Utils.mapSet(dirs, new Function1<File, String>() {
+            @Override
+            public String apply(File _) {
+                try {
+                    return _.getCanonicalPath();
+                } catch (IOException e) {
+                    throw new KafkaException(e);
+                }
             }
-            return "";
-        }).collect(Collectors.toSet()).size() < dirs.size()) {
+        }).size() < dirs.size())
             throw new KafkaException("Duplicate log directory found: " + logDirs);
-        }
         for (File dir : dirs) {
             if (!dir.exists()) {
-                info("Log directory '" + dir.getAbsolutePath() + "' not found, creating it.");
-                if (!dir.mkdirs())
+                logger.info("Log directory '{}' not found, creating it.", dir.getAbsolutePath());
+                boolean created = dir.mkdirs();
+                if (!created)
                     throw new KafkaException("Failed to create data directory " + dir.getAbsolutePath());
             }
             if (!dir.isDirectory() || !dir.canRead())
@@ -158,130 +127,71 @@ public class LogManager extends Logging {
      * Lock all the given directories
      */
     private List<FileLock> lockLogDirs(List<File> dirs) {
-        return dirs.stream().map(dir -> {
-            FileLock lock = null;
-            try {
-                lock = new FileLock(new File(dir, LockFile));
-            } catch (IOException e) {
-                error(e.getMessage(), e);
-                throw new KafkaException("Failed to acquire lock on file .lock in " + lock.file.getParentFile().getAbsolutePath() +
-                        ". A Kafka instance in another process or thread is using this directory.");
+        return Utils.mapList(dirs, new Function1<File, FileLock>() {
+            @Override
+            public FileLock apply(File dir) {
+                FileLock lock = new FileLock(new File(dir, LockFile));
+                if (!lock.tryLock())
+                    throw new KafkaException("Failed to acquire lock on file .lock in " + lock.file.getParentFile().getAbsolutePath() + ". A Kafka instance in another process or thread is using this directory.");
+                return lock;
             }
-            if (!lock.tryLock())
-                throw new KafkaException("Failed to acquire lock on file .lock in " + lock.file.getParentFile().getAbsolutePath() +
-                        ". A Kafka instance in another process or thread is using this directory.");
-            return lock;
-        }).collect(Collectors.toList());
+        });
     }
 
     /**
      * Recover and load all logs in the given data directories
-     * 加载目录下所有的topic-partition到 Pool logs<TopicAndPartition, Log>
      */
-    private void loadLogs() throws IOException {
-        info("Loading logs.");
-
-        List<ExecutorService> threadPools = Lists.newArrayList();
-        Map<File, Set<Future>> jobs = Maps.newHashMap();
-        for (File dir : this.logDirs) {
-            ExecutorService pool = Executors.newFixedThreadPool(ioThreads);
-            threadPools.add(pool);
-
-            File cleanShutdownFile = new File(dir, Log.CleanShutdownFile);
-
-            if (cleanShutdownFile.exists()) {
-                debug("Found clean shutdown file. " +
-                        "Skipping recovery for all logs in data directory: " +
-                        dir.getAbsolutePath());
-            } else {
-                // log recovery itself is being performed by `Log` class during initialization;
-                brokerState.newState(BrokerStates.RecoveringFromUncleanShutdown);
-            }
-
+    private void loadLogs(List<File> dirs) {
+        for (File dir : dirs) {
             Map<TopicAndPartition, Long> recoveryPoints = this.recoveryPointCheckpoints.get(dir).read();
-            List<Runnable> jobsForDir = Lists.newArrayList();
-            for (File dirContent : dir.listFiles()) {
-                if (dirContent.isDirectory()) {
-                    File logDir = dirContent;
-                    jobsForDir.add(Utils.runnable(() -> {
-                        debug("Loading log '" + logDir.getName() + "'");
-
-                        TopicAndPartition topicPartition = Log.parseTopicPartitionName(logDir.getName());
-                        LogConfig config = topicConfigs.getOrDefault(topicPartition.topic, defaultConfig);
-                        Long logRecoveryPoint = recoveryPoints.getOrDefault(topicPartition, 0L);
-
-                        Log current = null;
-                        try {
-                            current = new Log(logDir, config, logRecoveryPoint, scheduler, time);
-                        } catch (IOException e) {
-                            error(e.getMessage(), e);
-                        }
-                        Log previous = this.logs.put(topicPartition, current);
-
-                        if (previous != null) {
-                            throw new IllegalArgumentException(
-                                    String.format("Duplicate log directories found: %s, %s!",
-                                            current.dir.getAbsolutePath(), previous.dir.getAbsolutePath()));
-                        }
-                    }));
-                }
-            }
-
-            jobs.put(cleanShutdownFile, jobsForDir.stream().map(job -> pool.submit(job)).collect(Collectors.toSet()));
-        }
-
-
-        try {
-            for (Map.Entry<File, Set<Future>> entry : jobs.entrySet()) {
-                File cleanShutdownFile = entry.getKey();
-                Set<Future> dirJobs = entry.getValue();
-                dirJobs.forEach(job -> {
-                    try {
-                        job.get();
-                    } catch (InterruptedException e) {
-                        error("There was an InterruptedException in one of the threads during logs loading: " + e.getCause());
-                    } catch (ExecutionException e) {
-                        error("There was an error in one of the threads during logs loading: " + e.getCause());
+            /* load the logs */
+            File[] subDirs = dir.listFiles();
+            if (subDirs != null) {
+                File cleanShutDownFile = new File(dir, Logs.CleanShutdownFile);
+                if (cleanShutDownFile.exists())
+                    logger.info("Found clean shutdown file. Skipping recovery for all logs in data directory '{}'", dir.getAbsolutePath());
+                for (File subDir : subDirs) {
+                    if (subDir.isDirectory()) {
+                        logger.info("Loading log '" + subDir.getName() + "'");
+                        TopicAndPartition topicPartition = parseTopicPartitionName(subDir.getName());
+                        LogConfig config = Utils.getOrElse(topicConfigs, topicPartition.topic, defaultConfig);
+                        Log log = new Log(subDir, config, Utils.getOrElse(recoveryPoints, topicPartition, 0L), scheduler, time);
+                        Log previous = this.logs.put(topicPartition, log);
+                        if (previous != null)
+                            throw new IllegalArgumentException(String.format("Duplicate log directories found: %s, %s!", log.dir.getAbsolutePath(), previous.dir.getAbsolutePath()));
                     }
-                });
-                cleanShutdownFile.delete();
+                }
+                cleanShutDownFile.delete();
             }
-        } finally {
-            threadPools.forEach(t -> t.shutdown());
         }
-        info("Logs loading complete.");
     }
 
     /**
      * Start the background threads to flush logs and do log cleanup
-     * 启动定时任务
-     * 1.日志保留（大小、保留时间）
-     * 2.fileChannnel.flush()策略
-     * 3.写入segment的recoverPointOffset
-     * <p>
-     * 启动cleaner
      */
-
     public void startup() {
-    /* Schedule the cleanup task to delete old logs */
+        /* Schedule the cleanup task to delete old logs */
         if (scheduler != null) {
-            info(String.format("Starting log cleanup with a period of %d ms.", retentionCheckMs));
-            scheduler.schedule("kafka-log-retention",
-                    cleanupLogs,
-                    InitialTaskDelayMs,
-                    retentionCheckMs,
-                    TimeUnit.MILLISECONDS);
-            info(String.format("Starting log flusher with a default period of %d ms.", flushCheckMs));
-            scheduler.schedule("kafka-log-flusher",
-                    flushDirtyLogs,
-                    InitialTaskDelayMs,
-                    flushCheckMs,
-                    TimeUnit.MILLISECONDS);
-            scheduler.schedule("kafka-recovery-point-checkpoint",
-                    checkpointRecoveryPointOffsets,
-                    InitialTaskDelayMs,
-                    flushCheckpointMs,
-                    TimeUnit.MILLISECONDS);
+            logger.info("Starting log cleanup with a period of {} ms.", retentionCheckMs);
+            scheduler.schedule("kafka-log-retention", new Runnable() {
+                @Override
+                public void run() {
+                    cleanupLogs();
+                }
+            }, InitialTaskDelayMs, retentionCheckMs, TimeUnit.MILLISECONDS);
+            logger.info("Starting log flusher with a default period of {} ms.", flushCheckMs);
+            scheduler.schedule("kafka-log-flusher", new Runnable() {
+                @Override
+                public void run() {
+                    flushDirtyLogs();
+                }
+            }, InitialTaskDelayMs, flushCheckMs, TimeUnit.MILLISECONDS);
+            scheduler.schedule("kafka-recovery-point-checkpoint", new Runnable() {
+                @Override
+                public void run() {
+                    checkpointRecoveryPointOffsets();
+                }
+            }, InitialTaskDelayMs, flushCheckpointMs, TimeUnit.MILLISECONDS);
         }
         if (cleanerConfig.enableCleaner)
             cleaner.startup();
@@ -290,199 +200,132 @@ public class LogManager extends Logging {
     /**
      * Close all the logs
      */
-    public void shutdown() throws IOException {
-        info("Shutting down.");
-
-        List<ExecutorService> threadPools = Lists.newArrayList();
-        Map<File, Set<Future>> jobs = Maps.newHashMap();
-
-        // stop the cleaner first;
-        if (cleaner != null) {
-            Utils.swallow(() -> cleaner.shutdown());
-        }
-
-        // close logs in each dir;
-        for (File dir : this.logDirs) {
-            debug("Flushing and closing logs at " + dir);
-
-            ExecutorService pool = Executors.newFixedThreadPool(ioThreads);
-            threadPools.add(pool);
-
-            Collection<Log> logsInDir = logsByDir().getOrDefault(dir.toString(), Maps.newHashMap()).values();
-            List<Runnable> jobsForDir = logsInDir.stream().map(log -> Utils.runnable(() -> {
-                // flush the log to ensure latest possible recovery point;
-                log.flush();
-                log.close();
-            })).collect(Collectors.toList());
-            jobs.put(dir, jobsForDir.stream().map(job -> pool.submit(job)).collect(Collectors.toSet()));
-        }
-
-
+    public void shutdown() {
+        logger.debug("Shutting down.");
         try {
-            for (File dir : jobs.keySet()) {
-                Set<Future> dirJobs = jobs.get(dir);
-                dirJobs.forEach(job -> {
-                    try {
-                        job.get();
-                    } catch (InterruptedException e) {
-                        error(e.getMessage(), e);
-                    } catch (ExecutionException e) {
-                        error("There was an error in one of the threads during LogManager shutdown: " + e.getCause());
+            // stop the cleaner first
+            if (cleaner != null)
+                Utils.swallow(new Runnable() {
+                    @Override
+                    public void run() {
+                        cleaner.shutdown();
                     }
                 });
-
-                // update the last flush point;
-                debug("Updating recovery points at " + dir);
-                checkpointLogsInDir(dir);
-
-                // mark that the shutdown was clean by creating marker file;
-                debug("Writing clean shutdown marker at " + dir);
-                Utils.swallow(() -> {
-                    try {
-                        new File(dir, Log.CleanShutdownFile).createNewFile();
-                    } catch (IOException e) {
-                        error(e.getMessage(), e);
-                    }
-                });
-            }
+            // flush the logs to ensure latest possible recovery point
+            Utils.foreach(allLogs(), new Callable1<Log>() {
+                @Override
+                public void apply(Log _) {
+                    _.flush();
+                }
+            });
+            // close the logs
+            Utils.foreach(allLogs(), new Callable1<Log>() {
+                @Override
+                public void apply(Log _) {
+                    _.close();
+                }
+            });
+            // update the last flush point
+            checkpointRecoveryPointOffsets();
+            // mark that the shutdown was clean by creating the clean shutdown marker file
+            Utils.foreach(logDirs, new Callable1<File>() {
+                @Override
+                public void apply(final File dir) {
+                    Utils.swallow(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                new File(dir, Logs.CleanShutdownFile).createNewFile();
+                            } catch (IOException e) {
+                                throw new KafkaException(e);
+                            }
+                        }
+                    });
+                }
+            });
         } finally {
-            threadPools.forEach(t -> t.shutdown());
-            // regardless of whether the close succeeded, we need to unlock the data directories;
-            dirLocks.forEach(lock -> {
-                try {
-                    lock.destroy();
-                } catch (IOException e) {
-                    error(e.getMessage(), e);
+            // regardless of whether the close succeeded, we need to unlock the data directories
+            Utils.foreach(dirLocks, new Callable1<FileLock>() {
+                @Override
+                public void apply(FileLock _) {
+                    _.destroy();
                 }
             });
         }
 
-        info("Shutdown complete.");
+        logger.debug("Shutdown complete.");
     }
-
 
     /**
      * Truncate the partition logs to the specified offsets and checkpoint the recovery point to this offset
      *
      * @param partitionAndOffsets Partition logs that need to be truncated
      */
-    public void truncateTo(Map<TopicAndPartition, Long> partitionAndOffsets) throws IOException {
-        for (TopicAndPartition topicAndPartition : partitionAndOffsets.keySet()) {
-            Long truncateOffset = partitionAndOffsets.get(topicAndPartition);
-            Log log = logs.get(topicAndPartition);
-            // If the log does not exist, skip it;
-            if (log != null) {
-                //May need to abort and pause the cleaning of the log, and resume after truncation is done.;
-                Boolean needToStopCleaner = (truncateOffset < log.activeSegment().baseOffset);
-                if (needToStopCleaner && cleaner != null)
-                    cleaner.abortAndPauseCleaning(topicAndPartition);
-                log.truncateTo(truncateOffset);
-                if (needToStopCleaner && cleaner != null)
-                    cleaner.resumeCleaning(topicAndPartition);
+    public void truncateTo(Map<TopicAndPartition, Long> partitionAndOffsets) {
+        Utils.foreach(partitionAndOffsets, new Callable2<TopicAndPartition, Long>() {
+            @Override
+            public void apply(TopicAndPartition topicAndPartition, Long truncateOffset) {
+                Log log = logs.get(topicAndPartition);
+                // If the log does not exist, skip it
+                if (log != null) {
+                    log.truncateTo(truncateOffset);
+                }
             }
-        }
-        checkpointRecoveryPointOffsets.invoke();
-    }
+        });
 
-    /**
-     * Delete all data in a partition and start the log at the new offset
-     *
-     * @param newOffset The new offset to start the log with
-     */
-    public void truncateFullyAndStartAt(TopicAndPartition topicAndPartition, Long newOffset) throws IOException {
-        Log log = logs.get(topicAndPartition);
-        // If the log does not exist, skip it;
-        if (log != null) {
-            //Abort and pause the cleaning of the log, and resume after truncation is done.;
-            if (cleaner != null)
-                cleaner.abortAndPauseCleaning(topicAndPartition);
-            log.truncateFullyAndStartAt(newOffset);
-            if (cleaner != null)
-                cleaner.resumeCleaning(topicAndPartition);
-        }
-        checkpointRecoveryPointOffsets.invoke();
+        checkpointRecoveryPointOffsets();
     }
 
     /**
      * Write out the current recovery point for all logs to a text file in the log directory
      * to avoid recovering the whole log on startup.
      */
-    public Action checkpointRecoveryPointOffsets = () -> this.logDirs.forEach(log -> {
-        try {
-            checkpointLogsInDir(log);
-        } catch (IOException e) {
-            error(e.getMessage(), e);
-        }
-    });
-
-    /**
-     * Make a checkpoint for all logs in provided directory.
-     */
-    private void checkpointLogsInDir(File dir) throws IOException {
-        Map<TopicAndPartition, Log> recoveryPoints = this.logsByDir().get(dir.toString());
-        if (recoveryPoints != null) {
-            this.recoveryPointCheckpoints.get(dir).write(Utils.map(recoveryPoints, v -> v.recoveryPoint));
+    public void checkpointRecoveryPointOffsets() {
+        Table<String, TopicAndPartition, Log> recoveryPointsByDir = Utils.groupBy(this.logsByTopicPartition(), new Function2<TopicAndPartition, Log, String>() {
+            @Override
+            public String apply(TopicAndPartition _1, Log _2) {
+                return _2.dir.getParent();
+            }
+        });
+        for (File dir : logDirs) {
+            Map<TopicAndPartition, Log> recoveryPoints = recoveryPointsByDir.row(dir.toString());
+            if (recoveryPoints != null)
+                this.recoveryPointCheckpoints.get(dir).write(Utils.map(recoveryPoints, new Function2<TopicAndPartition, Log, Tuple2<TopicAndPartition, Long>>() {
+                    @Override
+                    public Tuple2<TopicAndPartition, Long> apply(TopicAndPartition arg1, Log log) {
+                        return Tuple2.make(arg1, log.recoveryPoint);
+                    }
+                }));
         }
     }
 
     /**
      * Get the log if it exists, otherwise return None
      */
-    public Optional<Log> getLog(TopicAndPartition topicAndPartition) {
-        Log log = logs.get(topicAndPartition);
-        if (log == null)
-            return Optional.empty();
-        else
-            return Optional.of(log);
+    public Log getLog(TopicAndPartition topicAndPartition) {
+        return logs.get(topicAndPartition);
     }
 
     /**
      * Create a log for the given topic and the given partition
      * If the log already exists, just return a copy of the existing log
      */
-    public Log createLog(TopicAndPartition topicAndPartition, LogConfig config) throws IOException {
-        synchronized (logCreationOrDeletionLock) {
+    public Log createLog(TopicAndPartition topicAndPartition, LogConfig config) {
+        synchronized (logCreationLock) {
             Log log = logs.get(topicAndPartition);
 
-            // check if the log has already been created in another thread;
+            // check if the log has already been created in another thread
             if (log != null)
                 return log;
 
-            // if not, create it;
+            // if not, create it
             File dataDir = nextLogDir();
             File dir = new File(dataDir, topicAndPartition.topic + "-" + topicAndPartition.partition);
             dir.mkdirs();
-            log = new Log(dir, config,
-                    0L,
-                    scheduler,
-                    time);
+            log = new Log(dir, config, /*recoveryPoint = */0L, scheduler, time);
             logs.put(topicAndPartition, log);
-            info(String.format("Created log for partition <%s,%d> in %s with properties {%s}.", topicAndPartition.topic,
-                    topicAndPartition.partition,
-                    dataDir.getAbsolutePath(),
-                    config.toProps()));
+            logger.info("Created log for partition [{},{}] in {} with properties {{}}.", topicAndPartition.topic, topicAndPartition.partition, dataDir.getAbsolutePath(), config.toProps());
             return log;
-        }
-    }
-
-    /**
-     * Delete a log.
-     */
-    public void deleteLog(TopicAndPartition topicAndPartition) {
-        Log removedLog;
-        synchronized (logCreationOrDeletionLock) {
-            removedLog = logs.remove(topicAndPartition);
-        }
-        if (removedLog != null) {
-            //We need to wait until there is no more cleaning task on the log to be deleted before actually deleting it.;
-            if (cleaner != null) {
-                cleaner.abortCleaning(topicAndPartition);
-                cleaner.updateCheckpoints(removedLog.dir.getParentFile());
-            }
-            removedLog.delete();
-            info(String.format("Deleted log for partition <%s,%d> in %s.", topicAndPartition.topic,
-                    topicAndPartition.partition,
-                    removedLog.dir.getAbsolutePath()));
         }
     }
 
@@ -495,103 +338,138 @@ public class LogManager extends Logging {
         if (logDirs.size() == 1) {
             return logDirs.get(0);
         } else {
-            // count the number of logs in each parent directory (including 0 for empty directories;
-            Map<String, Integer> logCounts = Utils.map(Utils.groupBy(allLogs(), log -> log.dir.getParent()), list -> list.size());
-            Map<String, Integer> zeros = logDirs.stream().map(dir -> Tuple.of(dir.getPath(), 0)).collect(Collectors.toMap(t -> t.v1, t -> t.v2));
-            zeros.putAll(logCounts);
-//            var dirCounts = (zeros++ logCounts).toBuffer;
-//            // choose the directory with the least logs in it;
-//            val leastLoaded = dirCounts.sortBy(_._2).head;
-            Map.Entry<String, Integer> leastLoaded = zeros.entrySet().stream().sorted((o1, o2) -> o1.getValue() - o2.getValue()).findFirst().get();
-            return new File(leastLoaded.getKey());
+            // count the number of logs in each parent directory (including 0 for empty directories
+            final Multiset<String> logCount = HashMultiset.create();
+
+            Utils.foreach(allLogs(), new Callable1<Log>() {
+                @Override
+                public void apply(Log log) {
+                    logCount.add(log.dir.getParent(), (int) (log.size() + 1));
+                }
+            });
+
+            Utils.foreach(logDirs, new Callable1<File>() {
+                @Override
+                public void apply(File dir) {
+                    logCount.add(dir.getPath());
+                }
+            });
+
+            // choose the directory with the least logs in it
+            int minCount = Integer.MAX_VALUE;
+            String min = "max";
+
+            for (Multiset.Entry<String> entry : logCount.entrySet()) {
+                if (entry.getCount() < minCount) {
+                    minCount = entry.getCount();
+                    min = entry.getElement();
+                }
+            }
+
+            return new File(min);
         }
     }
 
     /**
      * Runs through the log removing segments older than a certain age
      */
-    private Integer cleanupExpiredSegments(Log log) throws IOException {
-        Long startMs = time.milliseconds();
-        return log.deleteOldSegments(l -> startMs - l.lastModified() > log.config.retentionMs);
+    private int cleanupExpiredSegments(final Log log) {
+        final long startMs = time.milliseconds();
+        String topic = parseTopicPartitionName(log.name()).topic;
+        return log.deleteOldSegments(new Predicate<LogSegment>() {
+            @Override
+            public boolean apply(LogSegment _) {
+                return startMs - _.lastModified() > log.config.retentionMs;
+            }
+        });
     }
 
     /**
      * Runs through the log removing segments until the size of the log
      * is at least logRetentionSize bytes in size
      */
-    private Integer cleanupSegmentsToMaintainSize(Log log) throws IOException {
+    private int cleanupSegmentsToMaintainSize(Log log) {
         if (log.config.retentionSize < 0 || log.size() < log.config.retentionSize)
             return 0;
+
         final AtomicLong diff = new AtomicLong(log.size() - log.config.retentionSize);
-        return log.deleteOldSegments((segment) -> {
-            if (diff.addAndGet(-segment.size()) >= 0) {
-                diff.addAndGet(-segment.size());
-                return true;
-            } else {
-                return false;
+
+        return log.deleteOldSegments(new Predicate<LogSegment>() {
+            @Override
+            public boolean apply(LogSegment segment) {
+                if (diff.get() - segment.size() >= 0) {
+                    diff.addAndGet(-segment.size());
+                    return true;
+                } else {
+                    return false;
+                }
             }
         });
     }
 
-
     /**
      * Delete any eligible logs. Return the number of segments deleted.
      */
-    public Action cleanupLogs = () -> {
-        debug("Beginning log cleanup...");
-        Integer total = 0;
-        Long startMs = time.milliseconds();
+    public void cleanupLogs() {
+        logger.debug("Beginning log cleanup...");
+        int total = 0;
+        long startMs = time.milliseconds();
         for (Log log : allLogs()) {
-            if (!log.config.compact) {
-                debug("Garbage collecting '" + log.name + "'");
-                try {
-                    total += cleanupExpiredSegments(log) + cleanupSegmentsToMaintainSize(log);
-                } catch (IOException e) {
-                    error(e.getMessage(), e);
-                }
-            }
-            debug("Log cleanup completed. " + total + " files deleted in " + (time.milliseconds() - startMs) / 1000 + " seconds");
+            if (log.config.dedupe)
+                continue;
+
+            logger.debug("Garbage collecting '{}'", log.name());
+            total += cleanupExpiredSegments(log) + cleanupSegmentsToMaintainSize(log);
         }
-    };
+        logger.debug("Log cleanup completed. " + total + " files deleted in " + (time.milliseconds() - startMs) / 1000 + " seconds");
+    }
 
     /**
      * Get all the partition logs
      */
-    public Iterable<Log> allLogs() {
+    public Collection<Log> allLogs() {
         return logs.values();
     }
 
     /**
      * Get a map of TopicAndPartition => Log
      */
-    public Map<TopicAndPartition, Log> logsByTopicPartition = logs.toMap();
-
-    /**
-     * Map of log dir to logs by topic and partitions in that dir
-     */
-    private Map<String, Map<TopicAndPartition, Log>> logsByDir() {
-        return Utils.groupByValue(logsByTopicPartition, v -> v.dir.getParent());
+    public Map<TopicAndPartition, Log> logsByTopicPartition() {
+        return logs.toMap();
     }
 
     /**
      * Flush any log which has exceeded its flush interval and has unwritten messages.
      */
-    private Action flushDirtyLogs = () -> {
-        debug("Checking for dirty logs to flush...");
+    private void flushDirtyLogs() {
+        logger.debug("Checking for dirty logs to flush...");
+        Utils.foreach(logs, new Callable1<Map.Entry<TopicAndPartition, Log>>() {
+            @Override
+            public void apply(Map.Entry<TopicAndPartition, Log> _) {
+                TopicAndPartition topicAndPartition = _.getKey();
+                Log log = _.getValue();
 
-        for (Tuple<TopicAndPartition, Log> t : logs) {
-            TopicAndPartition topicAndPartition = t.v1;
-            Log log = t.v2;
-            try {
-                Long timeSinceLastFlush = time.milliseconds() - log.lastFlushTime();
-                debug("Checking if flush is needed on " + topicAndPartition.topic + " flush interval  " + log.config.flushMs +
-                        " last flushed " + log.lastFlushTime() + " time since last flush: " + timeSinceLastFlush);
-                if (timeSinceLastFlush >= log.config.flushMs)
-                    log.flush();
-            } catch (Exception e) {
-                error("Error flushing topic " + topicAndPartition.topic, e);
+                try {
+                    long timeSinceLastFlush = time.milliseconds() - log.lastFlushTime();
+                    logger.debug("Checking if flush is needed on " + topicAndPartition.topic + " flush interval  " + log.config.flushMs + " last flushed " + log.lastFlushTime() + " time since last flush: " + timeSinceLastFlush);
+                    if (timeSinceLastFlush >= log.config.flushMs)
+                        log.flush();
+                } catch (Throwable e) {
+                    logger.error("Error flushing topic " + topicAndPartition.topic, e);
+                    if (e instanceof IOException) {
+                        logger.error("Halting due to unrecoverable I/O error while flushing logs: " + e.getMessage(), e);
+                        System.exit(1);
+                    }
+                }
             }
-        }
-    };
+        });
+    }
 
+    /**
+     * Parse the topic and partition out of the directory name of a log
+     */
+    private TopicAndPartition parseTopicPartitionName(String name) {
+        int index = name.lastIndexOf('-');
+        return new TopicAndPartition(name.substring(0, index), Integer.parseInt(name.substring(index + 1)));
+    }
 }

@@ -1,23 +1,25 @@
 package kafka.common;
 
-/**
- * Created by Administrator on 2017/3/27.
- */
+import java.io.IOException;
+
 public class KafkaException extends RuntimeException {
-    private String message;
-    private Throwable t;
-
-    public KafkaException(String message, Throwable t) {
-        super(message, t);
-        this.message = message;
-        this.t = t;
-    }
-
     public KafkaException(String message) {
-        this(message, null);
+        super(message);
     }
 
-    public KafkaException(Throwable t) {
-        this("", t);
+    public KafkaException(String format, Object... args) {
+        super(String.format(format, args));
+    }
+
+    public KafkaException(Throwable e, String format, Object... args) {
+        super(String.format(format, args), e);
+    }
+
+    public KafkaException(IOException e) {
+        super(e);
+    }
+
+    public KafkaException(Throwable e) {
+        super(e);
     }
 }

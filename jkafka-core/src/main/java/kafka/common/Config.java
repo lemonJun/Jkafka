@@ -1,16 +1,21 @@
 package kafka.common;
 
-import kafka.utils.Logging;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-/**
- * Created by Administrator on 2017/4/4.
- */
-public class Config extends Logging {
-
-    public void validateChars(String prop, String value) {
+public abstract class Config {
+    public static void validateChars(String prop, String value) {
         String legalChars = "[a-zA-Z0-9\\._\\-]";
-        if (!value.matches(legalChars + "*")) {
+        Pattern rgx = Pattern.compile(legalChars + "*");
+
+        Matcher matcher = rgx.matcher(value);
+        if (!matcher.find()) {
             throw new InvalidConfigException(prop + " " + value + " is illegal, contains a character other than ASCII alphanumerics, '.', '_' and '-'");
         }
+
+        String t = matcher.group();
+
+        if (!t.equals(value))
+            throw new InvalidConfigException(prop + " " + value + " is illegal, contains a character other than ASCII alphanumerics, '.', '_' and '-'");
     }
 }

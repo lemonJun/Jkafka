@@ -2,14 +2,14 @@ package kafka.test;/**
  * Created by zhoulf on 2017/3/30.
  */
 
-import com.google.common.collect.Lists;
-
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+
+import com.google.common.collect.Lists;
 
 /**
  * @author

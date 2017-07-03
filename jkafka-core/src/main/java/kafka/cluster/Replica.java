@@ -2,10 +2,10 @@ package kafka.cluster;/**
  * Created by zhoulf on 2017/4/1.
  */
 
+import java.util.Optional;
+
 import kafka.log.Log;
 import kafka.utils.Time;
-
-import java.util.Optional;
 
 /**
  * @author

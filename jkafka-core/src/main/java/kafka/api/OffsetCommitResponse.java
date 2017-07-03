@@ -1,16 +1,16 @@
 package kafka.api;
 
-import kafka.common.ErrorMapping;
-import kafka.func.IntCount;
-import kafka.func.Tuple;
-import kafka.log.TopicAndPartition;
-import kafka.utils.Utils;
-
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import kafka.common.ErrorMapping;
+import kafka.func.IntCount;
+import kafka.func.Tuple;
+import kafka.log.TopicAndPartition;
+import kafka.utils.Utils;
 
 /**
  * Single constructor for both version 0 and 1 since they have the same format.

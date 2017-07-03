@@ -2,16 +2,6 @@ package kafka.log;/**
  * Created by zhoulf on 2017/4/11.
  */
 
-import com.yammer.metrics.core.Gauge;
-import kafka.common.LogCleaningAbortedException;
-import kafka.common.ThreadShutdownException;
-import kafka.func.ActionWithParam;
-import kafka.metrics.KafkaMetricsGroup;
-import kafka.utils.Pool;
-import kafka.utils.ShutdownableThread;
-import kafka.utils.Throttler;
-import kafka.utils.Time;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
@@ -20,6 +10,17 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import com.yammer.metrics.core.Gauge;
+
+import kafka.common.LogCleaningAbortedException;
+import kafka.common.ThreadShutdownException;
+import kafka.func.ActionWithParam;
+import kafka.metrics.KafkaMetricsGroup;
+import kafka.utils.Pool;
+import kafka.utils.ShutdownableThread;
+import kafka.utils.Throttler;
+import kafka.utils.Time;
 
 /**
  * The cleaner is responsible for removing obsolete records from logs which have the dedupe retention strategy.

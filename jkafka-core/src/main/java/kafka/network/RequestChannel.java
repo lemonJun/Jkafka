@@ -2,23 +2,8 @@ package kafka.network;/**
  * Created by zhoulf on 2017/4/20.
  */
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.yammer.metrics.core.Gauge;
-import com.yammer.metrics.core.Histogram;
-import com.yammer.metrics.core.Metric;
-import kafka.api.ProducerRequest;
-import kafka.api.RequestKeys;
-import kafka.api.RequestOrResponse;
-import kafka.func.ActionWithParam;
-import kafka.func.Handler;
-import kafka.metrics.KafkaMetricsGroup;
-import kafka.utils.Logging;
-import kafka.utils.Time;
-
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
@@ -28,6 +13,20 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.yammer.metrics.core.Gauge;
+import com.yammer.metrics.core.Histogram;
+import com.yammer.metrics.core.Metric;
+
+import kafka.api.ProducerRequest;
+import kafka.api.RequestKeys;
+import kafka.api.RequestOrResponse;
+import kafka.func.ActionWithParam;
+import kafka.metrics.KafkaMetricsGroup;
+import kafka.utils.Logging;
+import kafka.utils.Time;
 
 
 public class RequestChannel extends KafkaMetricsGroup {

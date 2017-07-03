@@ -1,25 +1,27 @@
 package kafka.utils;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+import org.I0Itec.zkclient.ZkClient;
+import org.I0Itec.zkclient.exception.ZkNoNodeException;
+import org.I0Itec.zkclient.exception.ZkNodeExistsException;
+import org.apache.zookeeper.data.Stat;
+
 import com.alibaba.fastjson.JSON;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+
 import kafka.api.LeaderAndIsr;
 import kafka.cluster.Broker;
 import kafka.common.KafkaException;
 import kafka.common.NoEpochForPartitionException;
 import kafka.func.Checker;
 import kafka.func.Tuple;
-import kafka.log.TopicAndPartition;
 import kafka.server.KafkaController;
-import org.I0Itec.zkclient.ZkClient;
-import org.I0Itec.zkclient.exception.ZkNoNodeException;
-import org.I0Itec.zkclient.exception.ZkNodeExistsException;
-import org.apache.kafka.common.Cluster;
-import org.apache.zookeeper.data.Stat;
-
-import java.util.*;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class ZkUtils {
     private static final Logging log = Logging.getLogger(ZkUtils.class.getName());

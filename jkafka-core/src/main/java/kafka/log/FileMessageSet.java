@@ -1,12 +1,5 @@
 package kafka.log;
 
-import kafka.common.KafkaException;
-import kafka.message.*;
-import kafka.metrics.KafkaMetricsGroup;
-import kafka.metrics.KafkaTimer;
-import kafka.utils.IteratorTemplate;
-import kafka.utils.Utils;
-
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -16,6 +9,17 @@ import java.nio.channels.GatheringByteChannel;
 import java.util.Iterator;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import kafka.common.KafkaException;
+import kafka.message.ByteBufferMessageSet;
+import kafka.message.InvalidMessageException;
+import kafka.message.Message;
+import kafka.message.MessageAndOffset;
+import kafka.message.MessageSet;
+import kafka.metrics.KafkaMetricsGroup;
+import kafka.metrics.KafkaTimer;
+import kafka.utils.IteratorTemplate;
+import kafka.utils.Utils;
 
 /**
  * An on-disk message set. An optional start and end position can be applied to the message set

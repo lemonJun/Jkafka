@@ -1,20 +1,23 @@
 package kafka.log;
 
+import java.io.File;
+import java.io.IOException;
+import java.util.Iterator;
+import java.util.Optional;
+
 import kafka.annotation.nonthreadsafe;
 import kafka.annotation.threadsafe;
 import kafka.common.KafkaStorageException;
-import kafka.message.*;
+import kafka.message.ByteBufferMessageSet;
+import kafka.message.CompressionCodec;
+import kafka.message.InvalidMessageException;
+import kafka.message.MessageAndOffset;
+import kafka.message.MessageSet;
 import kafka.server.FetchDataInfo;
 import kafka.server.LogOffsetMetadata;
 import kafka.utils.Logging;
 import kafka.utils.Time;
 import kafka.utils.Utils;
-
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.util.Iterator;
-import java.util.Optional;
 
 /**
  * A segment of the log. Each segment has two a components log and an index. The log is a FileMessageSet containing

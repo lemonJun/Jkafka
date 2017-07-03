@@ -2,12 +2,13 @@ package kafka.utils;/**
  * Created by zhoulf on 2017/4/10.
  */
 
-import com.yammer.metrics.core.Meter;
-import kafka.annotation.threadsafe;
-import kafka.metrics.KafkaMetricsGroup;
-
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
+
+import com.yammer.metrics.core.Meter;
+
+import kafka.annotation.threadsafe;
+import kafka.metrics.KafkaMetricsGroup;
 
 /**
  * A class to measure and throttle the rate of some process. The throttler takes a desired rate-per-second

@@ -1,13 +1,18 @@
 package kafka.server;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+
 import kafka.consumer.ConsumerConfig;
 import kafka.func.Tuple;
 import kafka.message.CompressionCodec;
 import kafka.message.Message;
 import kafka.message.MessageSet;
-import kafka.utils.*;
-
-import java.util.*;
+import kafka.utils.Prediction;
+import kafka.utils.Utils;
+import kafka.utils.VerifiableProperties;
+import kafka.utils.ZKConfig;
 
 public class KafkaConfig extends ZKConfig {
     VerifiableProperties props;

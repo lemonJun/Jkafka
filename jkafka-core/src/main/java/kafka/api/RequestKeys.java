@@ -1,12 +1,12 @@
 package kafka.api;
 
-import kafka.common.KafkaException;
-import kafka.func.Handler;
-import kafka.func.Tuple;
-
 import java.nio.Buffer;
 import java.util.HashMap;
 import java.util.Map;
+
+import kafka.common.KafkaException;
+import kafka.func.Handler;
+import kafka.func.Tuple;
 
 /**
  * Created by Administrator on 2017/4/21.

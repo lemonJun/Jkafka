@@ -2,11 +2,6 @@ package kafka.network;/**
  * Created by zhoulf on 2017/4/20.
  */
 
-import com.google.common.collect.Maps;
-import kafka.common.KafkaException;
-import kafka.utils.Logging;
-import kafka.utils.Utils;
-
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -17,6 +12,12 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import com.google.common.collect.Maps;
+
+import kafka.common.KafkaException;
+import kafka.utils.Logging;
+import kafka.utils.Utils;
 
 /**
  * A base class with some helper variables and methods

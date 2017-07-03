@@ -1,11 +1,11 @@
 package kafka.network;
 
-import kafka.common.KafkaException;
-import kafka.utils.Logging;
-
 import java.nio.ByteBuffer;
 import java.nio.channels.GatheringByteChannel;
 import java.nio.channels.ReadableByteChannel;
+
+import kafka.common.KafkaException;
+import kafka.utils.Logging;
 
 /**
  * Represents a stateful transfer of data to or from the network

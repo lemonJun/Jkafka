@@ -1,8 +1,8 @@
 package kafka.utils;
 
-import kafka.func.Action;
-
 import java.util.concurrent.TimeUnit;
+
+import kafka.func.Action;
 
 /**
  * A scheduler for running jobs

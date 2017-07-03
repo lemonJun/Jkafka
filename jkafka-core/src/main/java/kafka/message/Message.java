@@ -2,9 +2,9 @@ package kafka.message;/**
  * Created by zhoulf on 2017/3/22.
  */
 
-import kafka.utils.Utils;
-
 import java.nio.ByteBuffer;
+
+import kafka.utils.Utils;
 
 /**
  * @author

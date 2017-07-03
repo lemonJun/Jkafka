@@ -1,6 +1,5 @@
 package kafka.common;
 
-import jdk.nashorn.internal.runtime.regexp.joni.Regex;
 import kafka.utils.Logging;
 
 /**

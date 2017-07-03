@@ -1,10 +1,10 @@
 package kafka.api;
 
-import kafka.network.RequestChannel;
-import kafka.utils.Logging;
-
 import java.nio.ByteBuffer;
 import java.util.Optional;
+
+import kafka.network.RequestChannel;
+import kafka.utils.Logging;
 
 /**
  * Created by Administrator on 2017/4/21.

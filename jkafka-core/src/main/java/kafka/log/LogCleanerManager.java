@@ -2,23 +2,24 @@ package kafka.log;/**
  * Created by zhoulf on 2017/4/12.
  */
 
+import java.io.File;
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
+
 import com.google.common.collect.Maps;
 import com.yammer.metrics.core.Gauge;
+
 import kafka.common.LogCleaningAbortedException;
 import kafka.func.Tuple;
 import kafka.metrics.KafkaMetricsGroup;
 import kafka.utils.Pool;
 import kafka.utils.Utils;
 //import org.elasticsearch.index.fielddata.IndexFieldDataCache;
-
-import java.io.File;
-import java.io.IOException;
-import java.util.*;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.stream.Collector;
-import java.util.stream.Collectors;
 
 /**
  * Manage the state of each partition being cleaned.

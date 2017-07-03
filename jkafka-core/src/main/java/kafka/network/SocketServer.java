@@ -1,18 +1,19 @@
 package kafka.network;
 
-import com.google.common.collect.ImmutableMap;
-import com.yammer.metrics.core.Gauge;
-import com.yammer.metrics.core.Meter;
-import kafka.metrics.KafkaMetricsGroup;
-import kafka.utils.Time;
-import kafka.utils.Utils;
-
 import java.io.IOException;
 import java.nio.channels.SelectionKey;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import com.google.common.collect.ImmutableMap;
+import com.yammer.metrics.core.Gauge;
+import com.yammer.metrics.core.Meter;
+
+import kafka.metrics.KafkaMetricsGroup;
+import kafka.utils.Time;
+import kafka.utils.Utils;
 
 /**
  * An NIO socket server. The threading model is

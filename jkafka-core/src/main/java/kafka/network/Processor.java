@@ -1,12 +1,6 @@
 package kafka.network;
 
 
-import com.yammer.metrics.core.Meter;
-import kafka.common.KafkaException;
-import kafka.utils.SystemTime;
-import kafka.utils.Time;
-
-import java.io.EOFException;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.channels.CancelledKeyException;
@@ -18,6 +12,11 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
+
+import com.yammer.metrics.core.Meter;
+
+import kafka.common.KafkaException;
+import kafka.utils.Time;
 
 /**
  * Thread that processes all requests from a single connection. There are N of these running in parallel

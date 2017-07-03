@@ -2,14 +2,9 @@ package kafka.cache;/**
  * Created by zhoulf on 2017/5/9.
  */
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
-import kafka.log.Log;
-import kafka.utils.Logging;
-import kafka.utils.Utils;
-import org.apache.commons.collections.CollectionUtils;
-
-import java.io.*;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Random;
@@ -18,6 +13,15 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.locks.ReentrantLock;
+
+import org.apache.commons.collections.CollectionUtils;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+
+import kafka.log.Log;
+import kafka.utils.Logging;
+import kafka.utils.Utils;
 
 /**
  * @author

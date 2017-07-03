@@ -1,12 +1,19 @@
 package kafka.utils;
 
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+
 import kafka.common.KafkaException;
 import kafka.func.Handler;
 import kafka.func.Tuple;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class Pool<K, V> implements Iterable<Tuple<K, V>> {
     private ConcurrentHashMap<K, V> pool = new ConcurrentHashMap<K, V>();

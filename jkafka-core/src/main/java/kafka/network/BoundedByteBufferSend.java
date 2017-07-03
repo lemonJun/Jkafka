@@ -1,11 +1,12 @@
 package kafka.network;
 
-import kafka.annotation.nonthreadsafe;
-import kafka.api.RequestOrResponse;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.GatheringByteChannel;
 import java.util.Optional;
+
+import kafka.annotation.nonthreadsafe;
+import kafka.api.RequestOrResponse;
 
 /**
  * Created by zhoulf on 2017/4/26.

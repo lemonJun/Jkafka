@@ -2,19 +2,38 @@ package kafka.utils;/**
  * Created by zhoulf on 2017/3/22.
  */
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import kafka.func.*;
-
-import java.io.*;
+import java.io.EOFException;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.RandomAccessFile;
+import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.Charset;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.locks.Lock;
 import java.util.stream.Collectors;
 import java.util.zip.CRC32;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+
+import kafka.func.Action;
+import kafka.func.ActionWithParam;
+import kafka.func.ActionWithThrow;
+import kafka.func.Fun;
+import kafka.func.Handler;
+import kafka.func.Tuple;
 
 /**
  * General helper functions!

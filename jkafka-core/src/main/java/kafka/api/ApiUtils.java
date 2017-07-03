@@ -2,10 +2,10 @@ package kafka.api;/**
  * Created by zhoulf on 2017/4/25.
  */
 
-import kafka.common.KafkaException;
-
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
+
+import kafka.common.KafkaException;
 
 /**
  * Helper functions specific to parsing or serializing requests and responses

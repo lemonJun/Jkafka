@@ -1,13 +1,14 @@
 package kafka.cluster;
 
+import java.nio.ByteBuffer;
+import java.util.Map;
+
 import com.alibaba.fastjson.JSON;
+
 import kafka.api.ApiUtils;
 import kafka.common.BrokerNotAvailableException;
 import kafka.common.KafkaException;
 import kafka.utils.Utils;
-
-import java.nio.ByteBuffer;
-import java.util.Map;
 
 /**
  * A Kafka broker

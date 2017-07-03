@@ -2,15 +2,16 @@ package kafka.message;/**
  * Created by zhoulf on 2017/3/24.
  */
 
-import kafka.utils.Logging;
-import org.xerial.snappy.SnappyInputStream;
-import org.xerial.snappy.SnappyOutputStream;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
+
+import org.xerial.snappy.SnappyInputStream;
+import org.xerial.snappy.SnappyOutputStream;
+
+import kafka.utils.Logging;
 
 /**
  * @author

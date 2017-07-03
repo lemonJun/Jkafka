@@ -2,17 +2,17 @@ package kafka.log;/**
  * Created by zhoulf on 2017/4/11.
  */
 
-import kafka.annotation.nonthreadsafe;
-import kafka.utils.Logging;
-import kafka.utils.Prediction;
-import kafka.utils.Utils;
-
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.security.DigestException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
+
+import kafka.annotation.nonthreadsafe;
+import kafka.utils.Logging;
+import kafka.utils.Prediction;
+import kafka.utils.Utils;
 
 /**
  * @author

@@ -2,7 +2,6 @@ package kafka.common;/**
  * Created by zhoulf on 2017/5/16.
  */
 
-import kafka.func.Tuple;
 import kafka.func.Tuple3;
 
 /**

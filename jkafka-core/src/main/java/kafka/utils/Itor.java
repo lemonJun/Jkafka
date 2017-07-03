@@ -1,11 +1,12 @@
 package kafka.utils;
 
-import com.google.common.collect.Lists;
-import kafka.func.ActionWithParam;
-import kafka.func.Handler;
-
 import java.util.Iterator;
 import java.util.List;
+
+import com.google.common.collect.Lists;
+
+import kafka.func.ActionWithParam;
+import kafka.func.Handler;
 
 /**
  * Created by Administrator on 2017/4/6.

@@ -2,6 +2,13 @@ package kafka.api;/**
  * Created by zhoulf on 2017/5/15.
  */
 
+import java.nio.ByteBuffer;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 import kafka.common.ErrorMapping;
 import kafka.common.OffsetAndMetadata;
 import kafka.func.IntCount;
@@ -12,13 +19,6 @@ import kafka.network.RequestChannel;
 import kafka.utils.Prediction;
 import kafka.utils.Time;
 import kafka.utils.Utils;
-
-import java.nio.ByteBuffer;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * @author

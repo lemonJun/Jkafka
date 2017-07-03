@@ -1,15 +1,13 @@
 package kafka.server;
 
-import kafka.cluster.Partition;
-import kafka.func.Tuple;
-import kafka.log.LogManager;
-import kafka.metrics.KafkaMetricsGroup;
-import kafka.utils.Pool;
-import kafka.utils.Scheduler;
-import kafka.utils.Time;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import org.I0Itec.zkclient.ZkClient;
 
-import java.util.concurrent.atomic.AtomicBoolean;
+import kafka.log.LogManager;
+import kafka.metrics.KafkaMetricsGroup;
+import kafka.utils.Scheduler;
+import kafka.utils.Time;
 
 /**
  * Created by zhoulf on 2017/4/1.

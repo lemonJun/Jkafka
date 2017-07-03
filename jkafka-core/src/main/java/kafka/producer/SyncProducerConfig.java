@@ -2,10 +2,10 @@ package kafka.producer;/**
  * Created by zhoulf on 2017/5/3.
  */
 
+import java.util.Properties;
+
 import kafka.func.Tuple;
 import kafka.utils.VerifiableProperties;
-
-import java.util.Properties;
 
 /**
  * @author

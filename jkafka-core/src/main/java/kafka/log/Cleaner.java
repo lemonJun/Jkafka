@@ -2,7 +2,18 @@ package kafka.log;/**
  * Created by zhoulf on 2017/4/11.
  */
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.Collection;
+import java.util.Date;
+import java.util.List;
+import java.util.stream.Collectors;
+
+import org.apache.commons.collections.CollectionUtils;
+
 import com.google.common.collect.Lists;
+
 import kafka.common.LogCleaningAbortedException;
 import kafka.func.ActionWithParam;
 import kafka.func.Tuple;
@@ -14,15 +25,6 @@ import kafka.utils.Logging;
 import kafka.utils.Prediction;
 import kafka.utils.Throttler;
 import kafka.utils.Time;
-import org.apache.commons.collections.CollectionUtils;
-
-import java.io.File;
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.Collection;
-import java.util.Date;
-import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * This class holds the actual logic for cleaning a log

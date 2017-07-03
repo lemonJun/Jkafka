@@ -2,13 +2,14 @@ package kafka.log;/**
  * Created by zhoulf on 2017/4/1.
  */
 
-import com.google.common.collect.Sets;
-import kafka.common.InvalidConfigException;
-import kafka.utils.Prediction;
-
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+
+import com.google.common.collect.Sets;
+
+import kafka.common.InvalidConfigException;
+import kafka.utils.Prediction;
 
 /**
  * @author

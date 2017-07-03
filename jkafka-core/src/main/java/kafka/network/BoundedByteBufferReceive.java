@@ -1,12 +1,11 @@
 package kafka.network;
 
-import kafka.annotation.nonthreadsafe;
-import kafka.utils.Logging;
-import kafka.utils.Utils;
-
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
+
+import kafka.annotation.nonthreadsafe;
+import kafka.utils.Utils;
 
 /**
  * Represents a communication between the client and server

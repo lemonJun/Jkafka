@@ -2,17 +2,17 @@ package kafka.message;/**
  * Created by zhoulf on 2017/3/22.
  */
 
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Lists;
-import kafka.utils.Itor;
-import kafka.utils.Logging;
-
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.GatheringByteChannel;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
+
+import com.google.common.collect.Lists;
+
+import kafka.utils.Itor;
+import kafka.utils.Logging;
 
 /**
  * Message set helper functions

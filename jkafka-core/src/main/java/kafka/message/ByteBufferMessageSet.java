@@ -2,12 +2,6 @@ package kafka.message;/**
  * Created by zhoulf on 2017/3/23.
  */
 
-import com.google.common.collect.Lists;
-import kafka.utils.IteratorTemplate;
-import kafka.utils.Itor;
-import kafka.utils.Logging;
-import org.apache.commons.collections.CollectionUtils;
-
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -17,6 +11,14 @@ import java.nio.channels.GatheringByteChannel;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
+
+import org.apache.commons.collections.CollectionUtils;
+
+import com.google.common.collect.Lists;
+
+import kafka.utils.IteratorTemplate;
+import kafka.utils.Itor;
+import kafka.utils.Logging;
 
 /**
  * @author

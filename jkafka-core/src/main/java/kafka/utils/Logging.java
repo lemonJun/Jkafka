@@ -2,9 +2,9 @@ package kafka.utils;/**
  * Created by zhoulf on 2017/3/23.
  */
 
-import kafka.func.Action;
-import kafka.func.ActionWithThrow;
 import org.apache.log4j.Logger;
+
+import kafka.func.ActionWithThrow;
 
 /**
  * @author

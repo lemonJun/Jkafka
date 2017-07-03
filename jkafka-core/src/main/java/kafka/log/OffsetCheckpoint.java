@@ -2,12 +2,19 @@ package kafka.log;/**
  * Created by zhoulf on 2017/4/12.
  */
 
-import com.google.common.collect.Maps;
-import kafka.utils.Logging;
-
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.util.Collections;
 import java.util.Map;
+
+import com.google.common.collect.Maps;
+
+import kafka.utils.Logging;
 
 /**
  * This class saves out a map of topic/partition=>offsets to a file

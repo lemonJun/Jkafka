@@ -1,11 +1,11 @@
 package kafka.utils;
 
-import kafka.annotation.threadsafe;
-import kafka.func.Action;
-
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import kafka.annotation.threadsafe;
+import kafka.func.Action;
 
 /**
  * A scheduler based on java.util.concurrent.ScheduledThreadPoolExecutor

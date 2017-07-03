@@ -11,7 +11,6 @@ import java.io.InputStream;
 
 import kafka.message.KafkaLZ4BlockOutputStream.BD;
 import kafka.message.KafkaLZ4BlockOutputStream.FLG;
-
 import kafka.utils.Logging;
 import kafka.utils.Utils;
 import net.jpountz.lz4.LZ4Exception;

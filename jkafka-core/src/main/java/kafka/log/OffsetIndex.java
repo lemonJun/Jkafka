@@ -1,13 +1,5 @@
 package kafka.log;
 
-import kafka.common.InvalidOffsetException;
-import kafka.func.Fun;
-import kafka.utils.Logging;
-import kafka.utils.Os;
-import kafka.utils.Prediction;
-import kafka.utils.Utils;
-import sun.nio.ch.DirectBuffer;
-
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -18,6 +10,14 @@ import java.nio.channels.FileChannel;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+
+import kafka.common.InvalidOffsetException;
+import kafka.func.Fun;
+import kafka.utils.Logging;
+import kafka.utils.Os;
+import kafka.utils.Prediction;
+import kafka.utils.Utils;
+import sun.nio.ch.DirectBuffer;
 
 /**
  * An index that maps offsets to physical file locations for a particular log segment. This index may be sparse:

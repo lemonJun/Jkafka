@@ -2,17 +2,18 @@ package kafka.api;/**
  * Created by zhoulf on 2017/4/25.
  */
 
-import kafka.common.ErrorMapping;
-import kafka.func.Handler;
-import kafka.func.Tuple;
-import kafka.log.TopicAndPartition;
-import kafka.utils.Utils;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import kafka.common.ErrorMapping;
+import kafka.func.Handler;
+import kafka.func.Tuple;
+import kafka.log.TopicAndPartition;
+import kafka.utils.Utils;
 
 /**
  * @author

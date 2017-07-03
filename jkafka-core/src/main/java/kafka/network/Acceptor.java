@@ -1,7 +1,5 @@
 package kafka.network;
 
-import kafka.common.KafkaException;
-import kafka.func.Handler;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
@@ -11,6 +9,8 @@ import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.Iterator;
 import java.util.Set;
+
+import kafka.common.KafkaException;
 
 
 public class Acceptor extends AbstractServerThread {

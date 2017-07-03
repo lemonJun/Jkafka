@@ -1,12 +1,13 @@
 package kafka.server;
 
-import com.google.common.collect.Maps;
-import com.yammer.metrics.core.Meter;
-import kafka.metrics.KafkaMetricsGroup;
-
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+
+import com.google.common.collect.Maps;
+import com.yammer.metrics.core.Meter;
+
+import kafka.metrics.KafkaMetricsGroup;
 
 public class BrokerTopicMetrics extends KafkaMetricsGroup {
     public Optional<String> name;

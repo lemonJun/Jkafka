@@ -1,6 +1,4 @@
-package kafka.test;/**
-                   * Created by zhoulf on 2017/3/30.
-                   */
+package kafka.test;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -11,10 +9,6 @@ import java.util.List;
 
 import com.google.common.collect.Lists;
 
-/**
- * @author
- * @create 2017-03-30 10:04
- **/
 public class ScalaToJava {
     public static final String main = "src/main/java/kafka/";
     public static final String test = "src/test/";

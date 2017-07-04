@@ -25,9 +25,9 @@
 			<artifactId>guava</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>com.101tec</groupId>
+			<groupId>com.github.adyliu</groupId>
 			<artifactId>zkclient</artifactId>
-			<scope>compile</scope>
+			<version>2.1.1</version>
 		</dependency>
 		<dependency>
 			<groupId>com.alibaba</groupId>
@@ -37,7 +37,7 @@
 			<groupId>com.takin</groupId>
 			<artifactId>emmet</artifactId>
 		</dependency>
-		
+
 		<dependency>
 			<groupId>org.apache.kafka</groupId>
 			<artifactId>kafka-clients</artifactId>

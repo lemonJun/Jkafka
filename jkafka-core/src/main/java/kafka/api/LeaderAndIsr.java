@@ -1,60 +1,62 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.api;
 
-import java.util.List;
+import kafka.controller.LeaderIsrAndControllerEpoch;
+import kafka.utils._;
 
-import com.google.common.collect.ImmutableMap;
+import scala.collection.Set;
 
-import kafka.utils.Json;
+object LeaderAndIsr {
+  val Integer initialLeaderEpoch = 0;
+  val Integer initialZKVersion = 0;
+  val Integer NoLeader = -1;
+  val Integer LeaderDuringDelete = -2;
 
-public class LeaderAndIsr {
-    public final int leader;
-    public final int leaderEpoch;
-    public final List<Integer> isr;
-    public int zkVersion;
+  public void  apply Integer leader, List isr<Int>): LeaderAndIsr = LeaderAndIsr(leader, initialLeaderEpoch, isr, initialZKVersion);
 
-    public LeaderAndIsr(int leader, int leaderEpoch, List<Integer> isr, int zkVersion) {
-        this.leader = leader;
-        this.leaderEpoch = leaderEpoch;
-        this.isr = isr;
-        this.zkVersion = zkVersion;
-    }
+  public void  duringDelete(List isr<Int>): LeaderAndIsr = LeaderAndIsr(LeaderDuringDelete, isr);
+}
 
-    public LeaderAndIsr(int leader, List<Integer> isr) {
-        this(leader, LeaderAndIsrs.initialLeaderEpoch, isr, LeaderAndIsrs.initialZKVersion);
-    }
+case class LeaderAndIsr Integer leader,
+                        Integer leaderEpoch,
+                        List isr<Int>,
+                        Integer zkVersion) {
+  public void  withZkVersion Integer zkVersion) = copy(zkVersion = zkVersion);
 
-    @Override
-    public String toString() {
-        return Json.encode(ImmutableMap.of("leader", leader, "leader_epoch", leaderEpoch, "isr", isr));
-    }
+  public void  newLeader Integer leader) = newLeaderAndIsr(leader, isr);
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o)
-            return true;
-        if (o == null || getClass() != o.getClass())
-            return false;
+  public void  newLeaderAndIsr Integer leader, List isr<Int>) = LeaderAndIsr(leader, leaderEpoch + 1, isr, zkVersion + 1);
 
-        LeaderAndIsr that = (LeaderAndIsr) o;
+  public void  newEpochAndZkVersion = newLeaderAndIsr(leader, isr);
 
-        if (leader != that.leader)
-            return false;
-        if (leaderEpoch != that.leaderEpoch)
-            return false;
-        if (zkVersion != that.zkVersion)
-            return false;
-        if (isr != null ? !isr.equals(that.isr) : that.isr != null)
-            return false;
+  override public void  String toString = {
+    Json.encode(Map("leader" -> leader, "leader_epoch" -> leaderEpoch, "isr" -> isr));
+  }
+}
 
-        return true;
-    }
+case class PartitionStateInfo(LeaderIsrAndControllerEpoch leaderIsrAndControllerEpoch, Seq allReplicas<Int>) {
 
-    @Override
-    public int hashCode() {
-        int result = leader;
-        result = 31 * result + leaderEpoch;
-        result = 31 * result + (isr != null ? isr.hashCode() : 0);
-        result = 31 * result + zkVersion;
-        return result;
-    }
+  override public void  String toString = {
+    val partitionStateInfo = new StringBuilder;
+    partitionStateInfo.append("(LeaderAndIsrInfo:" + leaderIsrAndControllerEpoch.toString);
+    partitionStateInfo.append(",ReplicationFactor:" + allReplicas.size + ")");
+    partitionStateInfo.append(",AllReplicas:" + allReplicas.mkString(",") + ")");
+    partitionStateInfo.toString();
+  }
 }

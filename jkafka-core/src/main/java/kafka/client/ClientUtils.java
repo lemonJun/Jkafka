@@ -1,112 +1,215 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package kafka.client;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
+import org.apache.kafka.common.protocol.{Errors, SecurityProtocol}
+
+import scala.collection._;
+import kafka.cluster._;
+import kafka.api._;
+import kafka.producer._;
+import kafka.common.{BrokerEndPointNotAvailableException, KafkaException}
+import kafka.utils.{CoreUtils, Logging}
 import java.util.Properties;
-import java.util.Set;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import util.Random;
+import kafka.network.BlockingChannel;
+import kafka.utils.ZkUtils;
+import java.io.IOException;
 
-import com.google.common.base.Joiner;
-import com.google.common.collect.Lists;
-
-import kafka.api.TopicMetadataRequest;
-import kafka.api.TopicMetadataRequestReader;
-import kafka.api.TopicMetadataResponse;
-import kafka.cluster.Broker;
-import kafka.common.KafkaException;
-import kafka.producer.ProducerConfig;
-import kafka.producer.ProducerPool;
-import kafka.producer.SyncProducer;
-import kafka.utils.Function1;
-import kafka.utils.Function2;
-import kafka.utils.Utils;
-
-/**
+ /**
  * Helper functions common to clients (producer, consumer, or admin)
  */
-public class ClientUtils {
-    static Logger logger = LoggerFactory.getLogger(ClientUtils.class);
+@deprecated("This class has been deprecated and will be removed in a future release.", "0.11.0.0")
+object ClientUtils extends Logging {
 
-    /**
-     * Used by the producer to send a metadata request since it has access to the ProducerConfig
-     *
-     * @param topics         The topics for which the metadata needs to be fetched
-     * @param brokers        The brokers in the cluster as configured on the producer through metadata.broker.list
-     * @param producerConfig The producer's config
-     * @return topic metadata response
-     */
-    public static TopicMetadataResponse fetchTopicMetadata(Set<String> topics, Collection<Broker> brokers, ProducerConfig producerConfig, int correlationId) {
-        Boolean fetchMetaDataSucceeded = false;
-        int i = 0;
-        TopicMetadataRequest topicMetadataRequest = new TopicMetadataRequest(TopicMetadataRequestReader.CurrentVersion, correlationId, producerConfig.clientId, Lists.newArrayList(topics));
-        TopicMetadataResponse topicMetadataResponse = null;
-        Throwable t = null;
-        // shuffle the list of brokers before sending metadata requests so that most requests don't get routed to the
-        // same broker
-        List<Broker> shuffledBrokers = Lists.newArrayList(brokers);
-        Collections.shuffle(shuffledBrokers);
-        while (i < shuffledBrokers.size() && !fetchMetaDataSucceeded) {
-            SyncProducer producer = ProducerPool.createSyncProducer(producerConfig, shuffledBrokers.get(i));
-            logger.info("Fetching metadata from broker {} with correlation id {} for {} topic(s) {}", shuffledBrokers.get(i), correlationId, topics.size(), topics);
-            try {
-                topicMetadataResponse = producer.send(topicMetadataRequest);
-                fetchMetaDataSucceeded = true;
-            } catch (Throwable e) {
-                logger.warn("Fetching topic metadata with correlation id {} for topics [{}] from broker [{}] failed", correlationId, topics, shuffledBrokers.get(i), e);
-                t = e;
-            } finally {
-                i = i + 1;
-                producer.close();
-            }
+  /**
+   * Used by the producer to send a metadata request since it has access to the ProducerConfig
+   * @param topics The topics for which the metadata needs to be fetched
+   * @param brokers The brokers in the cluster as configured on the producer through metadata.broker.list
+   * @param producerConfig The producer's config
+   * @return topic metadata response
+   */
+  @deprecated("This method has been deprecated and will be removed in a future release.", "0.10.0.0")
+  public void  fetchTopicMetadata(Set topics<String>, Seq brokers<BrokerEndPoint>, ProducerConfig producerConfig, Integer correlationId): TopicMetadataResponse = {
+    var Boolean fetchMetaDataSucceeded = false;
+    var Integer i = 0;
+    val topicMetadataRequest = new TopicMetadataRequest(TopicMetadataRequest.CurrentVersion, correlationId, producerConfig.clientId, topics.toSeq);
+    var TopicMetadataResponse topicMetadataResponse = null;
+    var Throwable t = null;
+    // shuffle the list of brokers before sending metadata requests so that most requests don't get routed to the;
+    // same broker;
+    val shuffledBrokers = Random.shuffle(brokers);
+    while(i < shuffledBrokers.size && !fetchMetaDataSucceeded) {
+      val SyncProducer producer = ProducerPool.createSyncProducer(producerConfig, shuffledBrokers(i));
+      info(String.format("Fetching metadata from broker %s with correlation id %d for %d topic(s) %s",shuffledBrokers(i), correlationId, topics.size, topics))
+      try {
+        topicMetadataResponse = producer.send(topicMetadataRequest);
+        fetchMetaDataSucceeded = true;
+      }
+      catch {
+        case Throwable e =>
+          warn("Fetching topic metadata with correlation id %d for topics <%s> from broker <%s> failed";
+            .format(correlationId, topics, shuffledBrokers(i).toString), e)
+          t = e;
+      } finally {
+        i = i + 1;
+        producer.close();
+      }
+    }
+    if(!fetchMetaDataSucceeded) {
+      throw new KafkaException(String.format("fetching topic metadata for topics <%s> from broker <%s> failed",topics, shuffledBrokers), t)
+    } else {
+      debug(String.format("Successfully fetched metadata for %d topic(s) %s",topics.size, topics))
+    }
+    topicMetadataResponse;
+  }
+
+  /**
+   * Used by a non-producer client to send a metadata request
+   * @param topics The topics for which the metadata needs to be fetched
+   * @param brokers The brokers in the cluster as configured on the client
+   * @param clientId The client's identifier
+   * @return topic metadata response
+   */
+  public void  fetchTopicMetadata(Set topics<String>, Seq brokers<BrokerEndPoint>, String clientId, Integer timeoutMs,
+                         Integer correlationId = 0): TopicMetadataResponse = {
+    val props = new Properties();
+    props.put("metadata.broker.list", brokers.map(_.connectionString).mkString(","));
+    props.put("client.id", clientId);
+    props.put("request.timeout.ms", timeoutMs.toString);
+    val producerConfig = new ProducerConfig(props);
+    fetchTopicMetadata(topics, brokers, producerConfig, correlationId);
+  }
+
+  /**
+   * Parse a list of broker urls in the form port1 host1, port2 host2, ...
+   */
+  public void  parseBrokerList(String brokerListStr): Seq<BrokerEndPoint> = {
+    val brokersStr = CoreUtils.parseCsvList(brokerListStr);
+
+    brokersStr.zipWithIndex.map { case (address, brokerId) =>
+      BrokerEndPoint.createBrokerEndPoint(brokerId, address);
+    }
+  }
+
+  /**
+   * Creates a blocking channel to a random broker
+   */
+  public void  channelToAnyBroker(ZkUtils zkUtils, Integer socketTimeoutMs = 3000) : BlockingChannel = {
+    var BlockingChannel channel = null;
+    var connected = false;
+    while (!connected) {
+      val allBrokers = getPlaintextBrokerEndPoints(zkUtils);
+      Random.shuffle(allBrokers).find { broker =>
+        trace(String.format("Connecting to broker %s:%d.",broker.host, broker.port))
+        try {
+          channel = new BlockingChannel(broker.host, broker.port, BlockingChannel.UseDefaultBufferSize, BlockingChannel.UseDefaultBufferSize, socketTimeoutMs);
+          channel.connect();
+          debug(String.format("Created channel to broker %s:%d.",channel.host, channel.port))
+          true;
+        } catch {
+          case Exception _ =>
+            if (channel != null) channel.disconnect()
+            channel = null;
+            info(String.format("Error while creating channel to %s:%d.",broker.host, broker.port))
+            false;
         }
-        if (!fetchMetaDataSucceeded) {
-            throw new KafkaException(t, "fetching topic metadata for topics [%s] from broker [%s] failed", topics, shuffledBrokers);
-        } else {
-            logger.debug("Successfully fetched metadata for {} topic(s) {}", topics.size(), topics);
-        }
-        return topicMetadataResponse;
+      }
+      connected = channel != null;
     }
 
-    /**
-     * Used by a non-producer client to send a metadata request
-     *
-     * @param topics   The topics for which the metadata needs to be fetched
-     * @param brokers  The brokers in the cluster as configured on the client
-     * @param clientId The client's identifier
-     * @return topic metadata response
-     */
-    public static TopicMetadataResponse fetchTopicMetadata(Set<String> topics, Collection<Broker> brokers, String clientId, int timeoutMs, int correlationId /*= 0*/) {
-        Properties props = new Properties();
-        props.put("metadata.broker.list", Joiner.on(',').join(Utils.mapList(brokers, new Function1<Broker, String>() {
-            @Override
-            public String apply(Broker _) {
-                return _.getConnectionString();
-            }
-        })));
-        props.put("client.id", clientId);
-        props.put("request.timeout.ms", timeoutMs + "");
-        ProducerConfig producerConfig = new ProducerConfig(props);
-        return fetchTopicMetadata(topics, brokers, producerConfig, correlationId);
+    channel;
+  }
+
+   /**
+    * Returns the first end point from each broker with the PLAINTEXT security protocol.
+    */
+  public void  getPlaintextBrokerEndPoints(ZkUtils zkUtils): Seq<BrokerEndPoint> = {
+    zkUtils.getAllBrokersInCluster().map { broker =>
+      broker.endPoints.collectFirst {
+        case endPoint if endPoint.securityProtocol == SecurityProtocol.PLAINTEXT =>
+          new BrokerEndPoint(broker.id, endPoint.host, endPoint.port);
+      }.getOrElse(throw new BrokerEndPointNotAvailableException(s"End point with security protocol PLAINTEXT not found for broker ${broker.id}"))
     }
+  }
 
-    /**
-     * Parse a list of broker urls in the form host1:port1, host2:port2, ...
-     */
-    public static List<Broker> parseBrokerList(String brokerListStr) {
-        List<String> brokersStr = Utils.parseCsvList(brokerListStr);
+   /**
+    * Creates a blocking channel to the offset manager of the given group
+    */
+   public void  channelToOffsetManager(String group, ZkUtils zkUtils, Integer socketTimeoutMs = 3000, Integer retryBackOffMs = 1000) = {
+     var queryChannel = channelToAnyBroker(zkUtils);
 
-        return Utils.zipWithIndex(brokersStr, new Function2<String, Integer, Broker>() {
-            @Override
-            public Broker apply(String brokerStr, Integer brokerId) {
-                String[] brokerInfos = brokerStr.split(":");
-                String hostName = brokerInfos[0];
-                int port = Integer.parseInt(brokerInfos[1]);
-                return new Broker(brokerId, hostName, port);
-            }
-        });
-    }
+     var Option offsetManagerChannelOpt<BlockingChannel> = None;
 
-}
+     while (offsetManagerChannelOpt.isEmpty) {
+
+       var Option coordinatorOpt<BrokerEndPoint> = None;
+
+       while (coordinatorOpt.isEmpty) {
+         try {
+           if (!queryChannel.isConnected)
+             queryChannel = channelToAnyBroker(zkUtils);
+           debug(String.format("Querying %s:%d to locate offset manager for %s.",queryChannel.host, queryChannel.port, group))
+           queryChannel.send(GroupCoordinatorRequest(group));
+           val response = queryChannel.receive();
+           val consumerMetadataResponse =  GroupCoordinatorResponse.readFrom(response.payload());
+           debug("Consumer metadata response: " + consumerMetadataResponse.toString);
+           if (consumerMetadataResponse.error == Errors.NONE)
+             coordinatorOpt = consumerMetadataResponse.coordinatorOpt;
+           else {
+             debug("Query to %s:%d to locate offset manager for %s failed - will retry in %d milliseconds.";
+                  .format(queryChannel.host, queryChannel.port, group, retryBackOffMs))
+             Thread.sleep(retryBackOffMs);
+           }
+         }
+         catch {
+           case IOException _ =>
+             info(String.format("Failed to fetch consumer metadata from %s:%d.",queryChannel.host, queryChannel.port))
+             queryChannel.disconnect();
+         }
+       }
+
+       val coordinator = coordinatorOpt.get;
+       if (coordinator.host == queryChannel.host && coordinator.port == queryChannel.port) {
+         offsetManagerChannelOpt = Some(queryChannel);
+       } else {
+         val connectString = String.format("%s:%d",coordinator.host, coordinator.port)
+         var BlockingChannel offsetManagerChannel = null;
+         try {
+           debug(String.format("Connecting to offset manager %s.",connectString))
+           offsetManagerChannel = new BlockingChannel(coordinator.host, coordinator.port,
+                                                      BlockingChannel.UseDefaultBufferSize,
+                                                      BlockingChannel.UseDefaultBufferSize,
+                                                      socketTimeoutMs);
+           offsetManagerChannel.connect();
+           offsetManagerChannelOpt = Some(offsetManagerChannel);
+           queryChannel.disconnect();
+         }
+         catch {
+           case IOException _ => // offsets manager may have moved;
+             info(String.format("Error while connecting to %s.",connectString))
+             if (offsetManagerChannel != null) offsetManagerChannel.disconnect()
+             Thread.sleep(retryBackOffMs);
+             offsetManagerChannelOpt = None // just in case someone decides to change shutdownChannel to not swallow exceptions;
+         }
+       }
+     }
+
+     offsetManagerChannelOpt.get;
+   }
+ }

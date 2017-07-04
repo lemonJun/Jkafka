@@ -1,104 +1,80 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.api;
 
-import static kafka.api.ApiUtils.readShortString;
-import static kafka.api.ApiUtils.shortStringLength;
-import static kafka.api.ApiUtils.writeShortString;
-
 import java.nio.ByteBuffer;
-import java.util.Map;
 
-import com.google.common.collect.Table;
-
+import kafka.utils.Logging;
 import kafka.common.TopicAndPartition;
-import kafka.utils.Callable2;
-import kafka.utils.Function0;
-import kafka.utils.Function2;
-import kafka.utils.Function3;
-import kafka.utils.Tuple2;
-import kafka.utils.Utils;
+import org.apache.kafka.common.protocol.Errors;
 
-public class OffsetCommitResponse extends RequestOrResponse {
-    public static final short CurrentVersion = 0;
+object OffsetCommitResponse extends Logging {
+  val Short CurrentVersion = 0;
 
-    public static OffsetCommitResponse readFrom(final ByteBuffer buffer) {
-        int correlationId = buffer.getInt();
-        int topicCount = buffer.getInt();
-
-        Map<TopicAndPartition, Short> pairs = Utils.flatMaps(1, topicCount, new Function0<Map<TopicAndPartition, Short>>() {
-            @Override
-            public Map<TopicAndPartition, Short> apply() {
-                final String topic = readShortString(buffer);
-                int partitionCount = buffer.getInt();
-
-                return Utils.flatMap(1, partitionCount, new Function0<Tuple2<TopicAndPartition, Short>>() {
-                    @Override
-                    public Tuple2<TopicAndPartition, Short> apply() {
-                        int partitionId = buffer.getInt();
-                        short error = buffer.getShort();
-                        return Tuple2.make(new TopicAndPartition(topic, partitionId), error);
-                    }
-                });
-            }
-        });
-
-        return new OffsetCommitResponse(pairs, correlationId);
-    }
-
-    public Map<TopicAndPartition, Short> requestInfo;
-
-    public OffsetCommitResponse(Map<TopicAndPartition, Short> requestInfo) {
-        this(requestInfo, 0);
-    }
-
-    public OffsetCommitResponse(Map<TopicAndPartition, Short> requestInfo, int correlationId) {
-        super(correlationId);
-        this.requestInfo = requestInfo;
-
-        requestInfoGroupedByTopic = Utils.groupBy(requestInfo, new Function2<TopicAndPartition, Short, String>() {
-            @Override
-            public String apply(TopicAndPartition arg1, Short arg2) {
-                return arg1.topic;
-            }
-        });
-    }
-
-    public Table<String, TopicAndPartition, Short> requestInfoGroupedByTopic;
-
-    @Override
-    public int sizeInBytes() {
-        return 4 /* correlationId */
-                        + 4 /* topic count */
-                        + Utils.foldLeft(requestInfoGroupedByTopic, 0, new Function3<Integer, String, Map<TopicAndPartition, Short>, Integer>() {
-                            @Override
-                            public Integer apply(Integer count, String topic, Map<TopicAndPartition, Short> offsets) {
-                                return count + shortStringLength(topic) + /* topic */
-                                4 + /* number of partitions */
-                                offsets.size() * (4 + /* partition */
-                                2 /* error */
-                                );
-                            }
-                        });
-    }
-
-    @Override
-    public void writeTo(final ByteBuffer buffer) {
-        buffer.putInt(correlationId);
-        buffer.putInt(requestInfoGroupedByTopic.size()); // number of topics
-
-        Utils.foreach(requestInfoGroupedByTopic, new Callable2<String, Map<TopicAndPartition, Short>>() {
-            @Override
-            public void apply(String topic, Map<TopicAndPartition, Short> arg2) {
-                writeShortString(buffer, topic); // topic
-                buffer.putInt(arg2.size()); // number of partitions for this topic
-
-                Utils.foreach(arg2, new Callable2<TopicAndPartition, Short>() {
-                    @Override
-                    public void apply(TopicAndPartition arg1, Short arg2) {
-                        buffer.putInt(arg1.partition);
-                        buffer.putShort(arg2); //error
-                    }
-                });
-            }
-        });
-    }
+  public void  readFrom(ByteBuffer buffer): OffsetCommitResponse = {
+    val correlationId = buffer.getInt;
+    val topicCount = buffer.getInt;
+    val pairs = (1 to topicCount).flatMap(_ => {
+      val topic = ApiUtils.readShortString(buffer);
+      val partitionCount = buffer.getInt;
+      (1 to partitionCount).map(_ => {
+        val partitionId = buffer.getInt;
+        val error = Errors.forCode(buffer.getShort)
+        (TopicAndPartition(topic, partitionId), error);
+      });
+    });
+    OffsetCommitResponse(Map(_ pairs*), correlationId);
+  }
 }
+
+case class OffsetCommitResponse(Map commitStatus<TopicAndPartition, Errors>,
+                                Integer correlationId = 0);
+    extends RequestOrResponse() {
+
+  lazy val commitStatusGroupedByTopic = commitStatus.groupBy(_._1.topic);
+
+  public void  hasError = commitStatus.values.exists(_ != Errors.NONE);
+
+  public void  writeTo(ByteBuffer buffer) {
+    buffer.putInt(correlationId);
+    buffer.putInt(commitStatusGroupedByTopic.size);
+    commitStatusGroupedByTopic.foreach { case(topic, statusMap) =>
+      ApiUtils.writeShortString(buffer, topic);
+      buffer.putInt(statusMap.size) // partition count;
+      statusMap.foreach { case(topicAndPartition, error) =>
+        buffer.putInt(topicAndPartition.partition);
+        buffer.putShort(error.code);
+      }
+    }
+  }
+
+  override public void  sizeInBytes =
+    4 + /* correlationId */
+    4 + /* topic count */
+    commitStatusGroupedByTopic.foldLeft(0)((count, partitionStatusMap) => {
+      val (topic, partitionStatus) = partitionStatusMap;
+      count +;
+      ApiUtils.shortStringLength(topic) +;
+      4 + /* partition count */
+      partitionStatus.size * ( 4 /* partition */  + 2 /* error code */);
+    });
+
+  override public void  describe(Boolean details):String = { toString }
+
+}
+

@@ -1,108 +1,125 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.api;
 
-import static kafka.api.ApiUtils.shortStringLength;
-import static kafka.api.ApiUtils.writeShortString;
-
 import java.nio.ByteBuffer;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
 
-import com.google.common.collect.Multimap;
+import kafka.api.ApiUtils._;
+import kafka.common.{TopicAndPartition, _}
+import kafka.network.{RequestOrResponseSend, RequestChannel}
+import kafka.network.RequestChannel.Response;
+import kafka.utils.Logging;
+import org.apache.kafka.common.protocol.{ApiKeys, Errors}
 
-import kafka.common.ErrorMapping;
-import kafka.common.OffsetMetadataAndError;
-import kafka.common.TopicAndPartition;
-import kafka.network.BoundedByteBufferSend;
-import kafka.network.Request;
-import kafka.network.RequestChannel;
-import kafka.network.Response;
-import kafka.utils.Callable1;
-import kafka.utils.Callable2;
-import kafka.utils.Function1;
-import kafka.utils.Function3;
-import kafka.utils.Tuple2;
-import kafka.utils.Utils;
+object OffsetFetchRequest extends Logging {
+  val Short CurrentVersion = 2;
+  val DefaultClientId = "";
 
-public class OffsetFetchRequest extends RequestOrResponse {
-    public String groupId;
-    public List<TopicAndPartition> requestInfo;
-    public short versionId;
-    public String clientId;
+  public void  readFrom(ByteBuffer buffer): OffsetFetchRequest = {
+    // Read values from the envelope;
+    val versionId = buffer.getShort;
+    val correlationId = buffer.getInt;
+    val clientId = readShortString(buffer);
 
-    public OffsetFetchRequest(String groupId, List<TopicAndPartition> requestInfo) {
-        this(groupId, requestInfo, OffsetFetchRequestReader.CurrentVersion, 0, OffsetFetchRequestReader.DefaultClientId);
-    }
+    // Read the OffsetFetchRequest;
+    val consumerGroupId = readShortString(buffer);
+    val topicCount = buffer.getInt;
+    val pairs = (1 to topicCount).flatMap(_ => {
+      val topic = readShortString(buffer);
+      val partitionCount = buffer.getInt;
+      (1 to partitionCount).map(_ => {
+        val partitionId = buffer.getInt;
+        TopicAndPartition(topic, partitionId);
+      });
+    });
+    OffsetFetchRequest(consumerGroupId, pairs, versionId, correlationId, clientId);
+  }
+}
 
-    public OffsetFetchRequest(String groupId, List<TopicAndPartition> requestInfo, short versionId, int correlationId, String clientId) {
-        super(RequestKeys.OffsetFetchKey, correlationId);
-        this.groupId = groupId;
-        this.requestInfo = requestInfo;
-        this.versionId = versionId;
-        this.clientId = clientId;
+case class OffsetFetchRequest(String groupId,
+                              Seq requestInfo<TopicAndPartition>,
+                              Short versionId = OffsetFetchRequest.CurrentVersion,
+                              Integer correlationId = 0,
+                              String clientId = OffsetFetchRequest.DefaultClientId);
+    extends RequestOrResponse(Some(ApiKeys.OFFSET_FETCH.id)) {
 
-        requestInfoGroupedByTopic = Utils.groupBy(requestInfo, new Function1<TopicAndPartition, Tuple2<String, TopicAndPartition>>() {
-            @Override
-            public Tuple2<String, TopicAndPartition> apply(TopicAndPartition topicAndPartition) {
-                return Tuple2.make(topicAndPartition.topic, topicAndPartition);
-            }
-        });
-    }
+  lazy val requestInfoGroupedByTopic = requestInfo.groupBy(_.topic);
 
-    private Multimap<String, TopicAndPartition> requestInfoGroupedByTopic;
+  public void  writeTo(ByteBuffer buffer) {
+    // Write envelope;
+    buffer.putShort(versionId);
+    buffer.putInt(correlationId);
+    writeShortString(buffer, clientId);
 
-    @Override
-    public int sizeInBytes() {
-        return 2 + /* versionId */
-                        4 + /* correlationId */
-                        shortStringLength(clientId) + shortStringLength(groupId) + 4 /* topic count */
-                        + Utils.foldLeft(requestInfoGroupedByTopic, 0, new Function3<Integer, String, Collection<TopicAndPartition>, Integer>() {
-                            @Override
-                            public Integer apply(Integer count, String topic, Collection<TopicAndPartition> arg3) {
-                                return count + shortStringLength(topic) + /* topic */
-                                4 + /* number of partitions */
-                                arg3.size() * 4 /* partition */;
-                            }
-                        });
-    }
+    // Write OffsetFetchRequest;
+    writeShortString(buffer, groupId)             // consumer group;
+    buffer.putInt(requestInfoGroupedByTopic.size) // number of topics;
+    requestInfoGroupedByTopic.foreach( t1 => { // (topic, Seq<TopicAndPartition>)
+      writeShortString(buffer, t1._1) // topic;
+      buffer.putInt(t1._2.size)       // number of partitions for this topic;
+      t1._2.foreach( t2 => {
+        buffer.putInt(t2.partition);
+      });
+    });
+  }
 
-    @Override
-    public void writeTo(final ByteBuffer buffer) {
-        // Write envelope
-        buffer.putShort(versionId);
-        buffer.putInt(correlationId);
-        writeShortString(buffer, clientId);
+  override public void  sizeInBytes =
+    2 + /* versionId */
+    4 + /* correlationId */
+    shortStringLength(clientId) +;
+    shortStringLength(groupId) +;
+    4 + /* topic count */
+    requestInfoGroupedByTopic.foldLeft(0)((count, t) => {
+      count + shortStringLength(t._1) + /* topic */
+      4 + /* number of partitions */
+      t._2.size * 4 /* partition */
+    });
 
-        // Write OffsetFetchRequest
-        writeShortString(buffer, groupId); // consumer group
-        buffer.putInt(requestInfoGroupedByTopic.size()); // number of topics
+  override public void  handleError(Throwable e, RequestChannel requestChannel, RequestChannel request.Request): Unit = {
+    val requestVersion = request.header.apiVersion;
 
-        Utils.foreach(requestInfoGroupedByTopic, new Callable2<String, Collection<TopicAndPartition>>() {
-            @Override
-            public void apply(String topic, Collection<TopicAndPartition> topicAndPartitions) {
-                writeShortString(buffer, topic); // topic
-                buffer.putInt(topicAndPartitions.size()); // number of partitions for this topic
+    val thrownError = Errors.forException(e)
+    val responseMap =
+      if (requestVersion < 2) {
+        requestInfo.map {
+          topicAndPartition => (topicAndPartition, OffsetMetadataAndError(thrownError));
+        }.toMap;
+      } else {
+        Map<kafka.common.TopicAndPartition, kafka.common.OffsetMetadataAndError>();
+      }
 
-                Utils.foreach(topicAndPartitions, new Callable1<TopicAndPartition>() {
-                    @Override
-                    public void apply(TopicAndPartition arg) {
-                        buffer.putInt(arg.partition);
-                    }
-                });
-            }
-        });
-    }
+    val errorResponse = OffsetFetchResponse(requestInfo=responseMap, correlationId=correlationId, error=thrownError);
+    requestChannel.sendResponse(Response(request, new RequestOrResponseSend(request.connectionId, errorResponse)));
+  }
 
-    @Override
-    public void handleError(final Throwable e, RequestChannel requestChannel, Request request) {
-        Map<TopicAndPartition, OffsetMetadataAndError> responseMap = Utils.map(requestInfo, new Function1<TopicAndPartition, Tuple2<TopicAndPartition, OffsetMetadataAndError>>() {
-            @Override
-            public Tuple2<TopicAndPartition, OffsetMetadataAndError> apply(TopicAndPartition topicAndPartition) {
-                return Tuple2.make(topicAndPartition, new OffsetMetadataAndError(OffsetMetadataAndError.InvalidOffset, OffsetMetadataAndError.NoMetadata, ErrorMapping.codeFor(e.getClass())));
-            }
-        });
+  override public void  describe(Boolean details): String = {
+    val offsetFetchRequest = new StringBuilder;
+    offsetFetchRequest.append("Name: " + this.getClass.getSimpleName);
+    offsetFetchRequest.append("; Version: " + versionId);
+    offsetFetchRequest.append("; CorrelationId: " + correlationId);
+    offsetFetchRequest.append("; ClientId: " + clientId);
+    offsetFetchRequest.append("; GroupId: " + groupId);
+    if (details)
+      offsetFetchRequest.append("; RequestInfo: " + requestInfo.mkString(","));
+    offsetFetchRequest.toString();
+  }
 
-        OffsetFetchResponse errorResponse = new OffsetFetchResponse(responseMap, correlationId);
-        requestChannel.sendResponse(new Response(request, new BoundedByteBufferSend(errorResponse)));
-    }
+  override public void  String toString = {
+    describe(details = true);
+  }
 }

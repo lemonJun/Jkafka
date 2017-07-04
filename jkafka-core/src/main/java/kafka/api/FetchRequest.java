@@ -1,157 +1,288 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.api;
 
-import static kafka.api.ApiUtils.shortStringLength;
-import static kafka.api.ApiUtils.writeShortString;
-
-import java.nio.ByteBuffer;
-import java.util.Map;
-
-import com.google.common.collect.Table;
-
-import kafka.common.ErrorMapping;
+import kafka.utils.nonthreadsafe;
+import kafka.api.ApiUtils._;
 import kafka.common.TopicAndPartition;
-import kafka.consumer.ConsumerConfigs;
-import kafka.message.MessageSets;
-import kafka.network.Request;
+import kafka.consumer.ConsumerConfig;
 import kafka.network.RequestChannel;
-import kafka.network.Response;
-import kafka.utils.Function2;
-import kafka.utils.Tuple2;
-import kafka.utils.Utils;
+import kafka.message.MessageSet;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.nio.ByteBuffer;
+import java.util;
 
-public class FetchRequest extends RequestOrResponse {
-    public short versionId /*= FetchRequestReader.CurrentVersion*/;
-    //  override val correlationId: Int = FetchRequest.DefaultCorrelationId,
-    public String clientId;/* = ConsumerConfig.DefaultClientId,*/
-    public int replicaId; /*Request.OrdinaryConsumerId,*/
-    public int maxWait; /* FetchRequest.DefaultMaxWait,*/
-    public int minBytes; /*FetchRequest.DefaultMinBytes,*/
-    public Map<TopicAndPartition, PartitionFetchInfo> requestInfo;
+import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.protocol.{ApiKeys, Errors}
+import org.apache.kafka.common.record.MemoryRecords;
+import org.apache.kafka.common.requests.{FetchResponse => JFetchResponse}
 
-    public FetchRequest(Map<TopicAndPartition, PartitionFetchInfo> requestInfo) {
-        this(FetchRequestReader.CurrentVersion, FetchRequestReader.DefaultCorrelationId, ConsumerConfigs.DefaultClientId, Requests.OrdinaryConsumerId, FetchRequestReader.DefaultMaxWait, FetchRequestReader.DefaultMinBytes, requestInfo);
+import scala.collection.mutable.ArrayBuffer;
+import scala.util.Random;
+
+case class PartitionFetchInfo(Long offset, Integer fetchSize);
+
+@deprecated("This object has been deprecated and will be removed in a future release.", "0.11.0.0")
+object FetchRequest {
+
+  private val random = new Random;
+
+  val CurrentVersion = 3.shortValue;
+  val DefaultMaxWait = 0;
+  val DefaultMinBytes = 0;
+  val DefaultMaxBytes = Int.MaxValue;
+  val DefaultCorrelationId = 0;
+
+  public void  readFrom(ByteBuffer buffer): FetchRequest = {
+    val versionId = buffer.getShort;
+    val correlationId = buffer.getInt;
+    val clientId = readShortString(buffer);
+    val replicaId = buffer.getInt;
+    val maxWait = buffer.getInt;
+    val minBytes = buffer.getInt;
+    val maxBytes = if (versionId < 3) DefaultMaxBytes else buffer.getInt;
+    val topicCount = buffer.getInt;
+    val pairs = (1 to topicCount).flatMap(_ => {
+      val topic = readShortString(buffer);
+      val partitionCount = buffer.getInt;
+      (1 to partitionCount).map(_ => {
+        val partitionId = buffer.getInt;
+        val offset = buffer.getLong;
+        val fetchSize = buffer.getInt;
+        (TopicAndPartition(topic, partitionId), PartitionFetchInfo(offset, fetchSize));
+      });
+    });
+    FetchRequest(versionId, correlationId, clientId, replicaId, maxWait, minBytes, maxBytes, Vector(_ pairs*));
+  }
+
+  public void  shuffle(Seq requestInfo<(TopicAndPartition, PartitionFetchInfo)>): Seq<(TopicAndPartition, PartitionFetchInfo)> = {
+    val groupedByTopic = requestInfo.groupBy { case (tp, _) => tp.topic }.map { case (topic, values) =>
+      topic -> random.shuffle(values);
     }
-
-    public FetchRequest(short versionId, int correlationId, String clientId, int replicaId, int maxWait, int minBytes, Map<TopicAndPartition, PartitionFetchInfo> requestInfo) {
-        super(RequestKeys.FetchKey, correlationId);
-        this.versionId = versionId;
-        this.clientId = clientId;
-        this.replicaId = replicaId;
-        this.maxWait = maxWait;
-        this.minBytes = minBytes;
-        this.requestInfo = requestInfo;
-
-        // = requestInfo.groupBy(_._1.topic)
-        requestInfoGroupedByTopic = Utils.groupBy(requestInfo, new Function2<TopicAndPartition, PartitionFetchInfo, String>() {
-            @Override
-            public String apply(TopicAndPartition arg1, PartitionFetchInfo arg2) {
-                return arg1.topic;
-            }
-        });
+    random.shuffle(groupedByTopic.toSeq).flatMap { case (_, partitions) =>
+      partitions.map { case (tp, fetchInfo) => tp -> fetchInfo }
     }
+  }
 
-    /**
-     * Partitions the request info into a map of maps (one for each topic).
-     */
-    Table<String, TopicAndPartition, PartitionFetchInfo> requestInfoGroupedByTopic;
-
-    /**
-     * Public constructor for the clients
-     */
-    public FetchRequest(int correlationId, String clientId, int maxWait, int minBytes, Map<TopicAndPartition, PartitionFetchInfo> requestInfo) {
-        this(FetchRequestReader.CurrentVersion, correlationId, clientId, Requests.OrdinaryConsumerId, maxWait, minBytes, requestInfo);
+  public void  batchByTopic[T](Seq s<(TopicAndPartition, T)>): Seq[(String, Seq<(Int, T)])> = {
+    val result = new ArrayBuffer[(String, ArrayBuffer<(Int, T)])>;
+    s.foreach { case (TopicAndPartition(t, p), value) =>
+      if (result.isEmpty || result.last._1 != t)
+        result += (t -> new ArrayBuffer);
+      result.last._2 += (p -> value);
     }
+    result;
+  }
 
-    public void writeTo(ByteBuffer buffer) {
-        buffer.putShort(versionId);
-        buffer.putInt(correlationId);
-        writeShortString(buffer, clientId);
-        buffer.putInt(replicaId);
-        buffer.putInt(maxWait);
-        buffer.putInt(minBytes);
-        buffer.putInt(requestInfoGroupedByTopic.size()); // topic count
+}
 
-        for (String topic : requestInfoGroupedByTopic.rowKeySet()) {
-            Map<TopicAndPartition, PartitionFetchInfo> partitionFetchInfos = requestInfoGroupedByTopic.row(topic);
+@deprecated("This class has been deprecated and will be removed in a future release.", "0.11.0.0")
+case class FetchRequest(Short versionId = FetchRequest.CurrentVersion,
+                        Integer correlationId = FetchRequest.DefaultCorrelationId,
+                        String clientId = ConsumerConfig.DefaultClientId,
+                        Integer replicaId = Request.OrdinaryConsumerId,
+                        Integer maxWait = FetchRequest.DefaultMaxWait,
+                        Integer minBytes = FetchRequest.DefaultMinBytes,
+                        Integer maxBytes = FetchRequest.DefaultMaxBytes,
+                        Seq requestInfo<(TopicAndPartition, PartitionFetchInfo)>);
+        extends RequestOrResponse(Some(ApiKeys.FETCH.id)) {
 
-            writeShortString(buffer, topic);
-            buffer.putInt(partitionFetchInfos.size()); // partition count
+  /**
+    * Partitions the request info into a list of lists (one for each topic) while preserving request info ordering
+    */
+  private type PartitionInfos = Seq<(Int, PartitionFetchInfo)>;
+  private lazy val Seq requestInfoGroupedByTopic<(String, PartitionInfos)> = FetchRequest.batchByTopic(requestInfo);
 
-            for (Map.Entry<TopicAndPartition, PartitionFetchInfo> currPartition : partitionFetchInfos.entrySet()) {
-                int partition = currPartition.getKey().partition;
-                long offset = currPartition.getValue().offset;
-                int fetchSize = currPartition.getValue().fetchSize;
-                buffer.putInt(partition);
-                buffer.putLong(offset);
-                buffer.putInt(fetchSize);
-            }
+  /** Public constructor for the clients */
+  @deprecated("The order of partitions in `requestInfo` is relevant, so this constructor is deprecated in favour of the " +
+    "one that takes a Seq", since = "0.10.1.0");
+  public void  this Integer correlationId,
+           String clientId,
+           Integer maxWait,
+           Integer minBytes,
+           Integer maxBytes,
+           Map requestInfo<TopicAndPartition, PartitionFetchInfo>) {
+    this(versionId = FetchRequest.CurrentVersion,
+         correlationId = correlationId,
+         clientId = clientId,
+         replicaId = Request.OrdinaryConsumerId,
+         maxWait = maxWait,
+         minBytes = minBytes,
+         maxBytes = maxBytes,
+         requestInfo = FetchRequest.shuffle(requestInfo.toSeq));
+  }
+
+  /** Public constructor for the clients */
+  public void  this Integer correlationId,
+           String clientId,
+           Integer maxWait,
+           Integer minBytes,
+           Integer maxBytes,
+           Seq requestInfo<(TopicAndPartition, PartitionFetchInfo)>) {
+    this(versionId = FetchRequest.CurrentVersion,
+      correlationId = correlationId,
+      clientId = clientId,
+      replicaId = Request.OrdinaryConsumerId,
+      maxWait = maxWait,
+      minBytes = minBytes,
+      maxBytes = maxBytes,
+      requestInfo = requestInfo);
+  }
+
+  public void  writeTo(ByteBuffer buffer) {
+    buffer.putShort(versionId);
+    buffer.putInt(correlationId);
+    writeShortString(buffer, clientId);
+    buffer.putInt(replicaId);
+    buffer.putInt(maxWait);
+    buffer.putInt(minBytes);
+    if (versionId >= 3)
+      buffer.putInt(maxBytes);
+    buffer.putInt(requestInfoGroupedByTopic.size) // topic count;
+    requestInfoGroupedByTopic.foreach {
+      case (topic, partitionFetchInfos) =>
+        writeShortString(buffer, topic);
+        buffer.putInt(partitionFetchInfos.size) // partition count;
+        partitionFetchInfos.foreach {
+          case (partition, PartitionFetchInfo(offset, fetchSize)) =>
+            buffer.putInt(partition);
+            buffer.putLong(offset);
+            buffer.putInt(fetchSize);
         }
     }
+  }
 
-    public int sizeInBytes() {
-        return 2 + /* versionId */
-                        4 + /* correlationId */
-                        shortStringLength(clientId) + 4 + /* replicaId */
-                        4 + /* maxWait */
-                        4 + /* minBytes */
-                        4 + /* topic count */
-                        +compute();
+  public void  Integer sizeInBytes = {
+    2 + /* versionId */
+    4 + /* correlationId */
+    shortStringLength(clientId) +;
+    4 + /* replicaId */
+    4 + /* maxWait */
+    4 + /* minBytes */
+    (if (versionId >= 3) 4 /* maxBytes */ else 0) +;
+    4 + /* topic count */
+    requestInfoGroupedByTopic.foldLeft(0)((foldedTopics, currTopic) => {
+      val (topic, partitionFetchInfos) = currTopic;
+      foldedTopics +;
+      shortStringLength(topic) +;
+      4 + /* partition count */
+      partitionFetchInfos.size * (
+        4 + /* partition id */
+        8 + /* offset */
+        4 /* fetch size */
+      );
+    });
+  }
+
+  public void  isFromFollower = Request.isValidBrokerId(replicaId);
+
+  public void  isFromOrdinaryConsumer = replicaId == Request.OrdinaryConsumerId;
+
+  public void  isFromLowLevelConsumer = replicaId == Request.DebuggingConsumerId;
+
+  public void  numPartitions = requestInfo.size;
+
+  override public void  String toString = {
+    describe(true);
+  }
+
+  override  public void  handleError(Throwable e, RequestChannel requestChannel, RequestChannel request.Request): Unit = {
+    val responseData = new util.LinkedHashMap<TopicPartition, JFetchResponse.PartitionData>;
+    requestInfo.foreach { case (TopicAndPartition(topic, partition), _) =>
+      responseData.put(new TopicPartition(topic, partition),
+        new JFetchResponse.PartitionData(Errors.forException(e), JFetchResponse.INVALID_HIGHWATERMARK,
+          JFetchResponse.INVALID_LAST_STABLE_OFFSET, JFetchResponse.INVALID_LOG_START_OFFSET, null, MemoryRecords.EMPTY));
     }
+    val errorResponse = new JFetchResponse(responseData, 0);
+    // Magic value does not matter here because the message set is empty;
+    requestChannel.sendResponse(RequestChannel.Response(request, errorResponse));
+  }
 
-    private int compute() {
-        int total = 0;
-        for (String topic : requestInfoGroupedByTopic.rowKeySet()) {
-            Map<TopicAndPartition, PartitionFetchInfo> partitionFetchInfos = requestInfoGroupedByTopic.row(topic);
-            total += shortStringLength(topic);
-            total += 4; /* partition count */
-            total += partitionFetchInfos.size() * (4 + /* partition id */
-                            8 + /* offset */
-                            4 /* fetch size */
-            );
-        }
-        return total;
-    }
+  override public void  describe(Boolean details): String = {
+    val fetchRequest = new StringBuilder;
+    fetchRequest.append("Name: " + this.getClass.getSimpleName);
+    fetchRequest.append("; Version: " + versionId);
+    fetchRequest.append("; CorrelationId: " + correlationId);
+    fetchRequest.append("; ClientId: " + clientId);
+    fetchRequest.append("; ReplicaId: " + replicaId);
+    fetchRequest.append("; MaxWait: " + maxWait + " ms");
+    fetchRequest.append("; MinBytes: " + minBytes + " bytes");
+    fetchRequest.append("; MaxBytes:" + maxBytes + " bytes");
+    if(details)
+      fetchRequest.append("; RequestInfo: " + requestInfo.mkString(","));
+    fetchRequest.toString();
+  }
+}
 
-    public boolean isFromFollower() {
-        return Requests.isReplicaIdFromFollower(replicaId);
-    }
+@deprecated("This class has been deprecated and will be removed in a future release.", "0.11.0.0")
+@nonthreadsafe
+class FetchRequestBuilder() {
+  private val correlationId = new AtomicInteger(0);
+  private var versionId = FetchRequest.CurrentVersion;
+  private var clientId = ConsumerConfig.DefaultClientId;
+  private var replicaId = Request.OrdinaryConsumerId;
+  private var maxWait = FetchRequest.DefaultMaxWait;
+  private var minBytes = FetchRequest.DefaultMinBytes;
+  private var maxBytes = FetchRequest.DefaultMaxBytes;
+  private val requestMap = new collection.mutable.ArrayBuffer<(TopicAndPartition, PartitionFetchInfo)>;
 
-    public boolean isFromOrdinaryConsumer() {
-        return replicaId == Requests.OrdinaryConsumerId;
-    }
+  public void  addFetch(String topic, Integer partition, Long offset, Integer fetchSize) = {
+    requestMap.append((TopicAndPartition(topic, partition), PartitionFetchInfo(offset, fetchSize)));
+    this;
+  }
 
-    public boolean isFromLowLevelConsumer() {
-        return replicaId == Requests.DebuggingConsumerId;
-    }
+  public void  clientId(String clientId): FetchRequestBuilder = {
+    this.clientId = clientId;
+    this;
+  }
 
-    public int numPartitions() {
-        return requestInfo.size();
-    }
+  /**
+   * Only for internal use. Clients shouldn't set replicaId.
+   */
+  private<kafka> public void  replicaId Integer replicaId): FetchRequestBuilder = {
+    this.replicaId = replicaId;
+    this;
+  }
 
-    @Override
-    public String toString() {
-        StringBuilder fetchRequest = new StringBuilder();
-        fetchRequest.append("Name: " + this.getClass().getSimpleName());
-        fetchRequest.append("; Version: " + versionId);
-        fetchRequest.append("; CorrelationId: " + correlationId);
-        fetchRequest.append("; ClientId: " + clientId);
-        fetchRequest.append("; ReplicaId: " + replicaId);
-        fetchRequest.append("; MaxWait: " + maxWait + " ms");
-        fetchRequest.append("; MinBytes: " + minBytes + " bytes");
-        fetchRequest.append("; RequestInfo: " + requestInfo);
-        return fetchRequest.toString();
-    }
+  public void  maxWait Integer maxWait): FetchRequestBuilder = {
+    this.maxWait = maxWait;
+    this;
+  }
 
-    @Override
-    public void handleError(final Throwable e, RequestChannel requestChannel, Request request) {
-        Map<TopicAndPartition, FetchResponsePartitionData> fetchResponsePartitionData = Utils.map(requestInfo, new Function2<TopicAndPartition, PartitionFetchInfo, Tuple2<TopicAndPartition, FetchResponsePartitionData>>() {
-            @Override
-            public Tuple2<TopicAndPartition, FetchResponsePartitionData> apply(TopicAndPartition arg1, PartitionFetchInfo arg2) {
-                return Tuple2.make(arg1, new FetchResponsePartitionData(ErrorMapping.codeFor(e.getClass()), -1, MessageSets.Empty));
-            }
-        });
+  public void  minBytes Integer minBytes): FetchRequestBuilder = {
+    this.minBytes = minBytes;
+    this;
+  }
 
-        FetchResponse errorResponse = new FetchResponse(correlationId, fetchResponsePartitionData);
-        requestChannel.sendResponse(new Response(request, new FetchResponseSend(errorResponse)));
-    }
+  public void  maxBytes Integer maxBytes): FetchRequestBuilder = {
+    this.maxBytes = maxBytes;
+    this;
+  }
+
+  public void  requestVersion(Short versionId): FetchRequestBuilder = {
+    this.versionId = versionId;
+    this;
+  }
+
+  public void  build() = {
+    val fetchRequest = FetchRequest(versionId, correlationId.getAndIncrement, clientId, replicaId, maxWait, minBytes,
+      maxBytes, new ArrayBuffer() ++ requestMap);
+    requestMap.clear();
+    fetchRequest;
+  }
 }

@@ -1,248 +1,146 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.server;
 
-import java.util.Map;
-import java.util.Set;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
-import com.google.common.collect.Table;
-import com.yammer.metrics.core.Gauge;
-
-import kafka.cluster.Broker;
-import kafka.common.TopicAndPartition;
+import scala.collection.mutable;
+import scala.collection.Set;
+import scala.collection.Map;
+import kafka.utils.Logging;
+import kafka.cluster.BrokerEndPoint;
 import kafka.metrics.KafkaMetricsGroup;
-import kafka.utils.Callable1;
-import kafka.utils.Callable2;
-import kafka.utils.Function2;
-import kafka.utils.Function3;
-import kafka.utils.Tuple2;
-import kafka.utils.Utils;
+import com.yammer.metrics.core.Gauge;
+import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.utils.Utils;
 
-public abstract class AbstractFetcherManager extends KafkaMetricsGroup {
-    protected String name;
-    public String metricPrefix;
-    public int numFetchers; /* = 1*/
+abstract class AbstractFetcherManager(protected val String name, String clientId, Integer numFetchers = 1);
+  extends Logging with KafkaMetricsGroup {
+  // map of (source broker_id, fetcher_id per source broker) => fetcher;
+  private val fetcherThreadMap = new mutable.HashMap<BrokerIdAndFetcherId, AbstractFetcherThread>;
+  private val mapLock = new Object;
+  this.logIdent = "[" + name + "] ";
 
-    public AbstractFetcherManager(String name, String metricPrefix, int numFetchers) {
-        this.name = name;
-        this.metricPrefix = metricPrefix;
-        this.numFetchers = numFetchers;
-        init();
-    }
+  newGauge(
+    "MaxLag",
+    new Gauge<Long> {
+      // current max lag across all fetchers/topics/partitions;
+      public void  value = fetcherThreadMap.foldLeft(0L)((curMaxAll, fetcherThreadMapEntry) => {
+        fetcherThreadMapEntry._2.fetcherLagStats.stats.foldLeft(0L)((curMaxThread, fetcherLagStatsEntry) => {
+          curMaxThread.max(fetcherLagStatsEntry._2.lag);
+        }).max(curMaxAll);
+      });
+    },
+    Map("clientId" -> clientId);
+  );
 
-    private void init() {
-        logger = LoggerFactory.getLogger(AbstractFetcherManager.class + "[" + name + "] ");
+  newGauge(
+  "MinFetchRate", {
+    new Gauge<Double> {
+      // current min fetch rate across all fetchers/topics/partitions;
+      public void  value = {
+        val Double headRate =
+          fetcherThreadMap.headOption.map(_._2.fetcherStats.requestRate.oneMinuteRate).getOrElse(0);
 
-        newGauge(metricPrefix + "-MaxLag", new Gauge<Long>() {
-            // current max lag across all fetchers/topics/partitions
-            @Override
-            public Long value() {
-                return Utils.foldLeft(fetcherThreadMap, 0L, new Function3<Long, BrokerAndFetcherId, AbstractFetcherThread, Long>() {
-                    @Override
-                    public Long apply(Long curMaxAll, BrokerAndFetcherId arg2, AbstractFetcherThread arg3) {
-                        return Math.max(Utils.foldLeft(arg3.fetcherLagStats.stats, 0L, new Function2<Long, Map.Entry<AbstractFetcherThread.ClientIdBrokerTopicPartition, AbstractFetcherThread.FetcherLagMetrics>, Long>() {
-                            @Override
-                            public Long apply(Long curMaxThread, Map.Entry<AbstractFetcherThread.ClientIdBrokerTopicPartition, AbstractFetcherThread.FetcherLagMetrics> fetcherLagStatsEntry) {
-                                return Math.max(curMaxThread, fetcherLagStatsEntry.getValue().lag());
-                            }
-                        }), curMaxAll);
-                    }
-                });
-            }
+        fetcherThreadMap.foldLeft(headRate)((curMinAll, fetcherThreadMapEntry) => {
+          fetcherThreadMapEntry._2.fetcherStats.requestRate.oneMinuteRate.min(curMinAll);
         });
+      }
+    }
+  },
+  Map("clientId" -> clientId);
+  );
 
-        newGauge(metricPrefix + "-MinFetchRate", new Gauge<Double>() {
-            @Override
-            public Double value() {
-                Tuple2<BrokerAndFetcherId, AbstractFetcherThread> head = Utils.head(fetcherThreadMap);
-                Double headRate = head != null ? head._2.fetcherStats.requestRate.oneMinuteRate() : 0;
+  private public void  getFetcherId(String topic, Integer partitionId) : Integer = {
+    Utils.abs(31 * topic.hashCode() + partitionId) % numFetchers;
+  }
 
-                return Utils.foldLeft(fetcherThreadMap, headRate, new Function3<Double, BrokerAndFetcherId, AbstractFetcherThread, Double>() {
-                    @Override
-                    public Double apply(Double curMinAll, BrokerAndFetcherId arg2, AbstractFetcherThread _2) {
-                        return Math.min(_2.fetcherStats.requestRate.oneMinuteRate(), curMinAll);
-                    }
-                });
-            }
+  // to be defined in subclass to create a specific fetcher;
+  public void  createFetcherThread Integer fetcherId, BrokerEndPoint sourceBroker): AbstractFetcherThread;
 
+  public void  addFetcherForPartitions(Map partitionAndOffsets<TopicPartition, BrokerAndInitialOffset>) {
+    mapLock synchronized {
+      val partitionsPerFetcher = partitionAndOffsets.groupBy { case(topicPartition, brokerAndInitialOffset) =>
+        BrokerAndFetcherId(brokerAndInitialOffset.broker, getFetcherId(topicPartition.topic, topicPartition.partition))}
+
+      public void  addAndStartFetcherThread(BrokerAndFetcherId brokerAndFetcherId, BrokerIdAndFetcherId brokerIdAndFetcherId) {
+        val fetcherThread = createFetcherThread(brokerAndFetcherId.fetcherId, brokerAndFetcherId.broker);
+        fetcherThreadMap.put(brokerIdAndFetcherId, fetcherThread);
+        fetcherThread.start;
+      }
+
+      for ((brokerAndFetcherId, partitionAndOffsets) <- partitionsPerFetcher) {
+        val brokerIdAndFetcherId = BrokerIdAndFetcherId(brokerAndFetcherId.broker.id, brokerAndFetcherId.fetcherId);
+        fetcherThreadMap.get(brokerIdAndFetcherId) match {
+          case Some(f) if f.sourceBroker.host == brokerAndFetcherId.broker.host && f.sourceBroker.port == brokerAndFetcherId.broker.port =>
+            // reuse the fetcher thread;
+          case Some(f) =>
+            f.shutdown();
+            addAndStartFetcherThread(brokerAndFetcherId, brokerIdAndFetcherId);
+          case None =>
+            addAndStartFetcherThread(brokerAndFetcherId, brokerIdAndFetcherId);
+        }
+
+        fetcherThreadMap(brokerIdAndFetcherId).addPartitions(partitionAndOffsets.map { case (tp, brokerAndInitOffset) =>
+          tp -> brokerAndInitOffset.initOffset;
         });
+      }
     }
 
-    // map of (source broker_id, fetcher_id per source broker) => fetcher
-    private Map<BrokerAndFetcherId, AbstractFetcherThread> fetcherThreadMap = Maps.newHashMap();
-    private Object mapLock = new Object();
-    Logger logger;
+    info(String.format("Added fetcher for partitions %s",partitionAndOffsets.map { case (topicPartition, brokerAndInitialOffset) =>
+      "[" + topicPartition + ", initOffset " + brokerAndInitialOffset.initOffset + " to broker " + brokerAndInitialOffset.broker + "] "}));
+  }
 
-    private int getFetcherId(String topic, int partitionId) {
-        return Utils.abs(31 * topic.hashCode() + partitionId) % numFetchers;
+  public void  removeFetcherForPartitions(Set partitions<TopicPartition>) {
+    mapLock synchronized {
+      for (fetcher <- fetcherThreadMap.values)
+        fetcher.removePartitions(partitions);
     }
+    info(String.format("Removed fetcher for partitions %s",partitions.mkString(",")))
+  }
 
-    // to be defined in subclass to create a specific fetcher
-    public abstract AbstractFetcherThread createFetcherThread(int fetcherId, Broker sourceBroker);
-
-    public void addFetcherForPartitions(Map<TopicAndPartition, BrokerAndInitialOffset> partitionAndOffsets) {
-        synchronized (mapLock) {
-            Table<BrokerAndFetcherId, TopicAndPartition, BrokerAndInitialOffset> partitionsPerFetcher = Utils.groupBy(partitionAndOffsets, new Function2<TopicAndPartition, BrokerAndInitialOffset, BrokerAndFetcherId>() {
-                @Override
-                public BrokerAndFetcherId apply(TopicAndPartition topicAndPartition, BrokerAndInitialOffset brokerAndInitialOffset) {
-                    return new BrokerAndFetcherId(brokerAndInitialOffset.broker, getFetcherId(topicAndPartition.topic, topicAndPartition.partition));
-                }
-            });
-
-            Utils.foreach(partitionsPerFetcher, new Callable2<BrokerAndFetcherId, Map<TopicAndPartition, BrokerAndInitialOffset>>() {
-                @Override
-                public void apply(BrokerAndFetcherId brokerAndFetcherId, Map<TopicAndPartition, BrokerAndInitialOffset> partitionAndOffsets) {
-                    AbstractFetcherThread fetcherThread = fetcherThreadMap.get(brokerAndFetcherId);
-                    if (fetcherThread == null) {
-                        fetcherThread = createFetcherThread(brokerAndFetcherId.fetcherId, brokerAndFetcherId.broker);
-                        fetcherThreadMap.put(brokerAndFetcherId, fetcherThread);
-                        fetcherThread.start();
-                    }
-
-                    fetcherThreadMap.get(brokerAndFetcherId).addPartitions(Utils.map(partitionAndOffsets, new Function2<TopicAndPartition, BrokerAndInitialOffset, Tuple2<TopicAndPartition, Long>>() {
-                        @Override
-                        public Tuple2<TopicAndPartition, Long> apply(TopicAndPartition topicAndPartition, BrokerAndInitialOffset brokerAndInitOffset) {
-                            return Tuple2.make(topicAndPartition, brokerAndInitOffset.initOffset);
-                        }
-                    }));
-                }
-            });
-
+  public void  shutdownIdleFetcherThreads() {
+    mapLock synchronized {
+      val keysToBeRemoved = new mutable.HashSet<BrokerIdAndFetcherId>;
+      for ((key, fetcher) <- fetcherThreadMap) {
+        if (fetcher.partitionCount <= 0) {
+          fetcher.shutdown();
+          keysToBeRemoved += key;
         }
-
-        logger.info("Added fetcher for partitions {}", Utils.mapList(partitionAndOffsets, new Function2<TopicAndPartition, BrokerAndInitialOffset, String>() {
-            @Override
-            public String apply(TopicAndPartition topicAndPartition, BrokerAndInitialOffset brokerAndInitialOffset) {
-                return "[" + topicAndPartition + ", initOffset " + brokerAndInitialOffset.initOffset + " to broker " + brokerAndInitialOffset.broker + "] ";
-            }
-        }));
-
+      }
+      fetcherThreadMap --= keysToBeRemoved;
     }
+  }
 
-    public void removeFetcherForPartitions(final Set<TopicAndPartition> partitions) {
-        synchronized (mapLock) {
-            Utils.foreach(fetcherThreadMap, new Callable2<BrokerAndFetcherId, AbstractFetcherThread>() {
-                @Override
-                public void apply(BrokerAndFetcherId key, AbstractFetcherThread fetcher) {
-                    fetcher.removePartitions(partitions);
-                }
-            });
-        }
-        logger.info("Removed fetcher for partitions {}", partitions);
+  public void  closeAllFetchers() {
+    mapLock synchronized {
+      for ( (_, fetcher) <- fetcherThreadMap) {
+        fetcher.initiateShutdown();
+      }
+
+      for ( (_, fetcher) <- fetcherThreadMap) {
+        fetcher.shutdown();
+      }
+      fetcherThreadMap.clear();
     }
-
-    public void shutdownIdleFetcherThreads() {
-        synchronized (mapLock) {
-            final Set<BrokerAndFetcherId> keysToBeRemoved = Sets.newHashSet();
-            Utils.foreach(fetcherThreadMap, new Callable2<BrokerAndFetcherId, AbstractFetcherThread>() {
-                @Override
-                public void apply(BrokerAndFetcherId key, AbstractFetcherThread fetcher) {
-                    if (fetcher.partitionCount() <= 0) {
-                        fetcher.shutdown();
-                        keysToBeRemoved.add(key);
-                    }
-                }
-            });
-
-            Utils.foreach(keysToBeRemoved, new Callable1<BrokerAndFetcherId>() {
-                @Override
-                public void apply(BrokerAndFetcherId brokerAndFetcherId) {
-                    fetcherThreadMap.remove(brokerAndFetcherId);
-                }
-            });
-        }
-    }
-
-    public void closeAllFetchers() {
-        synchronized (mapLock) {
-            Utils.foreach(fetcherThreadMap, new Callable2<BrokerAndFetcherId, AbstractFetcherThread>() {
-                @Override
-                public void apply(BrokerAndFetcherId _, AbstractFetcherThread fetcher) {
-                    fetcher.shutdown();
-                }
-            });
-            fetcherThreadMap.clear();
-        }
-    }
-
-    public static class BrokerAndFetcherId {
-        public Broker broker;
-        public int fetcherId;
-
-        public BrokerAndFetcherId(Broker broker, int fetcherId) {
-            this.broker = broker;
-            this.fetcherId = fetcherId;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o)
-                return true;
-            if (o == null || getClass() != o.getClass())
-                return false;
-
-            BrokerAndFetcherId that = (BrokerAndFetcherId) o;
-
-            if (fetcherId != that.fetcherId)
-                return false;
-            if (broker != null ? !broker.equals(that.broker) : that.broker != null)
-                return false;
-
-            return true;
-        }
-
-        @Override
-        public int hashCode() {
-            int result = broker != null ? broker.hashCode() : 0;
-            result = 31 * result + fetcherId;
-            return result;
-        }
-
-        @Override
-        public String toString() {
-            return "BrokerAndFetcherId{" + "broker=" + broker + ", fetcherId=" + fetcherId + '}';
-        }
-    }
-
-    public static class BrokerAndInitialOffset {
-        public Broker broker;
-        public long initOffset;
-
-        public BrokerAndInitialOffset(Broker broker, long initOffset) {
-            this.broker = broker;
-            this.initOffset = initOffset;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o)
-                return true;
-            if (o == null || getClass() != o.getClass())
-                return false;
-
-            BrokerAndInitialOffset that = (BrokerAndInitialOffset) o;
-
-            if (initOffset != that.initOffset)
-                return false;
-            if (broker != null ? !broker.equals(that.broker) : that.broker != null)
-                return false;
-
-            return true;
-        }
-
-        @Override
-        public int hashCode() {
-            int result = broker != null ? broker.hashCode() : 0;
-            result = 31 * result + (int) (initOffset ^ (initOffset >>> 32));
-            return result;
-        }
-
-        @Override
-        public String toString() {
-            return "BrokerAndInitialOffset{" + "broker=" + broker + ", initOffset=" + initOffset + '}';
-        }
-    }
+  }
 }
+
+case class BrokerAndFetcherId(BrokerEndPoint broker, Integer fetcherId);
+
+case class BrokerAndInitialOffset(BrokerEndPoint broker, Long initOffset);
+
+case class BrokerIdAndFetcherId Integer brokerId, Integer fetcherId);

@@ -1,109 +1,105 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.api;
 
-import static kafka.api.ApiUtils.readShortString;
-import static kafka.api.ApiUtils.shortStringLength;
-import static kafka.api.ApiUtils.writeShortString;
-
 import java.nio.ByteBuffer;
-import java.util.Map;
 
-import com.google.common.collect.Table;
+import kafka.api.ApiUtils._;
+import kafka.common.{TopicAndPartition, OffsetMetadataAndError}
+import kafka.utils.Logging;
 
-import kafka.common.OffsetMetadataAndError;
-import kafka.common.TopicAndPartition;
-import kafka.utils.Callable2;
-import kafka.utils.Function0;
-import kafka.utils.Function2;
-import kafka.utils.Function3;
-import kafka.utils.Tuple2;
-import kafka.utils.Utils;
+import org.apache.kafka.common.protocol.Errors;
 
-public class OffsetFetchResponse extends RequestOrResponse {
-    public static final short CurrentVersion = 0;
+object OffsetFetchResponse extends Logging {
 
-    public static OffsetFetchResponse readFrom(final ByteBuffer buffer) {
-        int correlationId = buffer.getInt();
-        int topicCount = buffer.getInt();
+  public void  readFrom(ByteBuffer buffer): OffsetFetchResponse = {
+    readFrom(buffer, OffsetFetchRequest.CurrentVersion);
+  }
 
-        Map<TopicAndPartition, OffsetMetadataAndError> pairs = Utils.flatMaps(1, topicCount, new Function0<Map<TopicAndPartition, OffsetMetadataAndError>>() {
-            @Override
-            public Map<TopicAndPartition, OffsetMetadataAndError> apply() {
-                final String topic = readShortString(buffer);
-                int partitionCount = buffer.getInt();
+  public void  readFrom(ByteBuffer buffer, Integer requestVersion): OffsetFetchResponse = {
+    val correlationId = buffer.getInt;
+    val topicCount = buffer.getInt;
+    val pairs = (1 to topicCount).flatMap(_ => {
+      val topic = readShortString(buffer);
+      val partitionCount = buffer.getInt;
+      (1 to partitionCount).map(_ => {
+        val partitionId = buffer.getInt;
+        val offset = buffer.getLong;
+        val metadata = readShortString(buffer);
+        val error = Errors.forCode(buffer.getShort)
+        (TopicAndPartition(topic, partitionId), OffsetMetadataAndError(offset, metadata, error));
+      });
+    });
 
-                return Utils.flatMap(1, partitionCount, new Function0<Tuple2<TopicAndPartition, OffsetMetadataAndError>>() {
-                    @Override
-                    public Tuple2<TopicAndPartition, OffsetMetadataAndError> apply() {
-                        int partitionId = buffer.getInt();
-                        long offset = buffer.getLong();
-                        String metadata = readShortString(buffer);
-                        short error = buffer.getShort();
-
-                        return Tuple2.make(new TopicAndPartition(topic, partitionId), new OffsetMetadataAndError(offset, metadata, error));
-                    }
-                });
-            }
-        });
-
-        return new OffsetFetchResponse(pairs, correlationId);
+    val error = requestVersion match {
+      case 0 | 1 => Errors.NONE;
+      case _ => Errors.forCode(buffer.getShort)
     }
 
-    public Map<TopicAndPartition, OffsetMetadataAndError> requestInfo;
-
-    public OffsetFetchResponse(Map<TopicAndPartition, OffsetMetadataAndError> requestInfo, int correlationId) {
-        super(correlationId);
-        this.requestInfo = requestInfo;
-
-        requestInfoGroupedByTopic = Utils.groupBy(requestInfo, new Function2<TopicAndPartition, OffsetMetadataAndError, String>() {
-            @Override
-            public String apply(TopicAndPartition arg1, OffsetMetadataAndError arg2) {
-                return arg1.topic;
-            }
-        });
-    }
-
-    public Table<String, TopicAndPartition, OffsetMetadataAndError> requestInfoGroupedByTopic;
-
-    @Override
-    public int sizeInBytes() {
-        return 4 /* correlationId */
-                        + 4 /* topic count */
-                        + Utils.foldLeft(requestInfoGroupedByTopic, 0, new Function3<Integer, String, Map<TopicAndPartition, OffsetMetadataAndError>, Integer>() {
-                            @Override
-                            public Integer apply(Integer count, String topic, Map<TopicAndPartition, OffsetMetadataAndError> arg3) {
-                                return count + shortStringLength(topic) /* topic */
-                                                + 4 /* number of partitions */
-                                                + Utils.foldLeft(arg3, 0, new Function3<Integer, TopicAndPartition, OffsetMetadataAndError, Integer>() {
-                                                    @Override
-                                                    public Integer apply(Integer innerCount, TopicAndPartition arg2, OffsetMetadataAndError arg3) {
-                                                        return innerCount + 4 /* partition */ + 8 /* offset */ + shortStringLength(arg3.metadata) + 2 /* error */;
-                                                    }
-                                                });
-                            }
-                        });
-    }
-
-    @Override
-    public void writeTo(final ByteBuffer buffer) {
-        buffer.putInt(correlationId);
-        buffer.putInt(requestInfoGroupedByTopic.size()); // number of topics
-
-        Utils.foreach(requestInfoGroupedByTopic, new Callable2<String, Map<TopicAndPartition, OffsetMetadataAndError>>() {
-            @Override
-            public void apply(String topic, Map<TopicAndPartition, OffsetMetadataAndError> arg2) {
-                writeShortString(buffer, topic); // topic
-                buffer.putInt(arg2.size()); // number of partitions for this topic
-
-                Utils.foreach(arg2, new Callable2<TopicAndPartition, OffsetMetadataAndError>() {
-                    @Override
-                    public void apply(TopicAndPartition _1, OffsetMetadataAndError _2) {
-                        buffer.putInt(_1.partition);
-                        buffer.putLong(_2.offset);
-                        writeShortString(buffer, _2.metadata);
-                        buffer.putShort(_2.error);
-                    }
-                });
-            }
-        });
-    }
+    OffsetFetchResponse(Map(_ pairs*), requestVersion, correlationId, error);
+  }
 }
+
+case class OffsetFetchResponse(Map requestInfo<TopicAndPartition, OffsetMetadataAndError>,
+                               Integer requestVersion = OffsetFetchRequest.CurrentVersion,
+                               Integer correlationId = 0,
+                               Errors error = Errors.NONE);
+    extends RequestOrResponse() {
+
+  lazy val requestInfoGroupedByTopic = requestInfo.groupBy(_._1.topic);
+
+  public void  writeTo(ByteBuffer buffer) {
+    buffer.putInt(correlationId);
+    buffer.putInt(requestInfoGroupedByTopic.size) // number of topics;
+    requestInfoGroupedByTopic.foreach( t1 => { // topic -> Map<TopicAndPartition, OffsetMetadataAndError>;
+      writeShortString(buffer, t1._1) // topic;
+      buffer.putInt(t1._2.size)       // number of partitions for this topic;
+      t1._2.foreach( t2 => { // TopicAndPartition -> OffsetMetadataAndError;
+        buffer.putInt(t2._1.partition);
+        buffer.putLong(t2._2.offset);
+        writeShortString(buffer, t2._2.metadata);
+        buffer.putShort(t2._2.error.code);
+      });
+    });
+
+    // the top level error_code was introduced in v2;
+    if (requestVersion > 1)
+      buffer.putShort(error.code);
+  }
+
+  override public void  sizeInBytes =
+    4 + /* correlationId */
+    4 + /* topic count */
+    requestInfoGroupedByTopic.foldLeft(0)((count, topicAndOffsets) => {
+      val (topic, offsets) = topicAndOffsets;
+      count +;
+      shortStringLength(topic) + /* topic */
+      4 + /* number of partitions */
+      offsets.foldLeft(0)((innerCount, offsetsAndMetadata) => {
+        innerCount +;
+        4 /* partition */ +;
+        8 /* offset */ +;
+        shortStringLength(offsetsAndMetadata._2.metadata) +;
+        2 /* error */
+      });
+    }) +;
+    (if (requestVersion > 1) 2 else 0) /* error */
+
+  override public void  describe(Boolean details):String = { toString }
+}
+

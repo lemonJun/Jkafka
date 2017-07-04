@@ -1,50 +1,44 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.utils;
 
-import java.util.concurrent.Delayed;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent._;
 
-public class DelayedItem<T> implements Delayed {
-    public final T item;
-    public final long delay;
-    public final TimeUnit unit;
+import org.apache.kafka.common.utils.Time;
 
-    public DelayedItem(T item, long delay, TimeUnit unit) {
-        this.item = item;
-        this.delay = delay;
-        this.unit = unit;
+import scala.math._;
 
-        createdMs = SystemTime.instance.milliseconds();
-        long given = unit.toMillis(delay);
-        delayMs = (given < 0 || (createdMs + given) < 0) ? (Long.MAX_VALUE - createdMs) : given;
-    }
+class DelayedItem(Long delayMs) extends Delayed with Logging {
 
-    public DelayedItem(T item, long delayMs) {
-        this(item, delayMs, TimeUnit.MILLISECONDS);
-    }
+  private val dueMs = Time.SYSTEM.milliseconds + delayMs;
 
-    public long createdMs;
-    public long delayMs;
+  public void  this(Long delay, TimeUnit unit) = this(unit.toMillis(delay));
 
-    /**
-     * The remaining delay time
-     */
-    @Override
-    public long getDelay(TimeUnit unit) {
-        long elapsedMs = (SystemTime.instance.milliseconds() - createdMs);
-        return unit.convert(Math.max(delayMs - elapsedMs, 0), TimeUnit.MILLISECONDS);
-    }
+  /**
+   * The remaining delay time
+   */
+  public void  getDelay(TimeUnit unit): Long = {
+    unit.convert(max(dueMs - Time.SYSTEM.milliseconds, 0), TimeUnit.MILLISECONDS);
+  }
 
-    @Override
-    public int compareTo(Delayed d) {
-        DelayedItem delayed = (DelayedItem) d;
-        long myEnd = createdMs + delayMs;
-        long yourEnd = delayed.createdMs + delayed.delayMs;
+  public void  compareTo(Delayed d): Integer = {
+    val other = d.asInstanceOf<DelayedItem>;
+    java.lang.Long.compare(dueMs, other.dueMs);
+  }
 
-        if (myEnd < yourEnd)
-            return -1;
-        else if (myEnd > yourEnd)
-            return 1;
-        else
-            return 0;
-    }
 }

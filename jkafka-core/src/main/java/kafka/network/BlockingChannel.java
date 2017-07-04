@@ -1,113 +1,135 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.network;
 
-import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.channels.Channels;
-import java.nio.channels.GatheringByteChannel;
-import java.nio.channels.ReadableByteChannel;
-import java.nio.channels.SocketChannel;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.nio.channels._;
 
 import kafka.api.RequestOrResponse;
-import kafka.common.KafkaException;
-import kafka.utils.NonThreadSafe;
-import kafka.utils.Utils;
+import kafka.utils.{Logging, nonthreadsafe}
+import org.apache.kafka.common.network.NetworkReceive;
+
+
+@deprecated("This object has been deprecated and will be removed in a future release.", "0.11.0.0")
+object BlockingChannel{
+  val UseDefaultBufferSize = -1;
+}
 
 /**
- * A simple blocking channel with timeouts correctly enabled.
+ *  A simple blocking channel with timeouts correctly enabled.
+ *
  */
-@NonThreadSafe
-public class BlockingChannel {
-    public static final int UseDefaultBufferSize = -1;
+@nonthreadsafe
+@deprecated("This class has been deprecated and will be removed in a future release.", "0.11.0.0")
+class BlockingChannel( val String host, ;
+                       val Integer port, ;
+                       val Integer readBufferSize, ;
+                       val Integer writeBufferSize, ;
+                       val Integer readTimeoutMs ) extends Logging {
+  private var connected = false;
+  private var SocketChannel channel = null;
+  private var ReadableByteChannel readChannel = null;
+  private var GatheringByteChannel writeChannel = null;
+  private val lock = new Object();
+  private val connectTimeoutMs = readTimeoutMs;
+  private var String connectionId = "";
 
-    public String host;
-    public int port;
-    public int readBufferSize;
-    public int writeBufferSize;
-    public int readTimeoutMs;
+  public void  connect() = lock synchronized  {
+    if(!connected) {
+      try {
+        channel = SocketChannel.open();
+        if(readBufferSize > 0)
+          channel.socket.setReceiveBufferSize(readBufferSize);
+        if(writeBufferSize > 0)
+          channel.socket.setSendBufferSize(writeBufferSize);
+        channel.configureBlocking(true);
+        channel.socket.setSoTimeout(readTimeoutMs);
+        channel.socket.setKeepAlive(true);
+        channel.socket.setTcpNoDelay(true);
+        channel.socket.connect(new InetSocketAddress(host, port), connectTimeoutMs);
 
-    public BlockingChannel(String host, int port, int readBufferSize, int writeBufferSize, int readTimeoutMs) {
-        this.host = host;
-        this.port = port;
-        this.readBufferSize = readBufferSize;
-        this.writeBufferSize = writeBufferSize;
-        this.readTimeoutMs = readTimeoutMs;
+        writeChannel = channel;
+        // Need to create a new ReadableByteChannel from input stream because SocketChannel doesn't implement read with timeout;
+        // http See://stackoverflow.com/questions/2866557/timeout-for-socketchannel-doesnt-work;
+        readChannel = Channels.newChannel(channel.socket().getInputStream);
+        connected = true;
+        val localHost = channel.socket.getLocalAddress.getHostAddress;
+        val localPort = channel.socket.getLocalPort;
+        val remoteHost = channel.socket.getInetAddress.getHostAddress;
+        val remotePort = channel.socket.getPort;
+        connectionId = localHost + ":" + localPort + "-" + remoteHost + ":" + remotePort;
+        // settings may not match what we requested above;
+        val msg = "Created socket with SO_TIMEOUT = %d (requested %d), SO_RCVBUF = %d (requested %d), SO_SNDBUF = %d (requested %d), connectTimeoutMs = %d.";
+        debug(msg.format(channel.socket.getSoTimeout,
+                         readTimeoutMs,
+                         channel.socket.getReceiveBufferSize, ;
+                         readBufferSize,
+                         channel.socket.getSendBufferSize,
+                         writeBufferSize,
+                         connectTimeoutMs));
+
+      } catch {
+        case Throwable _ => disconnect();
+      }
     }
-
-    private boolean connected = false;
-    private SocketChannel channel = null;
-    private ReadableByteChannel readChannel = null;
-    private GatheringByteChannel writeChannel = null;
-    private Object lock = new Object();
-
-    Logger logger = LoggerFactory.getLogger(BlockingChannel.class);
-
-    public void connect() {
-        synchronized (lock) {
-            if (connected)
-                return;
-
-            try {
-                channel = SocketChannel.open();
-                if (readBufferSize > 0)
-                    channel.socket().setReceiveBufferSize(readBufferSize);
-                if (writeBufferSize > 0)
-                    channel.socket().setSendBufferSize(writeBufferSize);
-                channel.configureBlocking(true);
-                channel.socket().setSoTimeout(readTimeoutMs);
-                channel.socket().setKeepAlive(true);
-                channel.socket().setTcpNoDelay(true);
-                channel.connect(new InetSocketAddress(host, port));
-
-                writeChannel = channel;
-                readChannel = Channels.newChannel(channel.socket().getInputStream());
-                connected = true;
-                // settings may not match what we requested above
-                String msg = "Created socket with SO_TIMEOUT = {} (requested {}), SO_RCVBUF = {} (requested {}), SO_SNDBUF = {} (requested {}).";
-                logger.debug(msg, channel.socket().getSoTimeout(), readTimeoutMs, channel.socket().getReceiveBufferSize(), readBufferSize, channel.socket().getSendBufferSize(), writeBufferSize);
-            } catch (IOException e) {
-                throw new KafkaException(e);
-            }
-        }
+  }
+  ;
+  public void  disconnect() = lock synchronized {
+    if(channel != null) {
+      swallow(channel.close());
+      swallow(channel.socket.close());
+      channel = null;
+      writeChannel = null;
     }
-
-    public void disconnect() {
-        synchronized (lock) {
-            if (connected || channel != null) {
-                // closing the main socket channel *should* close the read channel
-                // but let's do it to be sure.
-                Utils.closeQuietly(channel);
-                Utils.closeQuietly(channel.socket());
-                Utils.closeQuietly(readChannel);
-                channel = null;
-                readChannel = null;
-                writeChannel = null;
-                connected = false;
-            }
-        }
+    // closing the main socket channel *should* close the read channel;
+    // but let's do it to be sure.;
+    if(readChannel != null) {
+      swallow(readChannel.close());
+      readChannel = null;
     }
+    connected = false;
+  }
 
-    public boolean isConnected() {
-        return connected;
-    }
+  public void  isConnected = connected;
 
-    public int send(RequestOrResponse request) {
-        if (!connected)
-            throw new KafkaException("ClosedChannelException");
+  public void  send(RequestOrResponse request): Long = {
+    if(!connected)
+      throw new ClosedChannelException();
 
-        BoundedByteBufferSend send = new BoundedByteBufferSend(request);
-        return send.writeCompletely(writeChannel);
-    }
+    val send = new RequestOrResponseSend(connectionId, request);
+    send.writeCompletely(writeChannel);
+  }
+  ;
+  public void  receive(): NetworkReceive = {
+    if(!connected)
+      throw new ClosedChannelException();
 
-    public Receive receive() {
-        if (!connected)
-            throw new KafkaException("ClosedChannelException");
+    val response = readCompletely(readChannel);
+    response.payload().rewind();
 
-        BoundedByteBufferReceive response = new BoundedByteBufferReceive();
-        response.readCompletely(readChannel);
+    response;
+  }
 
-        return response;
-    }
+  private public void  readCompletely(ReadableByteChannel channel): NetworkReceive = {
+    val response = new NetworkReceive;
+    while (!response.complete());
+      response.readFromReadableChannel(channel);
+    response;
+  }
+
 }

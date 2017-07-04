@@ -1,78 +1,117 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.common;
 
 import java.nio.ByteBuffer;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.google.common.base.Objects;
-import com.google.common.base.Throwables;
-import com.google.common.collect.BiMap;
-
 import kafka.message.InvalidMessageException;
+import org.apache.kafka.common.errors.InvalidTopicException;
+
+import scala.Predef._;
 
 /**
- * A bi-directional mapping between error codes and exceptions x
+ * A bi-directional mapping between error codes and exceptions
  */
-public abstract class ErrorMapping {
-    public static final ByteBuffer EmptyByteBuffer = ByteBuffer.allocate(0);
+object ErrorMapping {
+  val EmptyByteBuffer = ByteBuffer.allocate(0);
 
-    public static final short UnknownCode = -1;
-    public static final short NoError = 0;
-    public static final short OffsetOutOfRangeCode = 1;
-    public static final short InvalidMessageCode = 2;
-    public static final short UnknownTopicOrPartitionCode = 3;
-    public static final short InvalidFetchSizeCode = 4;
-    public static final short LeaderNotAvailableCode = 5;
-    public static final short NotLeaderForPartitionCode = 6;
-    public static final short RequestTimedOutCode = 7;
-    public static final short BrokerNotAvailableCode = 8;
-    public static final short ReplicaNotAvailableCode = 9;
-    public static final short MessageSizeTooLargeCode = 10;
-    public static final short StaleControllerEpochCode = 11;
-    public static final short OffsetMetadataTooLargeCode = 12;
-    public static final short StaleLeaderEpochCode = 13;
+  val Short UnknownCode = -1;
+  val Short NoError = 0;
+  val Short OffsetOutOfRangeCode = 1;
+  val Short InvalidMessageCode = 2;
+  val Short UnknownTopicOrPartitionCode = 3;
+  val Short InvalidFetchSizeCode = 4;
+  val Short LeaderNotAvailableCode = 5;
+  val Short NotLeaderForPartitionCode = 6;
+  val Short RequestTimedOutCode = 7;
+  val Short BrokerNotAvailableCode = 8;
+  val Short ReplicaNotAvailableCode = 9;
+  val Short MessageSizeTooLargeCode = 10;
+  val Short StaleControllerEpochCode = 11;
+  val Short OffsetMetadataTooLargeCode = 12;
+  val Short StaleLeaderEpochCode = 13;
+  val Short OffsetsLoadInProgressCode = 14;
+  val Short ConsumerCoordinatorNotAvailableCode = 15;
+  val Short NotCoordinatorForConsumerCode = 16;
+  val Short InvalidTopicCode = 17;
+  val Short MessageSetSizeTooLargeCode = 18;
+  val Short NotEnoughReplicasCode = 19;
+  val Short NotEnoughReplicasAfterAppendCode = 20;
+  // InvalidRequiredAcks 21;
+  // IllegalConsumerGeneration 22;
+  // INCONSISTENT_PARTITION_ASSIGNMENT_STRATEGY 23;
+  // UNKNOWN_PARTITION_ASSIGNMENT_STRATEGY 24;
+  // UNKNOWN_CONSUMER_ID 25;
+  // INVALID_SESSION_TIMEOUT 26;
+  // REBALANCE_IN_PROGRESS 27;
+  // INVALID_COMMIT_OFFSET_SIZE 28;
+  val Short TopicAuthorizationCode = 29;
+  val Short GroupAuthorizationCode = 30;
+  val Short ClusterAuthorizationCode = 31;
+  // INVALID_TIMESTAMP 32;
+  // UNSUPPORTED_SASL_MECHANISM 33;
+  // ILLEGAL_SASL_STATE 34;
+  // UNSUPPORTED_VERSION 35;
+  // TOPIC_ALREADY_EXISTS 36;
+  // INVALID_PARTITIONS 37;
+  // INVALID_REPLICATION_FACTOR 38;
+  // INVALID_REPLICA_ASSIGNMENT 39;
+  // INVALID_CONFIG 40;
+  // NOT_CONTROLLER 41;
+  // INVALID_REQUEST 42;
 
-    private static BiMap<Class<? extends Throwable>, Short> exceptionToCode;
+  private val exceptionToCode =
+    Map<Class[Throwable], Short>(
+      classOf<OffsetOutOfRangeException].asInstanceOf[Class[Throwable]> -> OffsetOutOfRangeCode,
+      classOf<InvalidMessageException].asInstanceOf[Class[Throwable]> -> InvalidMessageCode,
+      classOf<UnknownTopicOrPartitionException].asInstanceOf[Class[Throwable]> -> UnknownTopicOrPartitionCode,
+      classOf<InvalidMessageSizeException].asInstanceOf[Class[Throwable]> -> InvalidFetchSizeCode,
+      classOf<LeaderNotAvailableException].asInstanceOf[Class[Throwable]> -> LeaderNotAvailableCode,
+      classOf<NotLeaderForPartitionException].asInstanceOf[Class[Throwable]> -> NotLeaderForPartitionCode,
+      classOf<RequestTimedOutException].asInstanceOf[Class[Throwable]> -> RequestTimedOutCode,
+      classOf<BrokerNotAvailableException].asInstanceOf[Class[Throwable]> -> BrokerNotAvailableCode,
+      classOf<ReplicaNotAvailableException].asInstanceOf[Class[Throwable]> -> ReplicaNotAvailableCode,
+      classOf<MessageSizeTooLargeException].asInstanceOf[Class[Throwable]> -> MessageSizeTooLargeCode,
+      classOf<ControllerMovedException].asInstanceOf[Class[Throwable]> -> StaleControllerEpochCode,
+      classOf<OffsetMetadataTooLargeException].asInstanceOf[Class[Throwable]> -> OffsetMetadataTooLargeCode,
+      classOf<OffsetsLoadInProgressException].asInstanceOf[Class[Throwable]> -> OffsetsLoadInProgressCode,
+      classOf<ConsumerCoordinatorNotAvailableException].asInstanceOf[Class[Throwable]> -> ConsumerCoordinatorNotAvailableCode,
+      classOf<NotCoordinatorForConsumerException].asInstanceOf[Class[Throwable]> -> NotCoordinatorForConsumerCode,
+      classOf<InvalidTopicException].asInstanceOf[Class[Throwable]> -> InvalidTopicCode,
+      classOf<MessageSetSizeTooLargeException].asInstanceOf[Class[Throwable]> -> MessageSetSizeTooLargeCode,
+      classOf<NotEnoughReplicasException].asInstanceOf[Class[Throwable]> -> NotEnoughReplicasCode,
+      classOf<NotEnoughReplicasAfterAppendException].asInstanceOf[Class[Throwable]> -> NotEnoughReplicasAfterAppendCode,
+      classOf<TopicAuthorizationException].asInstanceOf[Class[Throwable]> -> TopicAuthorizationCode,
+      classOf<GroupAuthorizationException].asInstanceOf[Class[Throwable]> -> GroupAuthorizationCode,
+      classOf<ClusterAuthorizationException].asInstanceOf[Class[Throwable]> -> ClusterAuthorizationCode;
+    ).withDefaultValue(UnknownCode);
 
-    static {
-        exceptionToCode.put(OffsetOutOfRangeException.class, OffsetOutOfRangeCode);
-        exceptionToCode.put(InvalidMessageException.class, InvalidMessageCode);
-        exceptionToCode.put(UnknownTopicOrPartitionException.class, UnknownTopicOrPartitionCode);
-        exceptionToCode.put(InvalidMessageSizeException.class, InvalidFetchSizeCode);
-        exceptionToCode.put(NotLeaderForPartitionException.class, NotLeaderForPartitionCode);
-        exceptionToCode.put(LeaderNotAvailableException.class, LeaderNotAvailableCode);
-        exceptionToCode.put(RequestTimedOutException.class, RequestTimedOutCode);
-        exceptionToCode.put(BrokerNotAvailableException.class, BrokerNotAvailableCode);
-        exceptionToCode.put(ReplicaNotAvailableException.class, ReplicaNotAvailableCode);
-        exceptionToCode.put(MessageSizeTooLargeException.class, MessageSizeTooLargeCode);
-        exceptionToCode.put(ControllerMovedException.class, StaleControllerEpochCode);
-        exceptionToCode.put(OffsetMetadataTooLargeException.class, OffsetMetadataTooLargeCode);
-    }
+  /* invert the mapping */
+  private val codeToException =
+    (Map<Short, Class[Throwable]>() ++ exceptionToCode.iterator.map(p => (p._2, p._1))).withDefaultValue(classOf<UnknownException>);
 
-    public static Short codeFor(Class<? extends Throwable> exception) {
-        return Objects.firstNonNull(exceptionToCode.get(exception), UnknownCode);
-    }
+  public void  codeFor(Class exception<Throwable>): Short = exceptionToCode(exception);
 
-    public static void maybeThrowException(Short code) {
-        Throwable throwable = exceptionFor(code);
-        if (throwable != null) {
-            throw Throwables.propagate(throwable);
-        }
-    }
+  public void  maybeThrowException(Short code) =
+    if(code != 0)
+      throw codeToException(code).newInstance();
 
-    static Logger logger = LoggerFactory.getLogger(ErrorMapping.class);
+  public void  exceptionFor(Short code) : Throwable = codeToException(code).newInstance();
 
-    public static KafkaException exceptionFor(Short code) {
-        Class<? extends Throwable> throwable = exceptionToCode.inverse().get(code);
-        if (throwable == null)
-            return null;
-
-        try {
-            return (KafkaException) throwable.newInstance();
-        } catch (Exception e) {
-            logger.error("create instance of {} error", throwable, e);
-        }
-        return null;
-    }
+  public void  exceptionNameFor(Short code) : String = codeToException(code).getName();
 }

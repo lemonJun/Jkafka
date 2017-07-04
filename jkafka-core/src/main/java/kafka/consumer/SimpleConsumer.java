@@ -1,204 +1,199 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.consumer;
 
-import java.util.Map;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.nio.channels.{AsynchronousCloseException, ClosedByInterruptException}
+import java.util.concurrent.TimeUnit;
 
-import com.google.common.collect.Maps;
-
-import kafka.api.FetchRequest;
-import kafka.api.FetchResponse;
-import kafka.api.OffsetCommitRequest;
-import kafka.api.OffsetCommitResponse;
-import kafka.api.OffsetFetchRequest;
-import kafka.api.OffsetFetchResponse;
-import kafka.api.OffsetRequest;
-import kafka.api.OffsetResponse;
-import kafka.api.PartitionOffsetRequestInfo;
-import kafka.api.PartitionOffsetsResponse;
-import kafka.api.RequestOrResponse;
-import kafka.api.TopicMetadataRequest;
-import kafka.api.TopicMetadataResponse;
-import kafka.common.ErrorMapping;
-import kafka.common.TopicAndPartition;
-import kafka.metrics.KafkaTimer;
-import kafka.network.BlockingChannel;
-import kafka.network.Receive;
-import kafka.utils.Function0;
-import kafka.utils.ThreadSafe;
-import kafka.utils.Utils;
+import kafka.api._;
+import kafka.network._;
+import kafka.utils._;
+import kafka.common.{ErrorMapping, TopicAndPartition}
+import org.apache.kafka.common.network.{NetworkReceive}
+import org.apache.kafka.common.protocol.Errors;
+import org.apache.kafka.common.utils.Utils._;
 
 /**
  * A consumer of kafka messages
  */
-@ThreadSafe
-public class SimpleConsumer {
-    public String host;
-    public int port, soTimeout, bufferSize;
-    public String clientId;
+@deprecated("This class has been deprecated and will be removed in a future release. " +
+            "Please use org.apache.kafka.clients.consumer.KafkaConsumer instead.", "0.11.0.0");
+@threadsafe
+class SimpleConsumer(val String host,
+                     val Integer port,
+                     val Integer soTimeout,
+                     val Integer bufferSize,
+                     val String clientId) extends Logging {
 
-    public SimpleConsumer(String host, int port, int soTimeout, int bufferSize, String clientId) {
-        this.host = host;
-        this.port = port;
-        this.soTimeout = soTimeout;
-        this.bufferSize = bufferSize;
-        this.clientId = clientId;
+  ConsumerConfig.validateClientId(clientId);
+  private val lock = new Object();
+  private val blockingChannel = new BlockingChannel(host, port, bufferSize, BlockingChannel.UseDefaultBufferSize, soTimeout);
+  private val fetchRequestAndResponseStats = FetchRequestAndResponseStatsRegistry.getFetchRequestAndResponseStats(clientId);
+  private var isClosed = false;
 
-        init();
+  private public void  connect(): BlockingChannel = {
+    close;
+    blockingChannel.connect();
+    blockingChannel;
+  }
+
+  private public void  disconnect() = {
+    debug("Disconnecting from " + formatAddress(host, port))
+    blockingChannel.disconnect();
+  }
+
+  private public void  reconnect() {
+    disconnect();
+    connect();
+  }
+
+  /**
+   * Unblock thread by closing channel and triggering AsynchronousCloseException if a read operation is in progress.
+   *
+   * This handles a bug found in Java 1.7 and below, where interrupting a thread can not correctly unblock
+   * the thread from waiting on ReadableByteChannel.read().
+   */
+  public void  disconnectToHandleJavaIOBug() = {
+    disconnect();
+  }
+
+  public void  close() {
+    lock synchronized {
+      disconnect();
+      isClosed = true;
     }
+  }
 
-    private void init() {
-        ConsumerConfigs.validateClientId(clientId);
-        blockingChannel = new BlockingChannel(host, port, bufferSize, BlockingChannel.UseDefaultBufferSize, soTimeout);
-        brokerInfo = "host_%s-port_%s".format(host, port);
-        fetchRequestAndResponseStats = FetchRequestAndResponseStatsRegistry.getFetchRequestAndResponseStats(clientId);
+  private public void  sendRequest(RequestOrResponse request): NetworkReceive = {
+    lock synchronized {
+      var NetworkReceive response = null;
+      try {
+        getOrMakeConnection();
+        blockingChannel.send(request);
+        response = blockingChannel.receive();
+      } catch {
+        case e : ClosedByInterruptException =>
+          throw e;
+        // Should not observe this exception when running Kafka with Java 1.8;
+        case AsynchronousCloseException e =>
+          throw e;
+        case e : Throwable =>
+          info("Reconnect due to error:", e);
+          // retry once;
+          try {
+            reconnect();
+            blockingChannel.send(request);
+            response = blockingChannel.receive();
+          } catch {
+            case Throwable e =>
+              disconnect();
+              throw e;
+          }
+      }
+      response;
     }
+  }
 
-    private Object lock = new Object();
-    private BlockingChannel blockingChannel;
-    public String brokerInfo;
-    private FetchRequestAndResponseStatsRegistry.FetchRequestAndResponseStats fetchRequestAndResponseStats;
-    private boolean isClosed = false;
-    Logger logger = LoggerFactory.getLogger(SimpleConsumer.class);
+  public void  send(TopicMetadataRequest request): TopicMetadataResponse = {
+    val response = sendRequest(request);
+    TopicMetadataResponse.readFrom(response.payload());
+  }
 
-    private BlockingChannel connect() {
-        close();
-        blockingChannel.connect();
-        return blockingChannel;
+  public void  send(GroupCoordinatorRequest request): GroupCoordinatorResponse = {
+    val response = sendRequest(request);
+    GroupCoordinatorResponse.readFrom(response.payload());
+  }
+
+  /**
+   *  Fetch a set of messages from a topic.
+   *
+   *  @param request  specifies the topic name, topic partition, starting byte offset, maximum bytes to be fetched.
+   *  @return a set of fetched messages
+   */
+  public void  fetch(FetchRequest request): FetchResponse = {
+    var NetworkReceive response = null;
+    val specificTimer = fetchRequestAndResponseStats.getFetchRequestAndResponseStats(host, port).requestTimer;
+    val aggregateTimer = fetchRequestAndResponseStats.getFetchRequestAndResponseAllBrokersStats.requestTimer;
+    aggregateTimer.time {
+      specificTimer.time {
+        response = sendRequest(request);
+      }
     }
+    val fetchResponse = FetchResponse.readFrom(response.payload(), request.versionId);
+    val fetchedSize = fetchResponse.sizeInBytes;
+    fetchRequestAndResponseStats.getFetchRequestAndResponseStats(host, port).requestSizeHist.update(fetchedSize);
+    fetchRequestAndResponseStats.getFetchRequestAndResponseAllBrokersStats.requestSizeHist.update(fetchedSize);
+    fetchRequestAndResponseStats.getFetchRequestAndResponseStats(host, port).throttleTimeStats.update(fetchResponse.throttleTimeMs, TimeUnit.MILLISECONDS);
+    fetchRequestAndResponseStats.getFetchRequestAndResponseAllBrokersStats.throttleTimeStats.update(fetchResponse.throttleTimeMs, TimeUnit.MILLISECONDS);
+    fetchResponse;
+  }
 
-    private void disconnect() {
-        if (blockingChannel.isConnected()) {
-            logger.debug("Disconnecting from {}:{}", host, port);
-            blockingChannel.disconnect();
-        }
+  /**
+   *  Get a list of valid offsets (up to maxSize) before the given time.
+   *  @param request a <[kafka.api.OffsetRequest]> object.
+   *  @return a <[kafka.api.OffsetResponse]> object.
+   */
+  public void  getOffsetsBefore(OffsetRequest request) = OffsetResponse.readFrom(sendRequest(request).payload())
+
+  /**
+   * Commit offsets for a topic
+   * Version 0 of the request will commit offsets to Zookeeper and version 1 and above will commit offsets to Kafka.
+   * @param request a <[kafka.api.OffsetCommitRequest]> object.
+   * @return a <[kafka.api.OffsetCommitResponse]> object.
+   */
+  public void  commitOffsets(OffsetCommitRequest request) = {
+    // With TODO KAFKA-1012, we have to first issue a ConsumerMetadataRequest and connect to the coordinator before;
+    // we can commit offsets.;
+    OffsetCommitResponse.readFrom(sendRequest(request).payload());
+  }
+
+  /**
+   * Fetch offsets for a topic
+   * Version 0 of the request will fetch offsets from Zookeeper and version 1 and above will fetch offsets from Kafka.
+   * @param request a <[kafka.api.OffsetFetchRequest]> object.
+   * @return a <[kafka.api.OffsetFetchResponse]> object.
+   */
+  public void  fetchOffsets(OffsetFetchRequest request) = OffsetFetchResponse.readFrom(sendRequest(request).payload(), request.versionId);
+
+  private public void  getOrMakeConnection() {
+    if(!isClosed && !blockingChannel.isConnected) {
+      connect();
     }
+  }
 
-    private void reconnect() {
-        disconnect();
-        connect();
+  /**
+   * Get the earliest or latest offset of a given topic, partition.
+   * @param topicAndPartition Topic and partition of which the offset is needed.
+   * @param earliestOrLatest A value to indicate earliest or latest offset.
+   * @param consumerId Id of the consumer which could be a consumer client, SimpleConsumerShell or a follower broker.
+   * @return Requested offset.
+   */
+  public void  earliestOrLatestOffset(TopicAndPartition topicAndPartition, Long earliestOrLatest, Integer consumerId): Long = {
+    val request = OffsetRequest(requestInfo = Map(topicAndPartition -> PartitionOffsetRequestInfo(earliestOrLatest, 1)),
+                                clientId = clientId,
+                                replicaId = consumerId);
+    val partitionErrorAndOffset = getOffsetsBefore(request).partitionErrorAndOffsets(topicAndPartition)
+    val offset = partitionErrorAndOffset.error match {
+      case Errors.NONE => partitionErrorAndOffset.offsets.head;
+      case _ => throw ErrorMapping.exceptionFor(partitionErrorAndOffset.error.code);
     }
-
-    public void close() {
-        synchronized (lock) {
-            disconnect();
-            isClosed = true;
-        }
-    }
-
-    private Receive sendRequest(RequestOrResponse request) {
-        synchronized (lock) {
-            getOrMakeConnection();
-            Receive response = null;
-            try {
-                blockingChannel.send(request);
-                response = blockingChannel.receive();
-            } catch (RuntimeException e) {
-                logger.info("Reconnect due to socket error: {}", e.getMessage());
-                // retry once
-                try {
-                    reconnect();
-                    blockingChannel.send(request);
-                    response = blockingChannel.receive();
-                } catch (RuntimeException ioe) {
-                    disconnect();
-                    throw ioe;
-                }
-            }
-            return response;
-        }
-    }
-
-    public TopicMetadataResponse send(TopicMetadataRequest request) {
-        Receive response = sendRequest(request);
-        return TopicMetadataResponse.readFrom(response.buffer());
-    }
-
-    /**
-     * Fetch a set of messages from a topic.
-     *
-     * @param request specifies the topic name, topic partition, starting byte offset, maximum bytes to be fetched.
-     * @return a set of fetched messages
-     */
-    public FetchResponse fetch(final FetchRequest request) {
-        final Receive[] response = { null };
-        final KafkaTimer specificTimer = fetchRequestAndResponseStats.getFetchRequestAndResponseStats(brokerInfo).requestTimer;
-        KafkaTimer aggregateTimer = fetchRequestAndResponseStats.getFetchRequestAndResponseAllBrokersStats().requestTimer;
-        aggregateTimer.time(new Function0<Object>() {
-            @Override
-            public Object apply() {
-                specificTimer.time(new Function0<Object>() {
-                    @Override
-                    public Object apply() {
-                        response[0] = sendRequest(request);
-                        return null;
-                    }
-                });
-
-                return null;
-            }
-        });
-
-        FetchResponse fetchResponse = FetchResponse.readFrom(response[0].buffer());
-        int fetchedSize = fetchResponse.sizeInBytes();
-        fetchRequestAndResponseStats.getFetchRequestAndResponseStats(brokerInfo).requestSizeHist.update(fetchedSize);
-        fetchRequestAndResponseStats.getFetchRequestAndResponseAllBrokersStats().requestSizeHist.update(fetchedSize);
-        return fetchResponse;
-    }
-
-    /**
-     * Get a list of valid offsets (up to maxSize) before the given time.
-     *
-     * @param request a [[kafka.api.OffsetRequest]] object.
-     * @return a [[kafka.api.OffsetResponse]] object.
-     */
-    public OffsetResponse getOffsetsBefore(OffsetRequest request) {
-        return OffsetResponse.readFrom(sendRequest(request).buffer());
-    }
-
-    /**
-     * Commit offsets for a topic
-     *
-     * @param request a [[kafka.api.OffsetCommitRequest]] object.
-     * @return a [[kafka.api.OffsetCommitResponse]] object.
-     */
-    public OffsetCommitResponse commitOffsets(OffsetCommitRequest request) {
-        return OffsetCommitResponse.readFrom(sendRequest(request).buffer());
-    }
-
-    /**
-     * Fetch offsets for a topic
-     *
-     * @param request a [[kafka.api.OffsetFetchRequest]] object.
-     * @return a [[kafka.api.OffsetFetchResponse]] object.
-     */
-    public OffsetFetchResponse fetchOffsets(OffsetFetchRequest request) {
-        return OffsetFetchResponse.readFrom(sendRequest(request).buffer());
-    }
-
-    private void getOrMakeConnection() {
-        if (!isClosed && !blockingChannel.isConnected()) {
-            connect();
-        }
-    }
-
-    /**
-     * Get the earliest or latest offset of a given topic, partition.
-     *
-     * @param topicAndPartition Topic and partition of which the offset is needed.
-     * @param earliestOrLatest  A value to indicate earliest or latest offset.
-     * @param consumerId        Id of the consumer which could be a consumer client, SimpleConsumerShell or a follower broker.
-     * @return Requested offset.
-     */
-    public long earliestOrLatestOffset(final TopicAndPartition topicAndPartition, final long earliestOrLatest, int consumerId) {
-        Map<TopicAndPartition, PartitionOffsetRequestInfo> requestInfo = Maps.newHashMap();
-        requestInfo.put(topicAndPartition, new PartitionOffsetRequestInfo(earliestOrLatest, 1));
-        OffsetRequest request = new OffsetRequest(requestInfo, /*clientId = */clientId, /*replicaId = */consumerId);
-        PartitionOffsetsResponse partitionErrorAndOffset = getOffsetsBefore(request).partitionErrorAndOffsets.get(topicAndPartition);
-        if (partitionErrorAndOffset.error == ErrorMapping.NoError) {
-            return Utils.head(partitionErrorAndOffset.offsets);
-        }
-        throw ErrorMapping.exceptionFor(partitionErrorAndOffset.error);
-    }
+    offset;
+  }
 }
+

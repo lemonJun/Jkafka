@@ -1,121 +1,109 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ * 
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.utils;
 
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent._;
 
-import com.google.common.base.Function;
-import com.google.common.collect.Maps;
-
+import collection.mutable;
+import collection.JavaConverters._;
 import kafka.common.KafkaException;
 
-public class Pool<K, V> implements Iterable<Map.Entry<K, V>> {
-    public Function<K, V> valueFactory;
+class Pool<K,V>(Option valueFactory[K => V] = None) extends Iterable<(K, V)> {
 
-    public Pool() {
-    }
+  private val ConcurrentMap pool<K, V> = new ConcurrentHashMap<K, V>;
+  private val createLock = new Object;
 
-    public Pool(Function<K, V> valueFactory) {
-        this.valueFactory = valueFactory;
-    }
+  public void  this(collection m.Map<K, V>) {
+    this();
+    m.foreach(kv => pool.put(kv._1, kv._2))
+  }
+  ;
+  public void  put(K k, V v): V = pool.put(k, v);
+  ;
+  public void  putIfNotExists(K k, V v): V = pool.putIfAbsent(k, v);
 
-    private ConcurrentHashMap<K, V> pool = new ConcurrentHashMap<K, V>();
-    private Object createLock = new Object();
+  /**
+   * Gets the value associated with the given key. If there is no associated
+   * value, then create the value using the pool's value factory and return the
+   * value associated with the key. The user should declare the factory method
+   * as lazy if its side-effects need to be avoided.
+   *
+   * @param key The key to lookup.
+   * @return The final value associated with the key.
+   */
+  public void  getAndMaybePut(K key): V = {
+    if (valueFactory.isEmpty)
+      throw new KafkaException("Empty value factory in pool.");
+    getAndMaybePut(key, valueFactory.get(key));
+  }
 
-    public Pool(Map<K, V> m) {
-        this();
-
-        for (Map.Entry<K, V> entry : m.entrySet()) {
-            pool.put(entry.getKey(), entry.getValue());
+  /**
+    * Gets the value associated with the given key. If there is no associated
+    * value, then create the value using the provided by `createValue` and return the
+    * value associated with the key.
+    *
+    * @param key The key to lookup.
+    * @param createValue Factory function.
+    * @return The final value associated with the key.
+    */
+  public void  getAndMaybePut(K key, createValue: => V): V = {
+    val current = pool.get(key);
+    if (current == null) {
+      createLock synchronized {
+        val current = pool.get(key);
+        if (current == null) {
+          val value = createValue;
+          pool.put(key, value);
+          value;
         }
+        else current;
+      }
     }
+    else current;
+  }
 
-    public V put(K k, V v) {
-        return pool.put(k, v);
+  public void  contains(K id): Boolean = pool.containsKey(id);
+  ;
+  public void  get(K key): V = pool.get(key);
+  ;
+  public void  remove(K key): V = pool.remove(key);
+
+  public void  remove(K key, V value): Boolean = pool.remove(key, value);
+
+  public void  mutable keys.Set[K] = pool.keySet().asScala;
+
+  public void  Iterable values[V] = pool.values().asScala;
+
+  public void  clear() { pool.clear() }
+  ;
+  override public void  Integer size = pool.size;
+  ;
+  override public void  Iterator iterator<(K, V)> = new Iterator<(K,V)>() {
+    ;
+    private val iter = pool.entrySet.iterator;
+    ;
+    public void  Boolean hasNext = iter.hasNext;
+    ;
+    public void  next: (K, V) = {
+      val n = iter.next;
+      (n.getKey, n.getValue);
     }
-
-    public void putIfNotExists(K k, V v) {
-        pool.putIfAbsent(k, v);
-    }
-
-    /**
-     * Gets the value associated with the given key. If there is no associated
-     * value, then create the value using the pool's value factory and return the
-     * value associated with the key. The user should declare the factory method
-     * as lazy if its side-effects need to be avoided.
-     *
-     * @param key The key to lookup.
-     * @return The final value associated with the key. This may be different from
-     *         the value created by the factory if another thread successfully
-     *         put a value.
-     */
-    public V getAndMaybePut(K key) {
-        if (valueFactory == null)
-            throw new KafkaException("Empty value factory in pool.");
-
-        V curr = pool.get(key);
-        if (curr != null)
-            return curr;
-
-        synchronized (createLock) {
-            curr = pool.get(key);
-            if (curr == null)
-                pool.put(key, valueFactory.apply(key));
-            return pool.get(key);
-        }
-    }
-
-    public boolean contains(K id) {
-        return pool.containsKey(id);
-    }
-
-    public V get(K key) {
-        return pool.get(key);
-    }
-
-    public V remove(K key) {
-        return pool.remove(key);
-    }
-
-    public Set<K> keys() {
-        return pool.keySet();
-    }
-
-    public Collection<V> values() {
-        return pool.values();
-    }
-
-    public void clear() {
-        pool.clear();
-    }
-
-    public int size() {
-        return pool.size();
-    }
-
-    @Override
-    public Iterator<Map.Entry<K, V>> iterator() {
-        final Iterator<Map.Entry<K, V>> iterator = pool.entrySet().iterator();
-        return new Iterator<Map.Entry<K, V>>() {
-            @Override
-            public boolean hasNext() {
-                return iterator.hasNext();
-            }
-
-            @Override
-            public Map.Entry<K, V> next() {
-                return iterator.next();
-            }
-
-            @Override
-            public void remove() {
-            }
-        };
-    }
-
-    public Map<K, V> toMap() {
-        return Maps.newHashMap(pool);
-    }
+    ;
+  }
+    ;
 }

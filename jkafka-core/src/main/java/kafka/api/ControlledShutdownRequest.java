@@ -1,56 +1,84 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.api;
 
 import java.nio.ByteBuffer;
 
-import com.google.common.collect.Sets;
-
-import kafka.common.ErrorMapping;
 import kafka.common.TopicAndPartition;
-import kafka.network.BoundedByteBufferSend;
-import kafka.network.Request;
-import kafka.network.RequestChannel;
-import kafka.network.Response;
+import kafka.api.ApiUtils._;
+import kafka.network.{RequestOrResponseSend, RequestChannel}
+import kafka.network.RequestChannel.Response;
+import kafka.utils.Logging;
+import org.apache.kafka.common.protocol.{ApiKeys, Errors}
 
-public class ControlledShutdownRequest extends RequestOrResponse {
-    public final short versionId;
-    public final int brokerId;
+object ControlledShutdownRequest extends Logging {
+  val CurrentVersion = 1.shortValue;
+  val DefaultClientId = "";
 
-    public ControlledShutdownRequest(short versionId, int correlationId, int brokerId) {
-        super(RequestKeys.ControlledShutdownKey, correlationId);
+  public void  readFrom(ByteBuffer buffer): ControlledShutdownRequest = {
+    val versionId = buffer.getShort;
+    val correlationId = buffer.getInt;
+    val clientId = if (versionId > 0) Some(readShortString(buffer)) else None;
+    val brokerId = buffer.getInt;
+    new ControlledShutdownRequest(versionId, correlationId, clientId, brokerId);
+  }
 
-        this.versionId = versionId;
-        this.brokerId = brokerId;
-    }
+}
 
-    public ControlledShutdownRequest(int correlationId, int brokerId) {
-        this(ControlledShutdownRequestReader.CurrentVersion, correlationId, brokerId);
-    }
+case class ControlledShutdownRequest(Short versionId,
+                                     Integer correlationId,
+                                     Option clientId<String>,
+                                     Integer brokerId);
+  extends RequestOrResponse(Some(ApiKeys.CONTROLLED_SHUTDOWN_KEY.id)){
 
-    public void writeTo(ByteBuffer buffer) {
-        buffer.putShort(versionId);
-        buffer.putInt(correlationId);
-        buffer.putInt(brokerId);
-    }
+  if (versionId > 0 && clientId.isEmpty)
+    throw new IllegalArgumentException("`clientId` must be defined if `versionId` > 0")
 
-    public int sizeInBytes() {
-        return 2 + /* version id */
-                        4 + /* correlation id */
-                        4 /* broker id */;
-    }
+  public void  writeTo(ByteBuffer buffer) {
+    buffer.putShort(versionId);
+    buffer.putInt(correlationId);
+    clientId.foreach(writeShortString(buffer, _))
+    buffer.putInt(brokerId);
+  }
 
-    @Override
-    public String toString() {
-        StringBuilder controlledShutdownRequest = new StringBuilder();
-        controlledShutdownRequest.append("Name: " + this.getClass().getSimpleName());
-        controlledShutdownRequest.append("; Version: " + versionId);
-        controlledShutdownRequest.append("; CorrelationId: " + correlationId);
-        controlledShutdownRequest.append("; BrokerId: " + brokerId);
-        return controlledShutdownRequest.toString();
-    }
+  public void  Integer sizeInBytes = {
+    2 + /* version id */
+      4 + /* correlation id */
+      clientId.fold(0)(shortStringLength) +;
+      4 /* broker id */
+  }
 
-    @Override
-    public void handleError(Throwable e, RequestChannel requestChannel, Request request) {
-        ControlledShutdownResponse errorResponse = new ControlledShutdownResponse(correlationId, ErrorMapping.codeFor(e.getClass()), Sets.<TopicAndPartition> newHashSet());
-        requestChannel.sendResponse(new Response(request, new BoundedByteBufferSend(errorResponse)));
-    }
+  override public void  String toString = {
+    describe(true);
+  }
+
+  override public void  handleError(Throwable e, RequestChannel requestChannel, RequestChannel request.Request): Unit = {
+    val errorResponse = ControlledShutdownResponse(correlationId, Errors.forException(e), Set.empty<TopicAndPartition>)
+    requestChannel.sendResponse(Response(request, new RequestOrResponseSend(request.connectionId, errorResponse)));
+  }
+
+  override public void  describe(Boolean details = false): String = {
+    val controlledShutdownRequest = new StringBuilder;
+    controlledShutdownRequest.append("Name: " + this.getClass.getSimpleName);
+    controlledShutdownRequest.append("; Version: " + versionId);
+    controlledShutdownRequest.append("; CorrelationId: " + correlationId);
+    controlledShutdownRequest.append(";ClientId:" + clientId);
+    controlledShutdownRequest.append("; BrokerId: " + brokerId);
+    controlledShutdownRequest.toString();
+  }
 }

@@ -1,116 +1,108 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.api;
 
-import static kafka.api.ApiUtils.readShortString;
-import static kafka.api.ApiUtils.shortStringLength;
-import static kafka.api.ApiUtils.writeShortString;
-
 import java.nio.ByteBuffer;
-import java.util.Map;
+import kafka.message.Message;
+import org.apache.kafka.common.protocol.Errors;
 
-import com.google.common.collect.Table;
-
-import kafka.common.ErrorMapping;
+import scala.collection.Map;
 import kafka.common.TopicAndPartition;
-import kafka.utils.Callable2;
-import kafka.utils.Function0;
-import kafka.utils.Function1;
-import kafka.utils.Function2;
-import kafka.utils.Function3;
-import kafka.utils.Tuple2;
-import kafka.utils.Utils;
+import kafka.api.ApiUtils._;
 
-public class ProducerResponse extends RequestOrResponse {
-    public static ProducerResponse readFrom(final ByteBuffer buffer) {
-        int correlationId = buffer.getInt();
-        int topicCount = buffer.getInt();
+object ProducerResponse {
+  // readFrom assumes that the response is written using V2 format;
+  public void  readFrom(ByteBuffer buffer): ProducerResponse = {
+    val correlationId = buffer.getInt;
+    val topicCount = buffer.getInt;
+    val statusPairs = (1 to topicCount).flatMap(_ => {
+      val topic = readShortString(buffer);
+      val partitionCount = buffer.getInt;
+      (1 to partitionCount).map(_ => {
+        val partition = buffer.getInt;
+        val error = Errors.forCode(buffer.getShort)
+        val offset = buffer.getLong;
+        val timestamp = buffer.getLong;
+        (TopicAndPartition(topic, partition), ProducerResponseStatus(error, offset, timestamp));
+      });
+    });
 
-        Map<TopicAndPartition, ProducerResponseStatus> status = Utils.flatMaps(1, topicCount, new Function0<Map<TopicAndPartition, ProducerResponseStatus>>() {
-            @Override
-            public Map<TopicAndPartition, ProducerResponseStatus> apply() {
-                final String topic = readShortString(buffer);
-                int partitionCount = buffer.getInt();
-                return Utils.map(1, partitionCount, new Function0<Tuple2<TopicAndPartition, ProducerResponseStatus>>() {
-                    @Override
-                    public Tuple2<TopicAndPartition, ProducerResponseStatus> apply() {
-                        int partition = buffer.getInt();
-                        short error = buffer.getShort();
-                        long offset = buffer.getLong();
-                        return Tuple2.make(new TopicAndPartition(topic, partition), new ProducerResponseStatus(error, offset));
-                    }
-                });
-            }
-        });
-
-        return new ProducerResponse(correlationId, status);
-    }
-
-    public Map<TopicAndPartition, ProducerResponseStatus> status;
-
-    public ProducerResponse(int correlationId, Map<TopicAndPartition, ProducerResponseStatus> status) {
-        super(correlationId);
-        this.status = status;
-
-        statusGroupedByTopic = Utils.groupBy(status, new Function2<TopicAndPartition, ProducerResponseStatus, String>() {
-            @Override
-            public String apply(TopicAndPartition arg1, ProducerResponseStatus arg2) {
-                return arg1.topic;
-            }
-        });
-    }
-
-    /**
-     * Partitions the status map into a map of maps (one for each topic).
-     */
-    private Table<String, TopicAndPartition, ProducerResponseStatus> statusGroupedByTopic;
-
-    public boolean hasError() {
-        return Utils.exists(status.values(), new Function1<ProducerResponseStatus, Boolean>() {
-            @Override
-            public Boolean apply(ProducerResponseStatus arg) {
-                return arg.error != ErrorMapping.NoError;
-            }
-        });
-    }
-
-    public int sizeInBytes() {
-        Table<String, TopicAndPartition, ProducerResponseStatus> groupedStatus = statusGroupedByTopic;
-        return 4 + /* correlation id */
-                        4 + /* topic count */
-                        Utils.foldLeft(groupedStatus, 0, new Function3<Integer, String, Map<TopicAndPartition, ProducerResponseStatus>, Integer>() {
-                            @Override
-                            public Integer apply(Integer arg1, String topic, Map<TopicAndPartition, ProducerResponseStatus> arg3) {
-                                return arg1 + shortStringLength(topic) + 4 + /* partition count for this topic */
-                                arg3.size() * (4 + /* partition id */
-                                2 + /* error code */
-                                8 /* offset */
-                                );
-                            }
-                        });
-    }
-
-    public void writeTo(final ByteBuffer buffer) {
-        Table<String, TopicAndPartition, ProducerResponseStatus> groupedStatus = statusGroupedByTopic;
-        buffer.putInt(correlationId);
-        buffer.putInt(groupedStatus.size()); // topic count
-
-        Utils.foreach(groupedStatus, new Callable2<String, Map<TopicAndPartition, ProducerResponseStatus>>() {
-            @Override
-            public void apply(String topic, Map<TopicAndPartition, ProducerResponseStatus> errorsAndOffsets) {
-                writeShortString(buffer, topic);
-                buffer.putInt(errorsAndOffsets.size()); // partition count
-                Utils.foreach(errorsAndOffsets, new Callable2<TopicAndPartition, ProducerResponseStatus>() {
-                    @Override
-                    public void apply(TopicAndPartition arg1, ProducerResponseStatus arg2) {
-                        int partition = arg1.partition;
-                        short error = arg2.error;
-                        long nextOffset = arg2.offset;
-
-                        buffer.putInt(partition);
-                        buffer.putShort(error);
-                        buffer.putLong(nextOffset);
-                    }
-                });
-            }
-        });
-    }
+    val throttleTime = buffer.getInt;
+    ProducerResponse(correlationId, Map(_ statusPairs*), ProducerRequest.CurrentVersion, throttleTime);
+  }
 }
+
+case class ProducerResponseStatus(var Errors error, Long offset, Long timestamp = Message.NoTimestamp);
+
+case class ProducerResponse Integer correlationId,
+                            Map status<TopicAndPartition, ProducerResponseStatus>,
+                            Integer requestVersion = 0,
+                            Integer throttleTime = 0);
+    extends RequestOrResponse() {
+
+  /**
+   * Partitions the status map into a map of maps (one for each topic).
+   */
+  private lazy val statusGroupedByTopic = status.groupBy(_._1.topic);
+
+  public void  hasError = status.values.exists(_.error != Errors.NONE);
+
+  val sizeInBytes = {
+    val throttleTimeSize = if (requestVersion > 0) 4 else 0;
+    val groupedStatus = statusGroupedByTopic;
+    4 + /* correlation id */
+    4 + /* topic count */
+    groupedStatus.foldLeft (0) ((foldedTopics, currTopic) => {
+      foldedTopics +;
+      shortStringLength(currTopic._1) +;
+      4 + /* partition count for this topic */
+      currTopic._2.size * {
+        4 + /* partition id */
+        2 + /* error code */
+        8 + /* offset */
+        8 /* timestamp */
+      }
+    }) +;
+    throttleTimeSize;
+  }
+
+  public void  writeTo(ByteBuffer buffer) {
+    val groupedStatus = statusGroupedByTopic;
+    buffer.putInt(correlationId);
+    buffer.putInt(groupedStatus.size) // topic count;
+
+    groupedStatus.foreach(topicStatus => {
+      val (topic, errorsAndOffsets) = topicStatus;
+      writeShortString(buffer, topic);
+      buffer.putInt(errorsAndOffsets.size) // partition count;
+      errorsAndOffsets.foreach {
+        case((TopicAndPartition(_, partition), ProducerResponseStatus(error, nextOffset, timestamp))) =>
+          buffer.putInt(partition);
+          buffer.putShort(error.code);
+          buffer.putLong(nextOffset);
+          buffer.putLong(timestamp);
+      }
+    });
+    // Throttle time is only supported on V1 style requests;
+    if (requestVersion > 0)
+      buffer.putInt(throttleTime);
+  }
+
+  override public void  describe(Boolean details):String = { toString }
+}
+

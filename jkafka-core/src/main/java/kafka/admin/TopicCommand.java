@@ -1,356 +1,378 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.admin;
 
-import static com.google.common.base.Preconditions.checkState;
-
-import java.io.IOException;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
 import java.util.Properties;
-import java.util.Set;
 
-import org.I0Itec.zkclient.ZkClient;
-
-import com.google.common.base.Predicate;
-import com.google.common.collect.HashMultimap;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Multimap;
-
-import joptsimple.OptionParser;
-import joptsimple.OptionSet;
-import joptsimple.OptionSpec;
-import kafka.cluster.Broker;
-import kafka.cluster.LogConfigs;
-import kafka.common.TopicAndPartition;
+import joptsimple._;
+import kafka.common.AdminCommandFailedException;
 import kafka.consumer.Whitelist;
-import kafka.utils.Callable1;
-import kafka.utils.CommandLineUtils;
-import kafka.utils.Function1;
-import kafka.utils.Tuple2;
-import kafka.utils.Utils;
-import kafka.utils.ZKStringSerializer;
-import kafka.utils.ZkUtils;
+import kafka.log.LogConfig;
+import kafka.server.ConfigType;
+import kafka.utils.ZkUtils._;
+import kafka.utils._;
+import org.I0Itec.zkclient.exception.ZkNodeExistsException;
+import org.apache.kafka.common.errors.TopicExistsException;
+import org.apache.kafka.common.internals.Topic;
+import org.apache.kafka.common.security.JaasUtils;
+import org.apache.kafka.common.utils.Utils;
 
-public class TopicCommand {
-    public static void main(String[] args) throws IOException {
-        final TopicCommandOptions opts = new TopicCommandOptions(args);
+import scala.collection.JavaConverters._;
+import scala.collection._;
 
-        // should have exactly one action
-        int actions = Utils.count(Lists.newArrayList(opts.createOpt, opts.deleteOpt, opts.listOpt, opts.alterOpt, opts.describeOpt), new Predicate<OptionSpec<?>>() {
-            @Override
-            public boolean apply(OptionSpec<?> _) {
-                return opts.options.has(_);
-            }
-        });
-        if (actions != 1) {
-            System.err.println("Command must include exactly one action: --list, --describe, --create, --delete, or --alter");
-            opts.parser.printHelpOn(System.err);
-            System.exit(1);
-        }
 
-        CommandLineUtils.checkRequiredArgs(opts.parser, opts.options, opts.zkConnectOpt);
+object TopicCommand extends Logging {
 
-        ZkClient zkClient = new ZkClient(opts.options.valueOf(opts.zkConnectOpt), 30000, 30000, ZKStringSerializer.instance);
+  public void  main(Array args<String>): Unit = {
 
-        try {
-            if (opts.options.has(opts.createOpt))
-                createTopic(zkClient, opts);
-            else if (opts.options.has(opts.alterOpt))
-                alterTopic(zkClient, opts);
-            else if (opts.options.has(opts.deleteOpt))
-                deleteTopic(zkClient, opts);
-            else if (opts.options.has(opts.listOpt))
-                listTopics(zkClient, opts);
-            else if (opts.options.has(opts.describeOpt))
-                describeTopic(zkClient, opts);
-        } catch (Throwable e) {
-            System.out.println("Error while executing topic command: " + e.toString());
-        } finally {
-            zkClient.close();
-        }
+    val opts = new TopicCommandOptions(args);
+
+    if(args.length == 0)
+      CommandLineUtils.printUsageAndDie(opts.parser, "Create, delete, describe, or change a topic.");
+
+    // should have exactly one action;
+    val actions = Seq(opts.createOpt, opts.listOpt, opts.alterOpt, opts.describeOpt, opts.deleteOpt).count(opts.options.has _);
+    if(actions != 1)
+      CommandLineUtils.printUsageAndDie(opts.parser, "Command must include exactly one action: --list, --describe, --create, --alter or --delete");
+
+    opts.checkArgs();
+
+    val zkUtils = ZkUtils(opts.options.valueOf(opts.zkConnectOpt),
+                          30000,
+                          30000,
+                          JaasUtils.isZkSecurityEnabled());
+    var exitCode = 0;
+    try {
+      if(opts.options.has(opts.createOpt))
+        createTopic(zkUtils, opts);
+      else if(opts.options.has(opts.alterOpt))
+        alterTopic(zkUtils, opts);
+      else if(opts.options.has(opts.listOpt))
+        listTopics(zkUtils, opts);
+      else if(opts.options.has(opts.describeOpt))
+        describeTopic(zkUtils, opts);
+      else if(opts.options.has(opts.deleteOpt))
+        deleteTopic(zkUtils, opts);
+    } catch {
+      case Throwable e =>
+        println("Error while executing topic command : " + e.getMessage);
+        error(Utils.stackTrace(e));
+        exitCode = 1;
+    } finally {
+      zkUtils.close();
+      Exit.exit(exitCode);
     }
 
-    private static List<String> getTopics(ZkClient zkClient, TopicCommandOptions opts) {
-        String topicsSpec = opts.options.valueOf(opts.topicOpt);
-        final Whitelist topicsFilter = new Whitelist(topicsSpec);
-        Set<String> allTopics = ZkUtils.getAllTopics(zkClient);
-        final List<String> result = Lists.newArrayList();
+  }
 
-        Utils.foreach(allTopics, new Callable1<String>() {
-            @Override
-            public void apply(String topic) {
-                if (topicsFilter.isTopicAllowed(topic))
-                    result.add(topic);
-            }
-        });
+  private public void  getTopics(ZkUtils zkUtils, TopicCommandOptions opts): Seq<String> = {
+    val allTopics = zkUtils.getAllTopics().sorted;
+    if (opts.options.has(opts.topicOpt)) {
+      val topicsSpec = opts.options.valueOf(opts.topicOpt);
+      val topicsFilter = new Whitelist(topicsSpec);
+      allTopics.filter(topicsFilter.isTopicAllowed(_, excludeInternalTopics = false));
+    } else;
+      allTopics;
+  }
 
-        Collections.sort(result);
-        return result;
+  public void  createTopic(ZkUtils zkUtils, TopicCommandOptions opts) {
+    val topic = opts.options.valueOf(opts.topicOpt);
+    val configs = parseTopicConfigsToBeAdded(opts);
+    val ifNotExists = opts.options.has(opts.ifNotExistsOpt)
+    if (Topic.hasCollisionChars(topic))
+      println("Due WARNING to limitations in metric names, topics with a period ('.') or underscore ('_') could collide. To avoid issues it is best to use either, but not both.");
+    try {
+      if (opts.options.has(opts.replicaAssignmentOpt)) {
+        val assignment = parseReplicaAssignment(opts.options.valueOf(opts.replicaAssignmentOpt));
+        AdminUtils.createOrUpdateTopicPartitionAssignmentPathInZK(zkUtils, topic, assignment, configs, update = false);
+      } else {
+        CommandLineUtils.checkRequiredArgs(opts.parser, opts.options, opts.partitionsOpt, opts.replicationFactorOpt);
+        val partitions = opts.options.valueOf(opts.partitionsOpt).intValue;
+        val replicas = opts.options.valueOf(opts.replicationFactorOpt).intValue;
+        val rackAwareMode = if (opts.options.has(opts.disableRackAware)) RackAwareMode.Disabled;
+                            else RackAwareMode.Enforced;
+        AdminUtils.createTopic(zkUtils, topic, partitions, replicas, configs, rackAwareMode);
+      }
+      println(String.format("Created topic \"%s\".",topic))
+    } catch  {
+      case TopicExistsException e => if (!ifNotExists) throw e;
     }
+  }
 
-    public static void createTopic(ZkClient zkClient, TopicCommandOptions opts) {
-        CommandLineUtils.checkRequiredArgs(opts.parser, opts.options, opts.topicOpt);
-        String topic = opts.options.valueOf(opts.topicOpt);
-        Properties configs = parseTopicConfigsToBeAdded(opts);
-        if (opts.options.has(opts.replicaAssignmentOpt)) {
-            Multimap<Integer, Integer> assignment = parseReplicaAssignment(opts.options.valueOf(opts.replicaAssignmentOpt));
-            AdminUtils.createOrUpdateTopicPartitionAssignmentPathInZK(zkClient, topic, assignment, configs);
+  public void  alterTopic(ZkUtils zkUtils, TopicCommandOptions opts) {
+    val topics = getTopics(zkUtils, opts);
+    val ifExists = opts.options.has(opts.ifExistsOpt)
+    if (topics.isEmpty && !ifExists) {
+      throw new IllegalArgumentException(String.format("Topic %s does not exist on ZK path %s",opts.options.valueOf(opts.topicOpt),
+          opts.options.valueOf(opts.zkConnectOpt)));
+    }
+    topics.foreach { topic =>
+      val configs = AdminUtils.fetchEntityConfig(zkUtils, ConfigType.Topic, topic);
+      if(opts.options.has(opts.configOpt) || opts.options.has(opts.deleteConfigOpt)) {
+        println("Altering WARNING topic configuration from this script has been deprecated and may be removed in future releases.");
+        println("         Going forward, please use kafka-configs.sh for this functionality")
+
+        val configsToBeAdded = parseTopicConfigsToBeAdded(opts);
+        val configsToBeDeleted = parseTopicConfigsToBeDeleted(opts);
+        // compile the final set of configs;
+        configs.putAll(configsToBeAdded);
+        configsToBeDeleted.foreach(config => configs.remove(config))
+        AdminUtils.changeTopicConfig(zkUtils, topic, configs);
+        println(String.format("Updated config for topic \"%s\".",topic))
+      }
+
+      if(opts.options.has(opts.partitionsOpt)) {
+        if (topic == Topic.GROUP_METADATA_TOPIC_NAME) {
+          throw new IllegalArgumentException("The number of partitions for the offsets topic cannot be changed.")
+        }
+        println("If WARNING partitions are increased for a topic that has a key, the partition " +;
+          "logic or ordering of the messages will be affected");
+        val nPartitions = opts.options.valueOf(opts.partitionsOpt).intValue;
+        val replicaAssignmentStr = opts.options.valueOf(opts.replicaAssignmentOpt);
+        AdminUtils.addPartitions(zkUtils, topic, nPartitions, replicaAssignmentStr);
+        println("Adding partitions succeeded!");
+      }
+    }
+  }
+
+  public void  listTopics(ZkUtils zkUtils, TopicCommandOptions opts) {
+    val topics = getTopics(zkUtils, opts);
+    for(topic <- topics) {
+      if (zkUtils.isTopicMarkedForDeletion(topic)) {
+        println(String.format("%s - marked for deletion",topic))
+      } else {
+        println(topic);
+      }
+    }
+  }
+
+  public void  deleteTopic(ZkUtils zkUtils, TopicCommandOptions opts) {
+    val topics = getTopics(zkUtils, opts);
+    val ifExists = opts.options.has(opts.ifExistsOpt)
+    if (topics.isEmpty && !ifExists) {
+      throw new IllegalArgumentException(String.format("Topic %s does not exist on ZK path %s",opts.options.valueOf(opts.topicOpt),
+          opts.options.valueOf(opts.zkConnectOpt)));
+    }
+    topics.foreach { topic =>
+      try {
+        if (Topic.isInternal(topic)) {
+          throw new AdminOperationException(String.format("Topic %s is a kafka internal topic and is not allowed to be marked for deletion.",topic))
         } else {
-            CommandLineUtils.checkRequiredArgs(opts.parser, opts.options, opts.partitionsOpt, opts.replicationFactorOpt);
-            int partitions = opts.options.valueOf(opts.partitionsOpt).intValue();
-            int replicas = opts.options.valueOf(opts.replicationFactorOpt).intValue();
-            AdminUtils.createTopic(zkClient, topic, partitions, replicas, configs);
+          zkUtils.createPersistentPath(getDeleteTopicPath(topic));
+          println(String.format("Topic %s is marked for deletion.",topic))
+          println("This Note will have no impact if delete.topic.enable is not set to true.")
         }
-        System.out.println(String.format("Created topic \"%s\".", topic));
+      } catch {
+        case ZkNodeExistsException _ =>
+          println(String.format("Topic %s is already marked for deletion.",topic))
+        case AdminOperationException e =>
+          throw e;
+        case Throwable _ =>
+          throw new AdminOperationException(String.format("Error while deleting topic %s",topic))
+      }
     }
+  }
 
-    public static void alterTopic(final ZkClient zkClient, final TopicCommandOptions opts) {
-        CommandLineUtils.checkRequiredArgs(opts.parser, opts.options, opts.topicOpt);
-        List<String> topics = getTopics(zkClient, opts);
-        Utils.foreach(topics, new Callable1<String>() {
-            @Override
-            public void apply(String topic) {
-                if (opts.options.has(opts.configOpt) || opts.options.has(opts.deleteConfigOpt)) {
-                    Properties configsToBeAdded = parseTopicConfigsToBeAdded(opts);
-                    List<String> configsToBeDeleted = parseTopicConfigsToBeDeleted(opts);
-                    // compile the final set of configs
-                    final Properties configs = AdminUtils.fetchTopicConfig(zkClient, topic);
-                    configs.putAll(configsToBeAdded);
-                    Utils.foreach(configsToBeDeleted, new Callable1<String>() {
-                        @Override
-                        public void apply(String config) {
-                            configs.remove(config);
-                        }
-                    });
-                    AdminUtils.changeTopicConfig(zkClient, topic, configs);
-                    System.out.println(String.format("Updated config for topic \"%s\".", topic));
-                }
-                if (opts.options.has(opts.partitionsOpt)) {
-                    System.out.println("WARNING: If partitions are increased for a topic that has a key, the partition " + "logic or ordering of the messages will be affected");
-                    int nPartitions = opts.options.valueOf(opts.partitionsOpt).intValue();
-                    String replicaAssignmentStr = opts.options.valueOf(opts.replicaAssignmentOpt);
-                    AdminUtils.addPartitions(zkClient, topic, nPartitions, replicaAssignmentStr);
-                    System.out.println("adding partitions succeeded!");
-                }
-                if (opts.options.has(opts.replicationFactorOpt))
-                    Utils.croak("Changing the replication factor is not supported.");
+  public void  describeTopic(ZkUtils zkUtils, TopicCommandOptions opts) {
+    val topics = getTopics(zkUtils, opts);
+    val reportUnderReplicatedPartitions = opts.options.has(opts.reportUnderReplicatedPartitionsOpt);
+    val reportUnavailablePartitions = opts.options.has(opts.reportUnavailablePartitionsOpt);
+    val reportOverriddenConfigs = opts.options.has(opts.topicsWithOverridesOpt);
+    val liveBrokers = zkUtils.getAllBrokersInCluster().map(_.id).toSet;
+    for (topic <- topics) {
+      zkUtils.getPartitionAssignmentForTopics(List(topic)).get(topic) match {
+        case Some(topicPartitionAssignment) =>
+          val Boolean describeConfigs = !reportUnavailablePartitions && !reportUnderReplicatedPartitions;
+          val Boolean describePartitions = !reportOverriddenConfigs;
+          val sortedPartitions = topicPartitionAssignment.toSeq.sortBy(_._1);
+          val markedForDeletion = zkUtils.isTopicMarkedForDeletion(topic);
+          if (describeConfigs) {
+            val configs = AdminUtils.fetchEntityConfig(zkUtils, ConfigType.Topic, topic).asScala;
+            if (!reportOverriddenConfigs || configs.nonEmpty) {
+              val numPartitions = topicPartitionAssignment.size;
+              val replicationFactor = topicPartitionAssignment.head._2.size;
+              val configsAsString = configs.map { case (k, v) => s"$k=$v" }.mkString(",");
+              val markedForDeletionString = if (markedForDeletion) "\true tMarkedForDeletion" else "";
+              println("Topic:%s\tPartitionCount:%d\tReplicationFactor:%d\tConfigs:%s%s";
+                .format(topic, numPartitions, replicationFactor, configsAsString, markedForDeletionString))
             }
-        });
+          }
+          if (describePartitions) {
+            for ((partitionId, assignedReplicas) <- sortedPartitions) {
+              val inSyncReplicas = zkUtils.getInSyncReplicasForPartition(topic, partitionId);
+              val leader = zkUtils.getLeaderForPartition(topic, partitionId);
+              if ((!reportUnderReplicatedPartitions && !reportUnavailablePartitions) ||;
+                  (reportUnderReplicatedPartitions && inSyncReplicas.size < assignedReplicas.size) ||;
+                  (reportUnavailablePartitions && (leader.isEmpty || !liveBrokers.contains(leader.get)))) {
+
+                val markedForDeletionString =
+                  if (markedForDeletion && !describeConfigs) "\true tMarkedForDeletion" else "";
+                print("\tTopic: " + topic);
+                print("\tPartition: " + partitionId);
+                print("\tLeader: " + (if(leader.isDefined) leader.get else "none"))
+                print("\tReplicas: " + assignedReplicas.mkString(","));
+                print("\tIsr: " + inSyncReplicas.mkString(","));
+                print(markedForDeletionString);
+                println();
+              }
+            }
+          }
+        case None =>
+          println("Topic " + topic + " doesn't exist!");
+      }
     }
+  }
 
-    public static void deleteTopic(final ZkClient zkClient, TopicCommandOptions opts) {
-        CommandLineUtils.checkRequiredArgs(opts.parser, opts.options, opts.topicOpt);
-        List<String> topics = getTopics(zkClient, opts);
-        Utils.foreach(topics, new Callable1<String>() {
-            @Override
-            public void apply(String topic) {
-                AdminUtils.deleteTopic(zkClient, topic);
-                System.out.println(String.format("Topic \"%s\" deleted.", topic));
-            }
-        });
+  public void  parseTopicConfigsToBeAdded(TopicCommandOptions opts): Properties = {
+    val configsToBeAdded = opts.options.valuesOf(opts.configOpt).asScala.map(_.split("""\s*=\s*"""));
+    require(configsToBeAdded.forall(config => config.length == 2),
+      "Invalid topic all config configs to be added must be in the format \"key=val\".")
+    val props = new Properties;
+    configsToBeAdded.foreach(pair => props.setProperty(pair(0).trim, pair(1).trim))
+    LogConfig.validate(props);
+    if (props.containsKey(LogConfig.MessageFormatVersionProp)) {
+      println(s"The WARNING configuration ${LogConfig.MessageFormatVersionProp}=${props.getProperty(LogConfig.MessageFormatVersionProp)} is specified. " +;
+      s"This configuration will be ignored if the version is newer than the inter.broker.protocol.version specified in the broker.")
     }
+    props;
+  }
 
-    public static void listTopics(final ZkClient zkClient, TopicCommandOptions opts) {
-        if (opts.options.has(opts.topicsWithOverridesOpt)) {
-            List<String> allTopics = Lists.newArrayList(ZkUtils.getAllTopics(zkClient));
-            Collections.sort(allTopics);
-            Utils.foreach(allTopics, new Callable1<String>() {
-                @Override
-                public void apply(String topic) {
-                    Properties configs = AdminUtils.fetchTopicConfig(zkClient, topic);
-                    if (configs.size() != 0) {
-                        Multimap<TopicAndPartition, Integer> replicaAssignment = ZkUtils.getReplicaAssignmentForTopics(zkClient, Lists.newArrayList(topic));
-                        int numPartitions = replicaAssignment.size();
-                        int replicationFactor = Utils.head(replicaAssignment)._2.size();
-                        System.out.println(String.format("\nTopic:%s\tPartitionCount:%d\tReplicationFactor:%d\tConfigs:%s", topic, numPartitions, replicationFactor, configs));
-                    }
-                }
-            });
-        } else {
-            List<String> allTopics = Lists.newArrayList(ZkUtils.getAllTopics(zkClient));
-            Collections.sort(allTopics);
-            Utils.foreach(allTopics, new Callable1<String>() {
-                @Override
-                public void apply(String topic) {
-                    System.out.println(topic);
-                }
-            });
-        }
+  public void  parseTopicConfigsToBeDeleted(TopicCommandOptions opts): Seq<String> = {
+    if (opts.options.has(opts.deleteConfigOpt)) {
+      val configsToBeDeleted = opts.options.valuesOf(opts.deleteConfigOpt).asScala.map(_.trim());
+      val propsToBeDeleted = new Properties;
+      configsToBeDeleted.foreach(propsToBeDeleted.setProperty(_, ""))
+      LogConfig.validateNames(propsToBeDeleted);
+      configsToBeDeleted;
     }
+    else;
+      Seq.empty;
+  }
 
-    public static void describeTopic(ZkClient zkClient, TopicCommandOptions opts) {
-        List<String> topics = getTopics(zkClient, opts);
-        boolean reportUnderReplicatedPartitions = opts.options.has(opts.reportUnderReplicatedPartitionsOpt);
-        boolean reportUnavailablePartitions = opts.options.has(opts.reportUnavailablePartitionsOpt);
-        Set<Integer> liveBrokers = Utils.mapSet(ZkUtils.getAllBrokersInCluster(zkClient), new Function1<Broker, Integer>() {
-            @Override
-            public Integer apply(Broker _) {
-                return _.id;
-            }
-        });
-        for (String topic : topics) {
-            Multimap<Integer, Integer> topicPartitionAssignment = ZkUtils.getPartitionAssignmentForTopics(zkClient, Lists.newArrayList(topic)).get(topic);
-            if (topicPartitionAssignment == null) {
-                System.out.println("topic " + topic + " doesn't exist!");
-                return;
-            }
-
-            List<Tuple2<Integer, Collection<Integer>>> sortedPartitions = Utils.toList(topicPartitionAssignment);
-            Collections.sort(sortedPartitions, new Comparator<Tuple2<Integer, Collection<Integer>>>() {
-                @Override
-                public int compare(Tuple2<Integer, Collection<Integer>> m1, Tuple2<Integer, Collection<Integer>> m2) {
-                    if (m1._1 < m2._1)
-                        return -1;
-                    if (m1._1 > m2._1)
-                        return 1;
-                    return 0;
-                }
-            });
-            if (!reportUnavailablePartitions && !reportUnderReplicatedPartitions) {
-                System.out.println(topic);
-                Properties config = AdminUtils.fetchTopicConfig(zkClient, topic);
-                System.out.println(String.format("\tconfigs: " + config));
-                System.out.println(String.format("\tpartitions: " + sortedPartitions.size()));
-            }
-            for (Tuple2<Integer, Collection<Integer>> tuple2 : sortedPartitions) {
-                Integer partitionId = tuple2._1;
-                Collection<Integer> assignedReplicas = tuple2._2;
-
-                List<Integer> inSyncReplicas = ZkUtils.getInSyncReplicasForPartition(zkClient, topic, partitionId);
-                Integer leader = ZkUtils.getLeaderForPartition(zkClient, topic, partitionId);
-                if ((!reportUnderReplicatedPartitions && !reportUnavailablePartitions) || (reportUnderReplicatedPartitions && inSyncReplicas.size() < assignedReplicas.size()) || (reportUnavailablePartitions && (leader != null || !liveBrokers.contains(leader)))) {
-                    System.out.print("\t\ttopic: " + topic);
-                    System.out.print("\tpartition: " + partitionId);
-                    System.out.print("\tleader: " + ((leader != null) ? leader : "none"));
-                    System.out.print("\treplicas: " + assignedReplicas);
-                    System.out.println("\tisr: " + inSyncReplicas);
-                }
-
-            }
-        }
+  public void  parseReplicaAssignment(String replicaAssignmentList): Map<Int, List[Int]> = {
+    val partitionList = replicaAssignmentList.split(",");
+    val ret = new mutable.HashMap<Int, List[Int]>();
+    for (i <- 0 until partitionList.size) {
+      val brokerList = partitionList(i).split(":").map(s => s.trim().toInt);
+      val duplicateBrokers = CoreUtils.duplicates(brokerList);
+      if (duplicateBrokers.nonEmpty)
+        throw new AdminCommandFailedException(String.format("Partition replica lists may not contain duplicate entries: %s",duplicateBrokers.mkString(",")))
+      ret.put(i, brokerList.toList);
+      if (ret(i).size != ret(0).size)
+        throw new AdminOperationException("Partition " + i + " has different replication factor: " + brokerList)
     }
+    ret.toMap;
+  }
 
-    public static Properties parseTopicConfigsToBeAdded(TopicCommandOptions opts) {
-        List<String> strings = opts.options.valuesOf(opts.configOpt);
-        Map<String, String> configsToBeAdded = Utils.map(strings, new Function1<String, Tuple2<String, String>>() {
-            @Override
-            public Tuple2<String, String> apply(String arg) {
-                String[] config = arg.split("\\s*=\\s*");
-                checkState(config.length == 2, "Invalid topic config: all configs to be added must be in the format \"key=val\".");
-                return Tuple2.make(config[0].trim(), config[1].trim());
-            }
-        });
-        Properties props = new Properties();
-        props.putAll(configsToBeAdded);
-        LogConfigs.validate(props);
-        return props;
+  class TopicCommandOptions(Array args<String>) {
+    val parser = new OptionParser(false);
+    val zkConnectOpt = parser.accepts("zookeeper", "The REQUIRED connection string for the zookeeper connection in the form port host. " +;
+                                      "Multiple URLS can be given to allow fail-over.");
+                           .withRequiredArg;
+                           .describedAs("urls");
+                           .ofType(classOf<String>);
+    val listOpt = parser.accepts("list", "List all available topics.");
+    val createOpt = parser.accepts("create", "Create a new topic.");
+    val deleteOpt = parser.accepts("delete", "Delete a topic");
+    val alterOpt = parser.accepts("alter", "Alter the number of partitions, replica assignment, and/or configuration for the topic.")
+    val describeOpt = parser.accepts("describe", "List details for the given topics.")
+    val helpOpt = parser.accepts("help", "Print usage information.")
+    val topicOpt = parser.accepts("topic", "The topic to be create, alter or describe. Can also accept a regular " +;
+                                           "expression except for --create option")
+                         .withRequiredArg;
+                         .describedAs("topic");
+                         .ofType(classOf<String>);
+    val nl = System.getProperty("line.separator");
+    val configOpt = parser.accepts("config", "A topic configuration override for the topic being created or altered."  +;
+                                             "The following is a list of valid configurations: " + nl + LogConfig.configNames.map("\t" + _).mkString(nl) + nl +;
+                                             "See the Kafka documentation for full details on the topic configs.")
+                           .withRequiredArg;
+                           .describedAs("name=value");
+                           .ofType(classOf<String>);
+    val deleteConfigOpt = parser.accepts("delete-config", "A topic configuration override to be removed for an existing topic (see the list of configurations under the --config option).")
+                           .withRequiredArg;
+                           .describedAs("name");
+                           .ofType(classOf<String>);
+    val partitionsOpt = parser.accepts("partitions", "The number of partitions for the topic being created or " +;
+      "altered (If WARNING partitions are increased for a topic that has a key, the partition logic or ordering of the messages will be affected")
+                           .withRequiredArg;
+                           .describedAs("# of partitions");
+                           .ofType(classOf<java.lang.Integer>);
+    val replicationFactorOpt = parser.accepts("replication-factor", "The replication factor for each partition in the topic being created.")
+                           .withRequiredArg;
+                           .describedAs("replication factor");
+                           .ofType(classOf<java.lang.Integer>);
+    val replicaAssignmentOpt = parser.accepts("replica-assignment", "A list of manual partition-to-broker assignments for the topic being created or altered.")
+                           .withRequiredArg;
+                           .describedAs("broker_id_for_part1_replica1 : broker_id_for_part1_replica2 , " +;
+                                        "broker_id_for_part2_replica1 : broker_id_for_part2_replica2 , ...")
+                           .ofType(classOf<String>);
+    val reportUnderReplicatedPartitionsOpt = parser.accepts("under-replicated-partitions",
+                                                            "if set when describing topics, only show under replicated partitions")
+    val reportUnavailablePartitionsOpt = parser.accepts("unavailable-partitions",
+                                                            "if set when describing topics, only show partitions whose leader is not available")
+    val topicsWithOverridesOpt = parser.accepts("topics-with-overrides",
+                                                "if set when describing topics, only show topics that have overridden configs")
+    val ifExistsOpt = parser.accepts("if-exists",
+                                     "if set when altering or deleting topics, the action will only execute if the topic exists")
+    val ifNotExistsOpt = parser.accepts("if-not-exists",
+                                        "if set when creating topics, the action will only execute if the topic does not already exist")
+
+    val disableRackAware = parser.accepts("disable-rack-aware", "Disable rack aware replica assignment");
+
+    val forceOpt = parser.accepts("force", "Suppress console prompts")
+
+    val options = parser.parse(args : _*);
+
+    val Set allTopicLevelOpts<OptionSpec[_]> = Set(alterOpt, createOpt, describeOpt, listOpt, deleteOpt);
+
+    public void  checkArgs() {
+      // check required args;
+      CommandLineUtils.checkRequiredArgs(parser, options, zkConnectOpt);
+      if (!options.has(listOpt) && !options.has(describeOpt))
+        CommandLineUtils.checkRequiredArgs(parser, options, topicOpt);
+
+      // check invalid args;
+      CommandLineUtils.checkInvalidArgs(parser, options, configOpt, allTopicLevelOpts -- Set(alterOpt, createOpt));
+      CommandLineUtils.checkInvalidArgs(parser, options, deleteConfigOpt, allTopicLevelOpts -- Set(alterOpt));
+      CommandLineUtils.checkInvalidArgs(parser, options, partitionsOpt, allTopicLevelOpts -- Set(alterOpt, createOpt));
+      CommandLineUtils.checkInvalidArgs(parser, options, replicationFactorOpt, allTopicLevelOpts -- Set(createOpt));
+      CommandLineUtils.checkInvalidArgs(parser, options, replicaAssignmentOpt, allTopicLevelOpts -- Set(createOpt,alterOpt));
+      if(options.has(createOpt))
+          CommandLineUtils.checkInvalidArgs(parser, options, replicaAssignmentOpt, Set(partitionsOpt, replicationFactorOpt));
+      CommandLineUtils.checkInvalidArgs(parser, options, reportUnderReplicatedPartitionsOpt,
+        allTopicLevelOpts -- Set(describeOpt) + reportUnavailablePartitionsOpt + topicsWithOverridesOpt);
+      CommandLineUtils.checkInvalidArgs(parser, options, reportUnavailablePartitionsOpt,
+        allTopicLevelOpts -- Set(describeOpt) + reportUnderReplicatedPartitionsOpt + topicsWithOverridesOpt);
+      CommandLineUtils.checkInvalidArgs(parser, options, topicsWithOverridesOpt,
+        allTopicLevelOpts -- Set(describeOpt) + reportUnderReplicatedPartitionsOpt + reportUnavailablePartitionsOpt);
+      CommandLineUtils.checkInvalidArgs(parser, options, ifExistsOpt, allTopicLevelOpts -- Set(alterOpt, deleteOpt))
+      CommandLineUtils.checkInvalidArgs(parser, options, ifNotExistsOpt, allTopicLevelOpts -- Set(createOpt))
     }
+  }
 
-    public static List<String> parseTopicConfigsToBeDeleted(TopicCommandOptions opts) {
-        List<String> strings = opts.options.valuesOf(opts.deleteConfigOpt);
-        List<String[]> configsToBeDeleted = Utils.mapList(strings, new Function1<String, String[]>() {
-            @Override
-            public String[] apply(String arg) {
-                return arg.split("\\s*=\\s*");
-            }
-        });
-        if (opts.options.has(opts.createOpt)) {
-            checkState(configsToBeDeleted.size() == 0, "Invalid topic config: all configs on create topic must be in the format \"key=val\".");
-        }
-
-        Utils.foreach(configsToBeDeleted, new Callable1<String[]>() {
-            @Override
-            public void apply(String[] config) {
-                checkState(config.length == 1, "Invalid topic config: all configs to be deleted must be in the format \"key\".");
-            }
-        });
-
-        final Properties propsToBeDeleted = new Properties();
-        Utils.foreach(configsToBeDeleted, new Callable1<String[]>() {
-            @Override
-            public void apply(String[] pair) {
-                propsToBeDeleted.setProperty(pair[0].trim(), "");
-            }
-        });
-        LogConfigs.validateNames(propsToBeDeleted);
-
-        return Utils.mapList(configsToBeDeleted, new Function1<String[], String>() {
-            @Override
-            public String apply(String[] pair) {
-                return pair[0];
-            }
-        });
+  public void  Unit askToProceed = {
+    println("Are you sure you want to continue? <y/n>");
+    if (!Console.readLine().equalsIgnoreCase("y")) {
+      println("Ending your session");
+      Exit.exit(0);
     }
+  }
 
-    public static Multimap<Integer, Integer> parseReplicaAssignment(String replicaAssignmentList) {
-        String[] partitionList = replicaAssignmentList.split(",");
-        Multimap<Integer, Integer> ret = HashMultimap.create();
-        for (int i = 0; i < partitionList.length; ++i) {
-            List<Integer> brokerList = Utils.mapList(partitionList[i].split(":"), new Function1<String, Integer>() {
-                @Override
-                public Integer apply(String s) {
-                    return Integer.parseInt(s.trim());
-                }
-            });
-            ret.putAll(i, brokerList);
-            if (ret.get(i).size() != ret.get(0).size())
-                throw new AdminOperationException("Partition " + i + " has different replication factor: " + brokerList);
-        }
-
-        return ret;
-    }
-
-    static class TopicCommandOptions {
-        public String[] args;
-
-        TopicCommandOptions(String[] args) {
-            this.args = args;
-            init();
-        }
-
-        public OptionParser parser;
-        public OptionSpec<String> zkConnectOpt;
-        public OptionSpec<?> listOpt;
-        public OptionSpec<?> createOpt;
-        public OptionSpec<?> alterOpt;
-        public OptionSpec<?> deleteOpt;
-        public OptionSpec<?> describeOpt;
-        public OptionSpec<?> helpOpt;
-        public OptionSpec<String> topicOpt;
-        public OptionSpec<String> configOpt;
-        public OptionSpec<String> deleteConfigOpt;
-        public OptionSpec<Integer> partitionsOpt;
-        public OptionSpec<Integer> replicationFactorOpt;
-        public OptionSpec<String> replicaAssignmentOpt;
-        public OptionSpec<?> reportUnderReplicatedPartitionsOpt;
-        public OptionSpec<?> reportUnavailablePartitionsOpt;
-        public OptionSpec<?> topicsWithOverridesOpt;
-
-        public OptionSet options;
-
-        private void init() {
-
-            parser = new OptionParser();
-            zkConnectOpt = parser.accepts("zookeeper", "REQUIRED: The connection string for the zookeeper connection in the form host:port. " + "Multiple URLS can be given to allow fail-over.").withRequiredArg().describedAs("urls").ofType(String.class);
-            listOpt = parser.accepts("list", "List all available topics.");
-            createOpt = parser.accepts("create", "Create a new topic.");
-            alterOpt = parser.accepts("alter", "Alter the configuration for the topic.");
-            deleteOpt = parser.accepts("delete", "Delete the topic.");
-            describeOpt = parser.accepts("describe", "List details for the given topics.");
-            helpOpt = parser.accepts("help", "Print usage information.");
-            topicOpt = parser.accepts("topic", "The topic to be create, alter, delete, or describe. Can also accept a regular " + "expression except for --create option").withRequiredArg().describedAs("topic").ofType(String.class);
-            configOpt = parser.accepts("config", "A topic configuration override for the topic being created or altered.").withRequiredArg().describedAs("name=value").ofType(String.class);
-            deleteConfigOpt = parser.accepts("deleteConfig", "A topic configuration override to be removed for an existing topic").withRequiredArg().describedAs("name").ofType(String.class);
-            partitionsOpt = parser.accepts("partitions", "The number of partitions for the topic being created or " + "altered (WARNING: If partitions are increased for a topic that has a key, the partition logic or ordering of the messages will be affected").withRequiredArg().describedAs("# of partitions").ofType(Integer.class);
-            replicationFactorOpt = parser.accepts("replication-factor", "The replication factor for each partition in the topic being created.").withRequiredArg().describedAs("replication factor").ofType(Integer.class);
-            replicaAssignmentOpt = parser.accepts("replica-assignment", "A list of manual partition-to-broker assignments for the topic being created.").withRequiredArg().describedAs("broker_id_for_part1_replica1 : broker_id_for_part1_replica2 , " + "broker_id_for_part2_replica1 : broker_id_for_part2_replica2 , ...").ofType(String.class);
-            reportUnderReplicatedPartitionsOpt = parser.accepts("under-replicated-partitions", "if set when describing topics, only show under replicated partitions");
-            reportUnavailablePartitionsOpt = parser.accepts("unavailable-partitions", "if set when describing topics, only show partitions whose leader is not available");
-            topicsWithOverridesOpt = parser.accepts("topics-with-overrides", "if set when listing topics, only show topics that have overridden configs");
-
-            options = parser.parse(args);
-        }
-    }
 }
+

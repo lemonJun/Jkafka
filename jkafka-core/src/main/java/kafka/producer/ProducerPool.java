@@ -1,94 +1,89 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.producer;
 
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.Map;
 import java.util.Properties;
-import java.util.Set;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
-
-import kafka.api.PartitionMetadata;
 import kafka.api.TopicMetadata;
-import kafka.cluster.Broker;
+import kafka.cluster.BrokerEndPoint;
 import kafka.common.UnavailableProducerException;
-import kafka.utils.Callable1;
-import kafka.utils.Utils;
+import kafka.utils.Logging;
 
-public class ProducerPool {
-    /**
-     * Used in ProducerPool to initiate a SyncProducer connection with a broker.
-     */
-    public static SyncProducer createSyncProducer(ProducerConfig config, Broker broker) {
-        Properties props = new Properties();
-        props.put("host", broker.host);
-        props.put("port", broker.port + "");
-        props.putAll(config.props.props);
-        return new SyncProducer(new SyncProducerConfig(props));
-    }
+import scala.collection.mutable.HashMap;
 
-    public ProducerConfig config;
+@deprecated("This object has been deprecated and will be removed in a future release.", "0.10.0.0")
+object ProducerPool {
+  /**
+   * Used in ProducerPool to initiate a SyncProducer connection with a broker.
+   */
+  public void  createSyncProducer(ProducerConfig config, BrokerEndPoint broker): SyncProducer = {
+    val props = new Properties();
+    props.put("host", broker.host);
+    props.put("port", broker.port.toString);
+    props.putAll(config.props.props);
+    new SyncProducer(new SyncProducerConfig(props));
+  }
+}
 
-    public ProducerPool(ProducerConfig config) {
-        this.config = config;
-    }
+@deprecated("This class has been deprecated and will be removed in a future release.", "0.10.0.0")
+class ProducerPool(val ProducerConfig config) extends Logging {
+  private val syncProducers = new HashMap<Int, SyncProducer>;
+  private val lock = new Object();
 
-    private Map<Integer, SyncProducer> syncProducers = Maps.newHashMap();
-    private Object lock = new Object();
-
-    Logger logger = LoggerFactory.getLogger(ProducerPool.class);
-
-    public void updateProducer(Collection<TopicMetadata> topicMetadata) {
-        final Set<Broker> newBrokers = Sets.newHashSet();
-        Utils.foreach(topicMetadata, new Callable1<TopicMetadata>() {
-            @Override
-            public void apply(TopicMetadata tmd) {
-                Utils.foreach(tmd.partitionsMetadata, new Callable1<PartitionMetadata>() {
-                    @Override
-                    public void apply(PartitionMetadata pmd) {
-                        if (pmd.leader != null)
-                            newBrokers.add(pmd.leader);
-                    }
-                });
-            }
-        });
-        synchronized (lock) {
-            Utils.foreach(newBrokers, new Callable1<Broker>() {
-                @Override
-                public void apply(Broker b) {
-                    if (syncProducers.containsKey(b.id)) {
-                        syncProducers.get(b.id).close();
-                        syncProducers.put(b.id, ProducerPool.createSyncProducer(config, b));
-                    } else
-                        syncProducers.put(b.id, ProducerPool.createSyncProducer(config, b));
-                }
-            });
+  public void  updateProducer(Seq topicMetadata<TopicMetadata>) {
+    val newBrokers = new collection.mutable.HashSet<BrokerEndPoint>;
+    topicMetadata.foreach(tmd => {
+      tmd.partitionsMetadata.foreach(pmd => {
+        if(pmd.leader.isDefined) {
+          newBrokers += pmd.leader.get;
         }
+      });
+    });
+    lock synchronized {
+      newBrokers.foreach(b => {
+        if(syncProducers.contains(b.id)){
+          syncProducers(b.id).close();
+          syncProducers.put(b.id, ProducerPool.createSyncProducer(config, b));
+        } else;
+          syncProducers.put(b.id, ProducerPool.createSyncProducer(config, b));
+      });
     }
+  }
 
-    public SyncProducer getProducer(int brokerId) {
-        synchronized (lock) {
-            SyncProducer producer = syncProducers.get(brokerId);
-            if (producer != null)
-                return producer;
-
-            throw new UnavailableProducerException("Sync producer for broker id %d does not exist", brokerId);
-        }
+  public void  getProducer Integer brokerId) : SyncProducer = {
+    lock.synchronized {
+      val producer = syncProducers.get(brokerId);
+      producer match {
+        case Some(p) => p;
+        case None => throw new UnavailableProducerException(String.format("Sync producer for broker id %d does not exist",brokerId))
+      }
     }
+  }
 
-    /**
-     * Closes all the producers in the pool
-     */
-    public void close() {
-        synchronized (lock) {
-            logger.info("Closing all sync producers");
-            Iterator<SyncProducer> iter = syncProducers.values().iterator();
-            while (iter.hasNext())
-                iter.next().close();
-        }
+  /**
+   * Closes all the producers in the pool
+   */
+  public void  close() = {
+    lock.synchronized {
+      info("Closing all sync producers");
+      val iter = syncProducers.values.iterator;
+      while(iter.hasNext);
+        iter.next.close;
     }
+  }
 }

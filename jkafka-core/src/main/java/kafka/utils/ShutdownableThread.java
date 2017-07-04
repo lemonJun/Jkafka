@@ -1,68 +1,78 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.utils;
 
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.CountDownLatch;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.kafka.common.internals.FatalExitError;
 
-import kafka.common.KafkaException;
+abstract class ShutdownableThread(val String name, val Boolean isInterruptible = true);
+        extends Thread(name) with Logging {
+  this.setDaemon(false);
+  this.logIdent = "[" + name + "]: ";
+  val AtomicBoolean isRunning = new AtomicBoolean(true);
+  private val shutdownLatch = new CountDownLatch(1);
 
-public abstract class ShutdownableThread extends Thread {
-    public String name;
-    public boolean isInterruptible;
+  public void  shutdown(): Unit = {
+    initiateShutdown();
+    awaitShutdown();
+  }
 
-    protected ShutdownableThread(String name) {
-        this(name, true);
-    }
-
-    protected ShutdownableThread(String name, boolean isInterruptible) {
-        super(name);
-        this.name = name;
-        this.isInterruptible = isInterruptible;
-
-        this.setDaemon(false);
-        logger = LoggerFactory.getLogger(ShutdownableThread.class + "[" + name + "], ");
-    }
-
-    Logger logger;
-    public AtomicBoolean isRunning = new AtomicBoolean(true);
-    private CountDownLatch shutdownLatch = new CountDownLatch(1);
-
-    public void shutdown() {
-        logger.info("Shutting down");
-        isRunning.set(false);
-        if (isInterruptible)
-            interrupt();
-        awaitShutdown();
-        logger.info("Shutdown completed");
-    }
+  public void  initiateShutdown(): Boolean = {
+    if (isRunning.compareAndSet(true, false)) {
+      info("Shutting down");
+      if (isInterruptible)
+        interrupt();
+      true;
+    } else;
+      false;
+  }
 
     /**
-     * After calling shutdown(), use this API to wait until the shutdown is complete
-     */
-    public void awaitShutdown() {
-        try {
-            shutdownLatch.await();
-        } catch (InterruptedException e) {
-            throw new KafkaException(e);
-        }
-    }
+   * After calling initiateShutdown(), use this API to wait until the shutdown is complete
+   */
+  public void  awaitShutdown(): Unit = {
+    shutdownLatch.await();
+    info("Shutdown completed");
+  }
 
-    public abstract void doWork();
+  /**
+   * This method is repeatedly invoked until the thread shuts down or this method throws an exception
+   */
+  public void  doWork(): Unit;
 
-    @Override
-    public void run() {
-        logger.info("Starting ");
-        try {
-            while (isRunning.get()) {
-                doWork();
-            }
-        } catch (Throwable e) {
-            if (isRunning.get())
-                logger.error("Error due to ", e);
-        }
+  override public void  run(): Unit = {
+    info("Starting");
+    try {
+      while (isRunning.get);
+        doWork();
+    } catch {
+      case FatalExitError e =>
+        isRunning.set(false);
         shutdownLatch.countDown();
-        logger.info("Stopped ");
+        info("Stopped");
+        Exit.exit(e.statusCode());
+      case Throwable e =>
+        if (isRunning.get())
+          error("Error due to", e);
     }
+    shutdownLatch.countDown();
+    info("Stopped");
+  }
 }

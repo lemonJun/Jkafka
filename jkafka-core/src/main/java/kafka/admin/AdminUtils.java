@@ -1,436 +1,764 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.admin;
 
-import static com.google.common.base.Preconditions.checkState;
-
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Random;
-import java.util.Set;
-
-import org.I0Itec.zkclient.ZkClient;
-import org.I0Itec.zkclient.exception.ZkNodeExistsException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.alibaba.fastjson.JSONObject;
-import com.google.common.base.Predicate;
-import com.google.common.collect.HashMultimap;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Multimap;
-import com.google.common.collect.Sets;
-
-import kafka.api.PartitionMetadata;
-import kafka.api.TopicMetadata;
 import kafka.cluster.Broker;
-import kafka.cluster.LogConfigs;
-import kafka.common.ErrorMapping;
-import kafka.common.LeaderNotAvailableException;
-import kafka.common.ReplicaNotAvailableException;
-import kafka.common.Topic;
-import kafka.common.TopicAndPartition;
-import kafka.common.TopicExistsException;
-import kafka.utils.Callable2;
-import kafka.utils.Function1;
-import kafka.utils.Function2;
-import kafka.utils.Json;
-import kafka.utils.Predicate2;
-import kafka.utils.Tuple2;
-import kafka.utils.Utils;
-import kafka.utils.ZkUtils;
+import kafka.log.LogConfig;
+import kafka.server.{ConfigEntityName, ConfigType, DynamicConfig}
+import kafka.utils._;
+import kafka.utils.ZkUtils._;
+import java.util.Random;
+import java.util.Properties;
 
-public class AdminUtils {
-    public static Random rand = new Random();
-    public static String TopicConfigChangeZnodePrefix = "config_change_";
-    static Logger logger = LoggerFactory.getLogger(AdminUtils.class);
+import kafka.common.TopicAlreadyMarkedForDeletionException;
+import org.apache.kafka.common.Node;
+import org.apache.kafka.common.errors.{InvalidPartitionsException, InvalidReplicaAssignmentException, InvalidReplicationFactorException, InvalidTopicException, LeaderNotAvailableException, ReplicaNotAvailableException, TopicExistsException, UnknownTopicOrPartitionException}
+import org.apache.kafka.common.network.ListenerName;
+import org.apache.kafka.common.protocol.{Errors, SecurityProtocol}
+import org.apache.kafka.common.requests.MetadataResponse;
 
-    /**
-     * There are 2 goals of replica assignment:
-     * 1. Spread the replicas evenly among brokers.
-     * 2. For partitions assigned to a particular broker, their other replicas are spread over the other brokers.
-     * <p/>
-     * To achieve this goal, we:
-     * 1. Assign the first replica of each partition by round-robin, starting from a random position in the broker list.
-     * 2. Assign the remaining replicas of each partition with an increasing shift.
-     * <p/>
-     * Here is an example of assigning
-     * broker-0  broker-1  broker-2  broker-3  broker-4
-     * p0        p1        p2        p3        p4       (1st replica)
-     * p5        p6        p7        p8        p9       (1st replica)
-     * p4        p0        p1        p2        p3       (2nd replica)
-     * p8        p9        p5        p6        p7       (2nd replica)
-     * p3        p4        p0        p1        p2       (3nd replica)
-     * p7        p8        p9        p5        p6       (3nd replica)
-     */
-    public static Multimap<Integer, Integer> assignReplicasToBrokers(List<Integer> brokerList, int nPartitions, int replicationFactor) {
-        return assignReplicasToBrokers(brokerList, nPartitions, replicationFactor, -1, -1);
+import scala.collection._;
+import scala.collection.JavaConverters._;
+import mutable.ListBuffer;
+import scala.collection.mutable;
+import collection.Map;
+import collection.Set;
+import org.I0Itec.zkclient.exception.ZkNodeExistsException;
+import org.apache.kafka.common.internals.Topic;
+
+trait AdminUtilities {
+  public void  changeTopicConfig(ZkUtils zkUtils, String topic, Properties configs);
+  public void  changeClientIdConfig(ZkUtils zkUtils, String clientId, Properties configs);
+  public void  changeUserOrUserClientIdConfig(ZkUtils zkUtils, String sanitizedEntityName, Properties configs);
+  public void  changeBrokerConfig(ZkUtils zkUtils, Seq brokerIds<Int>, Properties configs);
+
+  public void  changeConfigs(ZkUtils zkUtils, String entityType, String entityName, Properties configs): Unit = {
+
+    public void  parseBroker(String broker): Integer = {
+      try broker.toInt;
+      catch {
+        case NumberFormatException _ =>
+          throw new IllegalArgumentException(s"Error parsing broker $broker. The broker's Entity Name must be a single integer value");
+      }
     }
 
-    public static Multimap<Integer, Integer> assignReplicasToBrokers(List<Integer> brokerList, int nPartitions, int replicationFactor, int fixedStartIndex/* = -1*/, int startPartitionId /*= -1*/) {
-        if (nPartitions <= 0)
-            throw new AdminOperationException("number of partitions must be larger than 0");
-        if (replicationFactor <= 0)
-            throw new AdminOperationException("replication factor must be larger than 0");
-        if (replicationFactor > brokerList.size())
-            throw new AdminOperationException("replication factor: " + replicationFactor + " larger than available brokers: " + brokerList.size());
-        Multimap<Integer, Integer> ret = HashMultimap.create();
-        int startIndex = (fixedStartIndex >= 0) ? fixedStartIndex : rand.nextInt(brokerList.size());
-        int currentPartitionId = (startPartitionId >= 0) ? startPartitionId : 0;
+    entityType match {
+      case ConfigType.Topic => changeTopicConfig(zkUtils, entityName, configs);
+      case ConfigType.Client => changeClientIdConfig(zkUtils, entityName, configs);
+      case ConfigType.User => changeUserOrUserClientIdConfig(zkUtils, entityName, configs);
+      case ConfigType.Broker => changeBrokerConfig(zkUtils, Seq(parseBroker(entityName)), configs);
+      case _ => throw new IllegalArgumentException(s"$entityType is not a known entityType. Should be one of ${ConfigType.Topic}, ${ConfigType.Client}, ${ConfigType.Broker}");
+    }
+  }
 
-        int nextReplicaShift = (fixedStartIndex >= 0) ? fixedStartIndex : rand.nextInt(brokerList.size());
-        for (int i = 0; i < nPartitions; ++i) {
-            if (currentPartitionId > 0 && (currentPartitionId % brokerList.size() == 0))
-                nextReplicaShift += 1;
-            int firstReplicaIndex = (currentPartitionId + startIndex) % brokerList.size();
-            List<Integer> replicaList = Lists.newArrayList(brokerList.get(firstReplicaIndex));
-            for (int j = 0; j < replicationFactor - 1; ++j)
-                replicaList.add(brokerList.get(replicaIndex(firstReplicaIndex, nextReplicaShift, j, brokerList.size())));
-            Collections.reverse(replicaList);
-            ret.putAll(currentPartitionId, replicaList);
-            currentPartitionId = currentPartitionId + 1;
+  public void  fetchEntityConfig(ZkUtils zkUtils,String entityType, String entityName): Properties;
+}
+
+object AdminUtils extends Logging with AdminUtilities {
+  val rand = new Random;
+  val AdminClientId = "__admin_client";
+  val EntityConfigChangeZnodePrefix = "config_change_";
+
+  /**
+   * There are 3 goals of replica assignment:
+   *
+   * 1. Spread the replicas evenly among brokers.
+   * 2. For partitions assigned to a particular broker, their other replicas are spread over the other brokers.
+   * 3. If all brokers have rack information, assign the replicas for each partition to different racks if possible
+   *
+   * To achieve this goal for replica assignment without considering racks, we:
+   * 1. Assign the first replica of each partition by round-robin, starting from a random position in the broker list.
+   * 2. Assign the remaining replicas of each partition with an increasing shift.
+   *
+   * Here is an example of assigning
+   * broker-0  broker-1  broker-2  broker-3  broker-4
+   * p0        p1        p2        p3        p4       (1st replica)
+   * p5        p6        p7        p8        p9       (1st replica)
+   * p4        p0        p1        p2        p3       (2nd replica)
+   * p8        p9        p5        p6        p7       (2nd replica)
+   * p3        p4        p0        p1        p2       (3nd replica)
+   * p7        p8        p9        p5        p6       (3nd replica)
+   *
+   * To create rack aware assignment, this API will first create a rack alternated broker list. For example,
+   * from this brokerID -> rack mapping:
+   *
+   * 0 -> "rack1", 1 -> "rack3", 2 -> "rack3", 3 -> "rack2", 4 -> "rack2", 5 -> "rack1"
+   *
+   * The rack alternated list will be:
+   *
+   * 0, 3, 1, 5, 4, 2
+   *
+   * Then an easy round-robin assignment can be applied. Assume 6 partitions with replication factor of 3, the assignment
+   * will be:
+   *
+   * 0 -> 0,3,1
+   * 1 -> 3,1,5
+   * 2 -> 1,5,4
+   * 3 -> 5,4,2
+   * 4 -> 4,2,0
+   * 5 -> 2,0,3
+   *
+   * Once it has completed the first round-robin, if there are more partitions to assign, the algorithm will start
+   * shifting the followers. This is to ensure we will not always get the same set of sequences.
+   * In this case, if there is another partition to assign (partition #6), the assignment will be:
+   *
+   * 6 -> 0,4,2 (instead of repeating 0,3,1 as partition 0)
+   *
+   * The rack aware assignment always chooses the 1st replica of the partition using round robin on the rack alternated
+   * broker list. For rest of the replicas, it will be biased towards brokers on racks that do not have
+   * any replica assignment, until every rack has a replica. Then the assignment will go back to round-robin on
+   * the broker list.
+   *
+   * As the result, if the number of replicas is equal to or greater than the number of racks, it will ensure that
+   * each rack will get at least one replica. Otherwise, each rack will get at most one replica. In a perfect
+   * situation where the number of replicas is the same as the number of racks and each rack has the same number of
+   * brokers, it guarantees that the replica distribution is even across brokers and racks.
+   *
+   * @return a Map from partition id to replica ids
+   * @throws AdminOperationException If rack information is supplied but it is incomplete, or if it is not possible to
+   *                                 assign each replica to a unique rack.
+   *
+   */
+  public void  assignReplicasToBrokers(Seq brokerMetadatas<BrokerMetadata>,
+                              Integer nPartitions,
+                              Integer replicationFactor,
+                              Integer fixedStartIndex = -1,
+                              Integer startPartitionId = -1): Map<Int, Seq[Int]> = {
+    if (nPartitions <= 0)
+      throw new InvalidPartitionsException("number of partitions must be larger than 0");
+    if (replicationFactor <= 0)
+      throw new InvalidReplicationFactorException("replication factor must be larger than 0");
+    if (replicationFactor > brokerMetadatas.size)
+      throw new InvalidReplicationFactorException(s"replication factor: $replicationFactor larger than available brokers: ${brokerMetadatas.size}");
+    if (brokerMetadatas.forall(_.rack.isEmpty))
+      assignReplicasToBrokersRackUnaware(nPartitions, replicationFactor, brokerMetadatas.map(_.id), fixedStartIndex,
+        startPartitionId);
+    else {
+      if (brokerMetadatas.exists(_.rack.isEmpty))
+        throw new AdminOperationException("Not all brokers have rack information for replica rack aware assignment")
+      assignReplicasToBrokersRackAware(nPartitions, replicationFactor, brokerMetadatas, fixedStartIndex,
+        startPartitionId);
+    }
+  }
+
+  private public void  assignReplicasToBrokersRackUnaware Integer nPartitions,
+                                                 Integer replicationFactor,
+                                                 Seq brokerList<Int>,
+                                                 Integer fixedStartIndex,
+                                                 Integer startPartitionId): Map<Int, Seq[Int]> = {
+    val ret = mutable.Map<Int, Seq[Int]>();
+    val brokerArray = brokerList.toArray;
+    val startIndex = if (fixedStartIndex >= 0) fixedStartIndex else rand.nextInt(brokerArray.length)
+    var currentPartitionId = math.max(0, startPartitionId);
+    var nextReplicaShift = if (fixedStartIndex >= 0) fixedStartIndex else rand.nextInt(brokerArray.length)
+    for (_ <- 0 until nPartitions) {
+      if (currentPartitionId > 0 && (currentPartitionId % brokerArray.length == 0))
+        nextReplicaShift += 1;
+      val firstReplicaIndex = (currentPartitionId + startIndex) % brokerArray.length;
+      val replicaBuffer = mutable.ArrayBuffer(brokerArray(firstReplicaIndex));
+      for (j <- 0 until replicationFactor - 1)
+        replicaBuffer += brokerArray(replicaIndex(firstReplicaIndex, nextReplicaShift, j, brokerArray.length))
+      ret.put(currentPartitionId, replicaBuffer);
+      currentPartitionId += 1;
+    }
+    ret;
+  }
+
+  private public void  assignReplicasToBrokersRackAware Integer nPartitions,
+                                               Integer replicationFactor,
+                                               Seq brokerMetadatas<BrokerMetadata>,
+                                               Integer fixedStartIndex,
+                                               Integer startPartitionId): Map<Int, Seq[Int]> = {
+    val brokerRackMap = brokerMetadatas.collect { case BrokerMetadata(id, Some(rack)) =>
+      id -> rack;
+    }.toMap;
+    val numRacks = brokerRackMap.values.toSet.size;
+    val arrangedBrokerList = getRackAlternatedBrokerList(brokerRackMap);
+    val numBrokers = arrangedBrokerList.size;
+    val ret = mutable.Map<Int, Seq[Int]>();
+    val startIndex = if (fixedStartIndex >= 0) fixedStartIndex else rand.nextInt(arrangedBrokerList.size)
+    var currentPartitionId = math.max(0, startPartitionId);
+    var nextReplicaShift = if (fixedStartIndex >= 0) fixedStartIndex else rand.nextInt(arrangedBrokerList.size)
+    for (_ <- 0 until nPartitions) {
+      if (currentPartitionId > 0 && (currentPartitionId % arrangedBrokerList.size == 0))
+        nextReplicaShift += 1;
+      val firstReplicaIndex = (currentPartitionId + startIndex) % arrangedBrokerList.size;
+      val leader = arrangedBrokerList(firstReplicaIndex);
+      val replicaBuffer = mutable.ArrayBuffer(leader);
+      val racksWithReplicas = mutable.Set(brokerRackMap(leader));
+      val brokersWithReplicas = mutable.Set(leader);
+      var k = 0;
+      for (_ <- 0 until replicationFactor - 1) {
+        var done = false;
+        while (!done) {
+          val broker = arrangedBrokerList(replicaIndex(firstReplicaIndex, nextReplicaShift * numRacks, k, arrangedBrokerList.size))
+          val rack = brokerRackMap(broker);
+          // Skip this broker if;
+          // 1. there is already a broker in the same rack that has assigned a replica AND there is one or more racks;
+          //    that do not have any replica, or;
+          // 2. the broker has already assigned a replica AND there is one or more brokers that do not have replica assigned;
+          if ((!racksWithReplicas.contains(rack) || racksWithReplicas.size == numRacks)
+              && (!brokersWithReplicas.contains(broker) || brokersWithReplicas.size == numBrokers)) {
+            replicaBuffer += broker;
+            racksWithReplicas += rack;
+            brokersWithReplicas += broker;
+            done = true;
+          }
+          k += 1;
         }
-        return ret;
+      }
+      ret.put(currentPartitionId, replicaBuffer);
+      currentPartitionId += 1;
     }
+    ret;
+  }
 
-    public static void addPartitions(ZkClient zkClient, String topic, int numPartitions /* = 1*/, String replicaAssignmentStr/* = ""*/) {
-        Multimap<TopicAndPartition, Integer> existingPartitionsReplicaList = ZkUtils.getReplicaAssignmentForTopics(zkClient, Lists.newArrayList(topic));
-        if (existingPartitionsReplicaList.size() == 0)
-            throw new AdminOperationException("The topic %s does not exist", topic);
-
-        final Collection<Integer> existingReplicaList = Utils.head(existingPartitionsReplicaList)._2;
-        int partitionsToAdd = numPartitions - existingPartitionsReplicaList.size();
-        if (partitionsToAdd <= 0)
-            throw new AdminOperationException("The number of partitions for a topic can only be increased");
-
-        // create the new partition replication list
-        List<Integer> brokerList = ZkUtils.getSortedBrokerList(zkClient);
-        Multimap<Integer, Integer> newPartitionReplicaList = (replicaAssignmentStr == null || replicaAssignmentStr == "") ? assignReplicasToBrokers(brokerList, partitionsToAdd, existingReplicaList.size(), Utils.head(existingReplicaList), existingPartitionsReplicaList.size()) : getManualReplicaAssignment(replicaAssignmentStr, Sets.newHashSet(brokerList), existingPartitionsReplicaList.size());
-
-        // check if manual assignment has the right replication factor
-        Multimap<Integer, Integer> unmatchedRepFactorList = Utils.filter(newPartitionReplicaList, new Predicate2<Integer, Collection<Integer>>() {
-            @Override
-            public boolean apply(Integer integer, Collection<Integer> p) {
-                return p.size() != existingReplicaList.size();
-            }
-        });
-        if (unmatchedRepFactorList.size() != 0)
-            throw new AdminOperationException("The replication factor in manual replication assignment " + " is not equal to the existing replication factor for the topic " + existingReplicaList.size());
-
-        logger.info("Add partition list for {} is {}", topic, newPartitionReplicaList);
-
-        Multimap<Integer, Integer> partitionReplicaList = Utils.map(existingPartitionsReplicaList, new Function2<TopicAndPartition, Collection<Integer>, Tuple2<Integer, Collection<Integer>>>() {
-            @Override
-            public Tuple2<Integer, Collection<Integer>> apply(TopicAndPartition _1, Collection<Integer> _2) {
-                return Tuple2.make(_1.partition, _2);
-            }
-        });
-        // add the new list
-        partitionReplicaList.putAll(newPartitionReplicaList);
-        createOrUpdateTopicPartitionAssignmentPathInZK(zkClient, topic, partitionReplicaList, new Properties(), /*update = */true);
+  /**
+    * Given broker and rack information, returns a list of brokers alternated by the rack. Assume
+    * this is the rack and its brokers:
+    *
+    * 0 rack1, 1, 2
+    * 3 rack2, 4, 5
+    * 6 rack3, 7, 8
+    *
+    * This API would return the list of 0, 3, 6, 1, 4, 7, 2, 5, 8
+    *
+    * This is essential to make sure that the assignReplicasToBrokers API can use such list and
+    * assign replicas to brokers in a simple round-robin fashion, while ensuring an even
+    * distribution of leader and replica counts on each broker and that replicas are
+    * distributed to all racks.
+    */
+  private<admin> public void  getRackAlternatedBrokerList(Map brokerRackMap<Int, String>): IndexedSeq<Int> = {
+    val brokersIteratorByRack = getInverseMap(brokerRackMap).map { case (rack, brokers) =>
+      (rack, brokers.toIterator);
     }
-
-    public static Multimap<Integer, Integer> getManualReplicaAssignment(String replicaAssignmentList, Set<Integer> availableBrokerList, int startPartitionId) {
-        String[] partitionList = replicaAssignmentList.split(",");
-        Multimap<Integer, Integer> ret = HashMultimap.create();
-        int partitionId = startPartitionId;
-        partitionList = Utils.takeRight(partitionList, (partitionList.length - partitionId));
-        for (int i = 0; i < partitionList.length; ++i) {
-            List<Integer> brokerList = Utils.mapList(partitionList[i].split(":"), new Function1<String, Integer>() {
-                @Override
-                public Integer apply(String s) {
-                    return Integer.parseInt(s.trim());
-                }
-            });
-            if (brokerList.size() <= 0)
-                throw new AdminOperationException("replication factor must be larger than 0");
-            if (brokerList.size() != Sets.newHashSet(brokerList).size())
-                throw new AdminOperationException("duplicate brokers in replica assignment: " + brokerList);
-            if (!Utils.subsetOf(Sets.newHashSet(brokerList), availableBrokerList))
-                throw new AdminOperationException("some specified brokers not available. specified brokers: " + brokerList + "available broker:" + availableBrokerList);
-            ret.putAll(partitionId, brokerList);
-            if (ret.get(partitionId).size() != ret.get(startPartitionId).size())
-                throw new AdminOperationException("partition " + i + " has different replication factor: " + brokerList);
-            partitionId = partitionId + 1;
-        }
-
-        return ret;
+    val racks = brokersIteratorByRack.keys.toArray.sorted;
+    val result = new mutable.ArrayBuffer<Int>;
+    var rackIndex = 0;
+    while (result.size < brokerRackMap.size) {
+      val rackIterator = brokersIteratorByRack(racks(rackIndex));
+      if (rackIterator.hasNext)
+        result += rackIterator.next();
+      rackIndex = (rackIndex + 1) % racks.length;
     }
+    result;
+  }
 
-    public static void deleteTopic(ZkClient zkClient, String topic) {
-        zkClient.deleteRecursive(ZkUtils.getTopicPath(topic));
-        zkClient.deleteRecursive(ZkUtils.getTopicConfigPath(topic));
+  private<admin> public void  getInverseMap(Map brokerRackMap<Int, String>): Map<String, Seq[Int]> = {
+    brokerRackMap.toSeq.map { case (id, rack) => (rack, id) }
+      .groupBy { case (rack, _) => rack }
+      .map { case (rack, rackAndIdList) => (rack, rackAndIdList.map { case (_, id) => id }.sorted) }
+  }
+ /**
+  * Add partitions to existing topic with optional replica assignment
+  *
+  * @param zkUtils Zookeeper utilities
+  * @param topic Topic for adding partitions to
+  * @param numPartitions Number of partitions to be set
+  * @param replicaAssignmentStr Manual replica assignment
+  * @param checkBrokerAvailable Ignore checking if assigned replica broker is available. Only used for testing
+  */
+  public void  addPartitions(ZkUtils zkUtils,
+                    String topic,
+                    Integer numPartitions = 1,
+                    String replicaAssignmentStr = "",
+                    Boolean checkBrokerAvailable = true,
+                    RackAwareMode rackAwareMode = RackAwareMode.Enforced) {
+    val existingPartitionsReplicaList = zkUtils.getReplicaAssignmentForTopics(List(topic));
+    if (existingPartitionsReplicaList.isEmpty)
+      throw new AdminOperationException(String.format("The topic %s does not exist",topic))
+
+    val existingReplicaListForPartitionZero = existingPartitionsReplicaList.find(p => p._1.partition == 0) match {
+      case None => throw new AdminOperationException("the topic does not have partition with id 0, it should never happen");
+      case Some(headPartitionReplica) => headPartitionReplica._2;
     }
+    val partitionsToAdd = numPartitions - existingPartitionsReplicaList.size;
+    if (partitionsToAdd <= 0)
+      throw new AdminOperationException("The number of partitions for a topic can only be increased")
 
-    public static Boolean topicExists(ZkClient zkClient, String topic) {
-        return zkClient.exists(ZkUtils.getTopicPath(topic));
+    // create the new partition replication list;
+    val brokerMetadatas = getBrokerMetadatas(zkUtils, rackAwareMode);
+    val newPartitionReplicaList =
+      if (replicaAssignmentStr == null || replicaAssignmentStr == "") {
+        val startIndex = math.max(0, brokerMetadatas.indexWhere(_.id >= existingReplicaListForPartitionZero.head));
+        AdminUtils.assignReplicasToBrokers(brokerMetadatas, partitionsToAdd, existingReplicaListForPartitionZero.size,
+          startIndex, existingPartitionsReplicaList.size);
+      }
+      else;
+        getManualReplicaAssignment(replicaAssignmentStr, brokerMetadatas.map(_.id).toSet,
+          existingPartitionsReplicaList.size, checkBrokerAvailable);
+
+    // check if manual assignment has the right replication factor;
+    val unmatchedRepFactorList = newPartitionReplicaList.values.filter(p => p.size != existingReplicaListForPartitionZero.size);
+    if (unmatchedRepFactorList.nonEmpty)
+      throw new AdminOperationException("The replication factor in manual replication assignment " +;
+        " is not equal to the existing replication factor for the topic " + existingReplicaListForPartitionZero.size)
+
+    info(String.format("Add partition list for %s is %s",topic, newPartitionReplicaList))
+    val partitionReplicaList = existingPartitionsReplicaList.map(p => p._1.partition -> p._2);
+    // add the new list;
+    partitionReplicaList ++= newPartitionReplicaList;
+    AdminUtils.createOrUpdateTopicPartitionAssignmentPathInZK(zkUtils, topic, partitionReplicaList, update = true);
+  }
+
+  public void  getManualReplicaAssignment(String replicaAssignmentList, Set availableBrokerList<Int>, Integer startPartitionId, Boolean checkBrokerAvailable = true): Map<Int, List[Int]> = {
+    var partitionList = replicaAssignmentList.split(",");
+    val ret = new mutable.HashMap<Int, List[Int]>();
+    var partitionId = startPartitionId;
+    partitionList = partitionList.takeRight(partitionList.size - partitionId);
+    for (i <- partitionList.indices) {
+      val brokerList = partitionList(i).split(":").map(s => s.trim().toInt);
+      if (brokerList.isEmpty)
+        throw new AdminOperationException("replication factor must be larger than 0");
+      if (brokerList.size != brokerList.toSet.size)
+        throw new AdminOperationException("duplicate brokers in replica assignment: " + brokerList);
+      if (checkBrokerAvailable && !brokerList.toSet.subsetOf(availableBrokerList))
+        throw new AdminOperationException("some specified brokers not available. specified brokers: " + brokerList +;
+          "available broker:" + availableBrokerList);
+      ret.put(partitionId, brokerList.toList);
+      if (ret(partitionId).size != ret(startPartitionId).size)
+        throw new AdminOperationException("partition " + i + " has different replication factor: " + brokerList)
+      partitionId = partitionId + 1;
     }
+    ret.toMap;
+  }
 
-    public static void createTopic(ZkClient zkClient, String topic, int partitions, int replicationFactor, Properties topicConfig /*= new Properties*/) {
-        List<Integer> brokerList = ZkUtils.getSortedBrokerList(zkClient);
-        Multimap<Integer, Integer> replicaAssignment = assignReplicasToBrokers(brokerList, partitions, replicationFactor);
-        createOrUpdateTopicPartitionAssignmentPathInZK(zkClient, topic, replicaAssignment, topicConfig, false);
-    }
-
-    public static void createOrUpdateTopicPartitionAssignmentPathInZK(ZkClient zkClient, String topic, final Multimap<Integer, Integer> partitionReplicaAssignment, Properties config /*= new Properties*/) {
-        createOrUpdateTopicPartitionAssignmentPathInZK(zkClient, topic, partitionReplicaAssignment, config, false);
-    }
-
-    public static void createOrUpdateTopicPartitionAssignmentPathInZK(ZkClient zkClient, String topic, final Multimap<Integer, Integer> partitionReplicaAssignment, Properties config /*= new Properties*/, boolean update/* = false*/) {
-        // validate arguments
-        Topic.validate(topic);
-        LogConfigs.validate(config);
-        checkState(Utils.mapSet(partitionReplicaAssignment, new Function2<Integer, Collection<Integer>, Integer>() {
-            @Override
-            public Integer apply(Integer arg1, Collection<Integer> _) {
-                return _.size();
-            }
-        }).size() == 1, "All partitions should have the same number of replicas.");
-
-        String topicPath = ZkUtils.getTopicPath(topic);
-        if (!update && zkClient.exists(topicPath))
-            throw new TopicExistsException("Topic \"%s\" already exists.", topic);
-
-        Utils.foreach(partitionReplicaAssignment, new Callable2<Integer, Collection<Integer>>() {
-            @Override
-            public void apply(Integer integer, Collection<Integer> reps) {
-                checkState(reps.size() == Sets.newHashSet(reps).size(), "Duplicate replica assignment found: " + partitionReplicaAssignment);
-            }
-        });
-
-        // write out the config if there is any, this isn't transactional with the partition assignments
-        writeTopicConfig(zkClient, topic, config);
-
-        // create the partition assignment
-        writeTopicPartitionAssignment(zkClient, topic, partitionReplicaAssignment, update);
-    }
-
-    private static void writeTopicPartitionAssignment(ZkClient zkClient, String topic, Multimap<Integer, Integer> replicaAssignment, boolean update) {
+  public void  deleteTopic(ZkUtils zkUtils, String topic) {
+      if (topicExists(zkUtils, topic)) {
         try {
-            String zkPath = ZkUtils.getTopicPath(topic);
-            String jsonPartitionData = ZkUtils.replicaAssignmentZkData(Utils.map(replicaAssignment, new Function2<Integer, Collection<Integer>, Tuple2<String, Collection<Integer>>>() {
-                @Override
-                public Tuple2<String, Collection<Integer>> apply(Integer _1, Collection<Integer> _2) {
-                    return Tuple2.make(_1 + "", _2);
-                }
-            }));
-
-            if (!update) {
-                logger.info("Topic creation {}", jsonPartitionData);
-                ZkUtils.createPersistentPath(zkClient, zkPath, jsonPartitionData);
-            } else {
-                logger.info("Topic update {}", jsonPartitionData);
-                ZkUtils.updatePersistentPath(zkClient, zkPath, jsonPartitionData);
-            }
-            logger.debug("Updated path {} with {} for replica assignment", zkPath, jsonPartitionData);
-        } catch (ZkNodeExistsException e) {
-            throw new TopicExistsException("topic %s already exists", topic);
-        } catch (Throwable e) {
-            throw new AdminOperationException(e.toString());
+          zkUtils.createPersistentPath(getDeleteTopicPath(topic));
+        } catch {
+          case ZkNodeExistsException _ => throw new TopicAlreadyMarkedForDeletionException(
+            String.format("topic %s is already marked for deletion",topic))
+          case Throwable e2 => throw new AdminOperationException(e2);
         }
+      } else {
+        throw new UnknownTopicOrPartitionException(s"Topic `$topic` to delete does not exist");
+      }
     }
 
-    /**
-     * Update the config for an existing topic and create a change notification so the change will propagate to other brokers
-     *
-     * @param zkClient: The ZkClient handle used to write the new config to zookeeper
-     * @param topic:    The topic for which configs are being changed
-     * @param configs:  The final set of configs that will be applied to the topic. If any new configs need to be added or
-     *                  existing configs need to be deleted, it should be done prior to invoking this API
-     */
-    public static void changeTopicConfig(ZkClient zkClient, String topic, Properties configs) {
-        if (!topicExists(zkClient, topic))
-            throw new AdminOperationException("Topic \"%s\" does not exist.", (topic));
+  @deprecated("This method has been deprecated and will be removed in a future release.", "0.11.0.0")
+  public void  isConsumerGroupActive(ZkUtils zkUtils, String group) = {
+    zkUtils.getConsumersInGroup(group).nonEmpty;
+  }
 
-        // remove the topic overrides
-        LogConfigs.validate(configs);
-
-        // write the new config--may not exist if there were previously no overrides
-        writeTopicConfig(zkClient, topic, configs);
-
-        // create the change notification
-        zkClient.createPersistentSequential(ZkUtils.TopicConfigChangesPath + "/" + TopicConfigChangeZnodePrefix, Json.encode(topic));
+  /**
+   * Delete the whole directory of the given consumer group if the group is inactive.
+   *
+   * @param zkUtils Zookeeper utilities
+   * @param group Consumer group
+   * @return whether or not we deleted the consumer group information
+   */
+  @deprecated("This method has been deprecated and will be removed in a future release.", "0.11.0.0")
+  public void  deleteConsumerGroupInZK(ZkUtils zkUtils, String group) = {
+    if (!isConsumerGroupActive(zkUtils, group)) {
+      val dir = new ZKGroupDirs(group);
+      zkUtils.deletePathRecursive(dir.consumerGroupDir);
+      true;
     }
+    else false;
+  }
 
-    /**
-     * Write out the topic config to zk, if there is any
-     */
-    private static void writeTopicConfig(ZkClient zkClient, String topic, Properties config) {
-        Map<String, Object> map = Maps.newHashMap();
-        map.put("version", 1);
-        map.put("config", config);
-
-        ZkUtils.updatePersistentPath(zkClient, ZkUtils.getTopicConfigPath(topic), Json.encode(map));
+  /**
+   * Delete the given consumer group's information for the given topic in Zookeeper if the group is inactive.
+   * If the consumer group consumes no other topics, delete the whole consumer group directory.
+   *
+   * @param zkUtils Zookeeper utilities
+   * @param group Consumer group
+   * @param topic Topic of the consumer group information we wish to delete
+   * @return whether or not we deleted the consumer group information for the given topic
+   */
+  @deprecated("This method has been deprecated and will be removed in a future release.", "0.11.0.0")
+  public void  deleteConsumerGroupInfoForTopicInZK(ZkUtils zkUtils, String group, String topic) = {
+    val topics = zkUtils.getTopicsByConsumerGroup(group);
+    if (topics == Seq(topic)) {
+      deleteConsumerGroupInZK(zkUtils, group);
     }
+    else if (!isConsumerGroupActive(zkUtils, group)) {
+      val dir = new ZKGroupTopicDirs(group, topic);
+      zkUtils.deletePathRecursive(dir.consumerOwnerDir);
+      zkUtils.deletePathRecursive(dir.consumerOffsetDir);
+      true;
+    }
+    else false;
+  }
 
-    /**
-     * Read the topic config (if any) from zk
-     */
-    public static Properties fetchTopicConfig(ZkClient zkClient, String topic) {
-        String str = zkClient.readData(ZkUtils.getTopicConfigPath(topic), true);
-        Properties props = new Properties();
-        if (str != null) {
-            JSONObject map = Json.parseFull(str);
-            if (map == null) {
-                // there are no config overrides
-            } else {
-                checkState(map.getInteger("version") == 1);
-                JSONObject config = map.getJSONObject("config");
-                if (config == null) {
-                    throw new IllegalArgumentException("Invalid topic config: " + str);
-                }
+  /**
+   * Delete every inactive consumer group's information about the given topic in Zookeeper.
+   *
+   * @param zkUtils Zookeeper utilities
+   * @param topic Topic of the consumer group information we wish to delete
+   */
+  @deprecated("This method has been deprecated and will be removed in a future release.", "0.11.0.0")
+  public void  deleteAllConsumerGroupInfoForTopicInZK(ZkUtils zkUtils, String topic) {
+    val groups = zkUtils.getAllConsumerGroupsForTopic(topic);
+    groups.foreach(group => deleteConsumerGroupInfoForTopicInZK(zkUtils, group, topic))
+  }
 
-                props.putAll(config);
+  public void  topicExists(ZkUtils zkUtils, String topic): Boolean =
+    zkUtils.pathExists(getTopicPath(topic));
 
-                // case o => throw new IllegalArgumentException("Unexpected value in config: "  + str)
-            }
+  public void  getBrokerMetadatas(ZkUtils zkUtils, RackAwareMode rackAwareMode = RackAwareMode.Enforced,
+                        Option brokerList<Seq[Int]> = None): Seq<BrokerMetadata> = {
+    val allBrokers = zkUtils.getAllBrokersInCluster();
+    val brokers = brokerList.map(brokerIds => allBrokers.filter(b => brokerIds.contains(b.id))).getOrElse(allBrokers);
+    val brokersWithRack = brokers.filter(_.rack.nonEmpty);
+    if (rackAwareMode == RackAwareMode.Enforced && brokersWithRack.nonEmpty && brokersWithRack.size < brokers.size) {
+      throw new AdminOperationException("Not all brokers have rack information. Add --disable-rack-aware in command line" +;
+        " to make replica assignment without rack information.")
+    }
+    val brokerMetadatas = rackAwareMode match {
+      case RackAwareMode.Disabled => brokers.map(broker => BrokerMetadata(broker.id, None));
+      case RackAwareMode.Safe if brokersWithRack.size < brokers.size =>
+        brokers.map(broker => BrokerMetadata(broker.id, None));
+      case _ => brokers.map(broker => BrokerMetadata(broker.id, broker.rack));
+    }
+    brokerMetadatas.sortBy(_.id);
+  }
+
+  public void  createTopic(ZkUtils zkUtils,
+                  String topic,
+                  Integer partitions,
+                  Integer replicationFactor,
+                  Properties topicConfig = new Properties,
+                  RackAwareMode rackAwareMode = RackAwareMode.Enforced) {
+    val brokerMetadatas = getBrokerMetadatas(zkUtils, rackAwareMode);
+    val replicaAssignment = AdminUtils.assignReplicasToBrokers(brokerMetadatas, partitions, replicationFactor);
+    AdminUtils.createOrUpdateTopicPartitionAssignmentPathInZK(zkUtils, topic, replicaAssignment, topicConfig);
+  }
+
+  public void  validateCreateOrUpdateTopic(ZkUtils zkUtils,
+                                  String topic,
+                                  Map partitionReplicaAssignment<Int, Seq[Int]>,
+                                  Properties config,
+                                  Boolean update): Unit = {
+    // validate arguments;
+    Topic.validate(topic);
+
+    if (!update) {
+      if (topicExists(zkUtils, topic))
+        throw new TopicExistsException(s"Topic '$topic' already exists.");
+      else if (Topic.hasCollisionChars(topic)) {
+        val allTopics = zkUtils.getAllTopics();
+        // check again in case the topic was created in the meantime, otherwise the;
+        // topic could potentially collide with itself;
+        if (allTopics.contains(topic))
+          throw new TopicExistsException(s"Topic '$topic' already exists.");
+        val collidingTopics = allTopics.filter(Topic.hasCollision(topic, _));
+        if (collidingTopics.nonEmpty) {
+          throw new InvalidTopicException(s"Topic '$topic' collides with existing topics: ${collidingTopics.mkString(", ")}");
         }
-        return props;
+      }
     }
 
-    public static Map<String, Properties> fetchAllTopicConfigs(final ZkClient zkClient) {
-        return Utils.map(ZkUtils.getAllTopics(zkClient), new Function1<String, Tuple2<String, Properties>>() {
-            @Override
-            public Tuple2<String, Properties> apply(String topic) {
-                return Tuple2.make(topic, fetchTopicConfig(zkClient, topic));
-            }
-        });
+    if (partitionReplicaAssignment.values.map(_.size).toSet.size != 1)
+      throw new InvalidReplicaAssignmentException("All partitions should have the same number of replicas");
+
+    partitionReplicaAssignment.values.foreach(reps =>
+      if (reps.size != reps.toSet.size)
+        throw new InvalidReplicaAssignmentException("Duplicate replica assignment found: " + partitionReplicaAssignment);
+    );
+
+
+    // Configs only matter if a topic is being created. Changing configs via AlterTopic is not supported;
+    if (!update)
+      LogConfig.validate(config);
+  }
+
+  public void  createOrUpdateTopicPartitionAssignmentPathInZK(ZkUtils zkUtils,
+                                                     String topic,
+                                                     Map partitionReplicaAssignment<Int, Seq[Int]>,
+                                                     Properties config = new Properties,
+                                                     Boolean update = false) {
+    validateCreateOrUpdateTopic(zkUtils, topic, partitionReplicaAssignment, config, update);
+
+    // Configs only matter if a topic is being created. Changing configs via AlterTopic is not supported;
+    if (!update) {
+      // write out the config if there is any, this isn't transactional with the partition assignments;
+      writeEntityConfig(zkUtils, getEntityConfigPath(ConfigType.Topic, topic), config);
     }
 
-    public static TopicMetadata fetchTopicMetadataFromZk(String topic, ZkClient zkClient) {
-        return fetchTopicMetadataFromZk(topic, zkClient, Maps.<Integer, Broker> newHashMap());
+    // create the partition assignment;
+    writeTopicPartitionAssignment(zkUtils, topic, partitionReplicaAssignment, update);
+  }
+
+  private public void  writeTopicPartitionAssignment(ZkUtils zkUtils, String topic, Map replicaAssignment<Int, Seq[Int]>, Boolean update) {
+    try {
+      val zkPath = getTopicPath(topic);
+      val jsonPartitionData = zkUtils.replicaAssignmentZkData(replicaAssignment.map(e => e._1.toString -> e._2));
+
+      if (!update) {
+        info("Topic creation " + jsonPartitionData.toString);
+        zkUtils.createPersistentPath(zkPath, jsonPartitionData);
+      } else {
+        info("Topic update " + jsonPartitionData.toString);
+        zkUtils.updatePersistentPath(zkPath, jsonPartitionData);
+      }
+      debug(String.format("Updated path %s with %s for replica assignment",zkPath, jsonPartitionData))
+    } catch {
+      case ZkNodeExistsException _ => throw new TopicExistsException(s"Topic '$topic' already exists.");
+      case Throwable e2 => throw new AdminOperationException(e2.toString);
     }
+  }
 
-    public static Set<TopicMetadata> fetchTopicMetadataFromZk(Set<String> topics, final ZkClient zkClient) {
-        final Map<Integer, Broker> cachedBrokerInfo = Maps.newHashMap();
+  /**
+   * Update the config for a client and create a change notification so the change will propagate to other brokers.
+   * If clientId is <default>, default clientId config is updated. ClientId configs are used only if <user, clientId>
+   * and <user> configs are not specified.
+   *
+   * @param zkUtils Zookeeper utilities used to write the config to ZK
+   * @param The clientId clientId for which configs are being changed
+   * @param The configs final set of configs that will be applied to the topic. If any new configs need to be added or
+   *                 existing configs need to be deleted, it should be done prior to invoking this API
+   *
+   */
+  public void  changeClientIdConfig(ZkUtils zkUtils, String clientId, Properties configs) {
+    DynamicConfig.Client.validate(configs);
+    changeEntityConfig(zkUtils, ConfigType.Client, clientId, configs);
+  }
 
-        return Utils.mapSet(topics, new Function1<String, TopicMetadata>() {
-            @Override
-            public TopicMetadata apply(String topic) {
-                return fetchTopicMetadataFromZk(topic, zkClient, cachedBrokerInfo);
-            }
-        });
+  /**
+   * Update the config for a <user> or <user, clientId> and create a change notification so the change will propagate to other brokers.
+   * User and/or clientId components of the path may be <default>, indicating that the configuration is the default
+   * value to be applied if a more specific override is not configured.
+   *
+   * @param zkUtils Zookeeper utilities used to write the config to ZK
+   * @param sanitizedEntityName: <sanitizedUserPrincipal> or <sanitizedUserPrincipal>/clients/<clientId>
+   * @param The configs final set of configs that will be applied to the topic. If any new configs need to be added or
+   *                 existing configs need to be deleted, it should be done prior to invoking this API
+   *
+   */
+  public void  changeUserOrUserClientIdConfig(ZkUtils zkUtils, String sanitizedEntityName, Properties configs) {
+    if (sanitizedEntityName == ConfigEntityName.Default || sanitizedEntityName.contains("/clients"))
+      DynamicConfig.Client.validate(configs);
+    else;
+      DynamicConfig.User.validate(configs);
+    changeEntityConfig(zkUtils, ConfigType.User, sanitizedEntityName, configs);
+  }
+
+  public void  validateTopicConfig(ZkUtils zkUtils, String topic, Properties configs): Unit = {
+    Topic.validate(topic);
+    if (!topicExists(zkUtils, topic))
+      throw new AdminOperationException(String.format("Topic \"%s\" does not exist.",topic))
+    // remove the topic overrides;
+    LogConfig.validate(configs);
+  }
+
+  /**
+   * Update the config for an existing topic and create a change notification so the change will propagate to other brokers
+   *
+   * @param zkUtils Zookeeper utilities used to write the config to ZK
+   * @param The topic topic for which configs are being changed
+   * @param The configs final set of configs that will be applied to the topic. If any new configs need to be added or
+   *                 existing configs need to be deleted, it should be done prior to invoking this API
+   *
+   */
+  public void  changeTopicConfig(ZkUtils zkUtils, String topic, Properties configs) {
+    validateTopicConfig(zkUtils, topic, configs);
+    changeEntityConfig(zkUtils, ConfigType.Topic, topic, configs);
+  }
+
+  /**
+    * Override the broker config on some set of brokers. These overrides will be persisted between sessions, and will
+    * override any defaults entered in the broker's config files
+    *
+    * @param Zookeeper zkUtils utilities used to write the config to ZK
+    * @param The brokers list of brokers to apply config changes to
+    * @param The configs config to change, as properties
+    */
+  public void  changeBrokerConfig(ZkUtils zkUtils, Seq brokers<Int>, Properties configs): Unit = {
+    DynamicConfig.Broker.validate(configs);
+    brokers.foreach { broker =>
+      changeEntityConfig(zkUtils, ConfigType.Broker, broker.toString, configs);
     }
+  }
 
-    private static TopicMetadata fetchTopicMetadataFromZk(final String topic, final ZkClient zkClient, final Map<Integer, Broker> cachedBrokerInfo) {
-        if (ZkUtils.pathExists(zkClient, ZkUtils.getTopicPath(topic))) {
-            Multimap<Integer, Integer> topicPartitionAssignment = ZkUtils.getPartitionAssignmentForTopics(zkClient, Lists.newArrayList(topic)).get(topic);
-            List<Tuple2<Integer, Collection<Integer>>> sortedPartitions = Utils.sortWith(Utils.toList(topicPartitionAssignment), new Comparator<Tuple2<Integer, Collection<Integer>>>() {
-                @Override
-                public int compare(Tuple2<Integer, Collection<Integer>> m1, Tuple2<Integer, Collection<Integer>> m2) {
-                    return m1._1 < m2._1 ? -1 : (m1._1.equals(m2._1) ? 0 : -1);
+  private public void  changeEntityConfig(ZkUtils zkUtils, String rootEntityType, String fullSanitizedEntityName, Properties configs) {
+    val sanitizedEntityPath = rootEntityType + '/' + fullSanitizedEntityName;
+    val entityConfigPath = getEntityConfigPath(rootEntityType, fullSanitizedEntityName);
+    // write the new config--may not exist if there were previously no overrides;
+    writeEntityConfig(zkUtils, entityConfigPath, configs);
+
+    // create the change notification;
+    val seqNode = ZkUtils.ConfigChangesPath + "/" + EntityConfigChangeZnodePrefix;
+    val content = Json.encode(getConfigChangeZnodeData(sanitizedEntityPath));
+    zkUtils.createSequentialPersistentPath(seqNode, content);
+  }
+
+  public void  getConfigChangeZnodeData(String sanitizedEntityPath) : Map<String, Any> = {
+    Map("version" -> 2, "entity_path" -> sanitizedEntityPath);
+  }
+
+  /**
+   * Write out the entity config to zk, if there is any
+   */
+  private public void  writeEntityConfig(ZkUtils zkUtils, String entityPath, Properties config) {
+    val map = Map("version" -> 1, "config" -> config.asScala);
+    zkUtils.updatePersistentPath(entityPath, Json.encode(map));
+  }
+
+  /**
+   * Read the entity (topic, broker, client, user or <user, client>) config (if any) from zk
+   * sanitizedEntityName is <topic>, <broker>, <client-id>, <user> or <user>/clients/<client-id>.
+   */
+  public void  fetchEntityConfig(ZkUtils zkUtils, String rootEntityType, String sanitizedEntityName): Properties = {
+    val entityConfigPath = getEntityConfigPath(rootEntityType, sanitizedEntityName);
+    // readDataMaybeNull returns Some(null) if the path exists, but there is no data;
+    val String str = zkUtils.readDataMaybeNull(entityConfigPath)._1.orNull;
+    val props = new Properties();
+    if (str != null) {
+      Json.parseFull(str) match {
+        case None => // there are no config overrides;
+        case Some(Map mapAnon<_, _>) =>
+          val map = mapAnon collect { case (String k, Any v) => k -> v }
+          require(map("version") == 1);
+          map.get("config") match {
+            case Some(Map config<_, _>) =>
+              for(configTup <- config)
+                configTup match {
+                  case (String k, String v) =>
+                    props.setProperty(k, v);
+                  case _ => throw new IllegalArgumentException(s"Invalid ${entityConfigPath} config: ${str}");
                 }
-            });
-            List<PartitionMetadata> partitionMetadata = Utils.mapList(sortedPartitions, new Function1<Tuple2<Integer, Collection<Integer>>, PartitionMetadata>() {
-                @Override
-                public PartitionMetadata apply(Tuple2<Integer, Collection<Integer>> partitionMap) {
-                    int partition = partitionMap._1;
-                    Collection<Integer> replicas = partitionMap._2;
-                    List<Integer> inSyncReplicas = ZkUtils.getInSyncReplicasForPartition(zkClient, topic, partition);
-                    Integer leader = ZkUtils.getLeaderForPartition(zkClient, topic, partition);
-                    logger.debug("replicas = " + replicas + ", in sync replicas = " + inSyncReplicas + ", leader = " + leader);
+            case _ => throw new IllegalArgumentException(s"Invalid ${entityConfigPath} config: ${str}");
+          }
 
-                    Broker leaderInfo = null;
-                    List<Broker> replicaInfo = null;
-                    List<Broker> isrInfo = null;
-                    try {
-                        if (leader == null) {
-                            throw new LeaderNotAvailableException("No leader exists for partition " + partition);
-                        }
+        case _ => throw new IllegalArgumentException(s"Unexpected value in config:(${str}), entity_config_path: ${entityConfigPath}");
+      }
+    }
+    props;
+  }
 
-                        try {
-                            leaderInfo = Utils.head(getBrokerInfoFromCache(zkClient, cachedBrokerInfo, Lists.newArrayList(leader)));
-                        } catch (Throwable e) {
-                            throw new LeaderNotAvailableException(e, "Leader not available for partition [%s,%d]", topic, partition);
-                        }
+  public void  fetchAllTopicConfigs(ZkUtils zkUtils): Map<String, Properties> =
+    zkUtils.getAllTopics().map(topic => (topic, fetchEntityConfig(zkUtils, ConfigType.Topic, topic))).toMap;
 
-                        try {
-                            replicaInfo = getBrokerInfoFromCache(zkClient, cachedBrokerInfo, replicas);
-                            isrInfo = getBrokerInfoFromCache(zkClient, cachedBrokerInfo, inSyncReplicas);
-                        } catch (Throwable e) {
-                            throw new ReplicaNotAvailableException(e);
-                        }
-                        if (replicaInfo.size() < replicas.size()) {
-                            final List<Integer> brokerIds = Utils.mapList(replicaInfo, new Function1<Broker, Integer>() {
-                                @Override
-                                public Integer apply(Broker _) {
-                                    return _.id;
-                                }
-                            });
-                            throw new ReplicaNotAvailableException("Replica information not available for following brokers: " + Utils.filter(replicas, new Predicate<Integer>() {
-                                @Override
-                                public boolean apply(Integer _) {
-                                    return !brokerIds.contains(_);
-                                }
-                            }));
-                        }
-                        if (isrInfo.size() < inSyncReplicas.size()) {
-                            final List<Integer> brokerIds = Utils.mapList(isrInfo, new Function1<Broker, Integer>() {
-                                @Override
-                                public Integer apply(Broker _) {
-                                    return _.id;
-                                }
-                            });
-                            throw new ReplicaNotAvailableException("In Sync Replica information not available for following brokers: " + Utils.filter(inSyncReplicas, new Predicate<Integer>() {
-                                @Override
-                                public boolean apply(Integer _) {
-                                    return !brokerIds.contains(_);
-                                }
-                            }));
-                        }
+  public void  fetchAllEntityConfigs(ZkUtils zkUtils, String entityType): Map<String, Properties> =
+    zkUtils.getAllEntitiesWithConfig(entityType).map(entity => (entity, fetchEntityConfig(zkUtils, entityType, entity))).toMap;
 
-                        return new PartitionMetadata(partition, leaderInfo, replicaInfo, isrInfo, ErrorMapping.NoError);
-                    } catch (Throwable e) {
-                        logger.debug("Error while fetching metadata for partition [{},{}]", topic, partition, e);
-                        return new PartitionMetadata(partition, leaderInfo, replicaInfo, isrInfo, ErrorMapping.codeFor(e.getClass()));
-                    }
-                }
-            });
+  public void  fetchAllChildEntityConfigs(ZkUtils zkUtils, String rootEntityType, String childEntityType): Map<String, Properties> = {
+    public void  entityPaths(ZkUtils zkUtils, Option rootPath<String]): Seq[String> = {
+      val root = rootPath match {
+        case Some(path) => rootEntityType + '/' + path;
+        case None => rootEntityType;
+      }
+      val entityNames = zkUtils.getAllEntitiesWithConfig(root);
+      rootPath match {
+        case Some(path) => entityNames.map(entityName => path + '/' + entityName);
+        case None => entityNames;
+      }
+    }
+    entityPaths(zkUtils, None);
+      .flatMap(entity => entityPaths(zkUtils, Some(entity + '/' + childEntityType)));
+      .map(entityPath => (entityPath, fetchEntityConfig(zkUtils, rootEntityType, entityPath))).toMap;
+  }
 
-            return new TopicMetadata(topic, partitionMetadata);
-        } else {
-            // topic doesn't exist, send appropriate error code
-            return new TopicMetadata(topic, Lists.<PartitionMetadata> newArrayList(), ErrorMapping.UnknownTopicOrPartitionCode);
+  public void  fetchTopicMetadataFromZk(String topic, ZkUtils zkUtils): MetadataResponse.TopicMetadata =
+    fetchTopicMetadataFromZk(topic, zkUtils, mutable.Map.empty<Int, Broker>,
+      ListenerName.forSecurityProtocol(SecurityProtocol.PLAINTEXT))
+
+  public void  fetchTopicMetadataFromZk(Set topics<String>, ZkUtils zkUtils): Set<MetadataResponse.TopicMetadata> =
+    fetchTopicMetadataFromZk(topics, zkUtils, ListenerName.forSecurityProtocol(SecurityProtocol.PLAINTEXT))
+
+  public void  fetchTopicMetadataFromZk(Set topics<String>, ZkUtils zkUtils, SecurityProtocol securityProtocol): Set<MetadataResponse.TopicMetadata> =
+    fetchTopicMetadataFromZk(topics, zkUtils, ListenerName.forSecurityProtocol(SecurityProtocol.PLAINTEXT))
+
+  public void  fetchTopicMetadataFromZk(Set topics<String>, ZkUtils zkUtils, ListenerName listenerName): Set<MetadataResponse.TopicMetadata> = {
+    val cachedBrokerInfo = mutable.Map.empty<Int, Broker>;
+    topics.map(topic => fetchTopicMetadataFromZk(topic, zkUtils, cachedBrokerInfo, listenerName));
+  }
+
+  private public void  fetchTopicMetadataFromZk(String topic,
+                                       ZkUtils zkUtils,
+                                       mutable cachedBrokerInfo.Map<Int, Broker>,
+                                       ListenerName listenerName): MetadataResponse.TopicMetadata = {
+    if (zkUtils.pathExists(getTopicPath(topic))) {
+      val topicPartitionAssignment = zkUtils.getPartitionAssignmentForTopics(List(topic))(topic);
+      val sortedPartitions = topicPartitionAssignment.toList.sortWith((m1, m2) => m1._1 < m2._1);
+      val partitionMetadata = sortedPartitions.map { partitionMap =>
+        val partition = partitionMap._1;
+        val replicas = partitionMap._2;
+        val inSyncReplicas = zkUtils.getInSyncReplicasForPartition(topic, partition);
+        val leader = zkUtils.getLeaderForPartition(topic, partition);
+        debug("replicas = " + replicas + ", in sync replicas = " + inSyncReplicas + ", leader = " + leader);
+
+        var Node leaderInfo = Node.noNode();
+        var Seq replicaInfo<Node> = Nil;
+        var Seq isrInfo<Node> = Nil;
+        try {
+          leaderInfo = leader match {
+            case Some(l) =>
+              try {
+                getBrokerInfoFromCache(zkUtils, cachedBrokerInfo, List(l)).head.getNode(listenerName);
+              } catch {
+                case Throwable e => throw new LeaderNotAvailableException(String.format("Leader not available for partition <%s,%d>",topic, partition), e)
+              }
+            case None => throw new LeaderNotAvailableException("No leader exists for partition " + partition)
+          }
+          try {
+            replicaInfo = getBrokerInfoFromCache(zkUtils, cachedBrokerInfo, replicas).map(_.getNode(listenerName));
+            isrInfo = getBrokerInfoFromCache(zkUtils, cachedBrokerInfo, inSyncReplicas).map(_.getNode(listenerName));
+          } catch {
+            case Throwable e => throw new ReplicaNotAvailableException(e);
+          }
+          if (replicaInfo.size < replicas.size)
+            throw new ReplicaNotAvailableException("Replica information not available for following brokers: " +;
+              replicas.filterNot(replicaInfo.map(_.id).contains(_)).mkString(","));
+          if (isrInfo.size < inSyncReplicas.size)
+            throw new ReplicaNotAvailableException("In Sync Replica information not available for following brokers: " +;
+              inSyncReplicas.filterNot(isrInfo.map(_.id).contains(_)).mkString(","));
+          new MetadataResponse.PartitionMetadata(Errors.NONE, partition, leaderInfo, replicaInfo.asJava, isrInfo.asJava);
+        } catch {
+          case Throwable e =>
+            debug(String.format("Error while fetching metadata for partition <%s,%d>",topic, partition), e)
+            new MetadataResponse.PartitionMetadata(Errors.forException(e), partition, leaderInfo, replicaInfo.asJava, isrInfo.asJava)
         }
+      }
+      new MetadataResponse.TopicMetadata(Errors.NONE, topic, Topic.isInternal(topic), partitionMetadata.asJava);
+    } else {
+      // topic doesn't exist, send appropriate error code;
+      new MetadataResponse.TopicMetadata(Errors.UNKNOWN_TOPIC_OR_PARTITION, topic, Topic.isInternal(topic), java.util.Collections.emptyList());
     }
+  }
 
-    private static List<Broker> getBrokerInfoFromCache(final ZkClient zkClient, final Map<Integer, Broker> cachedBrokerInfo, Collection<Integer> brokerIds) {
-        final List<Integer> failedBrokerIds = Lists.newArrayList();
-        final Map<Integer, Broker> finalCachedBrokerInfo = cachedBrokerInfo;
-        final List<Broker> brokerMetadata = Utils.mapList(brokerIds, new Function1<Integer, Broker>() {
-            @Override
-            public Broker apply(Integer id) {
-                Broker brokerInfo = finalCachedBrokerInfo.get(id);
-                if (brokerInfo != null)
-                    return brokerInfo; // return broker info from the cache
-
-                // fetch it from zookeeper
-                brokerInfo = ZkUtils.getBrokerInfo(zkClient, id);
-                if (brokerInfo != null) {
-                    cachedBrokerInfo.put(id, brokerInfo);
-                    return brokerInfo;
-                }
-
-                failedBrokerIds.add(id);
-
-                return null;
-            }
-        });
-
-        return Utils.filter(brokerMetadata, new Predicate<Broker>() {
-            @Override
-            public boolean apply(Broker input) {
-                return input != null;
-            }
-        });
-
+  private public void  getBrokerInfoFromCache(ZkUtils zkUtils,
+                                     scala cachedBrokerInfo.collection.mutable.Map<Int, Broker>,
+                                     Seq brokerIds<Int]): Seq[Broker> = {
+    var ListBuffer failedBrokerIds<Int> = new ListBuffer();
+    val brokerMetadata = brokerIds.map { id =>
+      val optionalBrokerInfo = cachedBrokerInfo.get(id);
+      optionalBrokerInfo match {
+        case Some(brokerInfo) => Some(brokerInfo) // return broker info from the cache;
+        case None => // fetch it from zookeeper;
+          zkUtils.getBrokerInfo(id) match {
+            case Some(brokerInfo) =>
+              cachedBrokerInfo += (id -> brokerInfo);
+              Some(brokerInfo);
+            case None =>
+              failedBrokerIds += id;
+              None;
+          }
+      }
     }
+    brokerMetadata.filter(_.isDefined).map(_.get);
+  }
 
-    private static int replicaIndex(int firstReplicaIndex, int secondReplicaShift, int replicaIndex, int nBrokers) {
-        int shift = 1 + (secondReplicaShift + replicaIndex) % (nBrokers - 1);
-        return (firstReplicaIndex + shift) % nBrokers;
-    }
+  private public void  replicaIndex Integer firstReplicaIndex, Integer secondReplicaShift, Integer replicaIndex, Integer nBrokers): Integer = {
+    val shift = 1 + (secondReplicaShift + replicaIndex) % (nBrokers - 1)
+    (firstReplicaIndex + shift) % nBrokers;
+  }
 }

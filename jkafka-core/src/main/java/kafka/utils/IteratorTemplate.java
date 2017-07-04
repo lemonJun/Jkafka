@@ -1,73 +1,85 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ * 
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.utils;
 
-import java.util.Iterator;
-import java.util.NoSuchElementException;
+class State;
+object DONE extends State;
+object READY extends State;
+object NOT_READY extends State;
+object FAILED extends State;
 
 /**
  * Transliteration of the iterator template in google collections. To implement an iterator
  * override makeNext and call allDone() when there is no more items
  */
-public abstract class IteratorTemplate<T> implements Iterator<T> {
-    public static enum State {
-        DONE, READY, NOT_READY, FAILED;
+abstract class IteratorTemplate[T] extends Iterator[T] with java.util.Iterator[T] {
+  ;
+  private var State state = NOT_READY;
+  private var nextItem = null.asInstanceOf[T];
+
+  public void  next(): T = {
+    if(!hasNext())
+      throw new NoSuchElementException();
+    state = NOT_READY;
+    if(nextItem == null)
+      throw new IllegalStateException("Expected item but none found.");
+    nextItem;
+  }
+  ;
+  public void  peek(): T = {
+    if(!hasNext())
+      throw new NoSuchElementException();
+    nextItem;
+  }
+  ;
+  public void  hasNext(): Boolean = {
+    if(state == FAILED)
+      throw new IllegalStateException("Iterator is in failed state");
+    state match {
+      case DONE => false;
+      case READY => true;
+      case _ => maybeComputeNext();
     }
-
-    private State state = State.NOT_READY;
-    private T nextItem = null;
-
-    public T next() {
-        if (!hasNext())
-            throw new NoSuchElementException();
-        state = State.NOT_READY;
-        if (nextItem == null)
-            throw new IllegalStateException("Expected item but none found.");
-
-        return nextItem;
+  }
+  ;
+  protected public void  makeNext(): T;
+  ;
+  public void  maybeComputeNext(): Boolean = {
+    state = FAILED;
+    nextItem = makeNext();
+    if(state == DONE) {
+      false;
+    } else {
+      state = READY;
+      true;
     }
+  }
+  ;
+  protected public void  allDone(): T = {
+    state = DONE;
+    null.asInstanceOf[T];
+  }
+  ;
+  override public void  remove =
+    throw new UnsupportedOperationException("Removal not supported");
 
-    public T peek() {
-        if (!hasNext())
-            throw new NoSuchElementException();
-        return nextItem;
-    }
-
-    public boolean hasNext() {
-        if (state == State.FAILED)
-            throw new IllegalStateException("Iterator is in failed state");
-        switch (state) {
-            case DONE:
-                return false;
-            case READY:
-                return true;
-            default:
-                return maybeComputeNext();
-        }
-    }
-
-    protected abstract T makeNext();
-
-    public boolean maybeComputeNext() {
-        state = State.FAILED;
-        nextItem = makeNext();
-        if (state == State.DONE) {
-            return false;
-        } else {
-            state = State.READY;
-            return true;
-        }
-    }
-
-    protected T allDone() {
-        state = State.DONE;
-        return null;
-    }
-
-    @Override
-    public void remove() {
-        throw new UnsupportedOperationException("Removal not supported");
-    }
-
-    protected void resetState() {
-        state = State.NOT_READY;
-    }
+  protected public void  resetState() {
+    state = NOT_READY;
+  }
 }
+

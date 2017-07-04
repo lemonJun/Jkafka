@@ -1,74 +1,72 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.api;
 
-import static kafka.api.ApiUtils.readShortString;
-import static kafka.api.ApiUtils.writeShortString;
-
 import java.nio.ByteBuffer;
-import java.util.Set;
-
-import com.google.common.collect.Sets;
-
-import kafka.common.ErrorMapping;
 import kafka.common.TopicAndPartition;
-import kafka.utils.Callable1;
-import kafka.utils.Function2;
-import kafka.utils.Utils;
+import kafka.api.ApiUtils._;
+import org.apache.kafka.common.protocol.Errors;
+import collection.Set;
 
-public class ControlledShutdownResponse extends RequestOrResponse {
+object ControlledShutdownResponse {
+  public void  readFrom(ByteBuffer buffer): ControlledShutdownResponse = {
+    val correlationId = buffer.getInt;
+    val error = Errors.forCode(buffer.getShort)
+    val numEntries = buffer.getInt;
 
-    public static ControlledShutdownResponse readFrom(ByteBuffer buffer) {
-        int correlationId = buffer.getInt();
-        short errorCode = buffer.getShort();
-        int numEntries = buffer.getInt();
-
-        Set<TopicAndPartition> partitionsRemaining = Sets.newHashSet();
-        for (int i = 0; i < numEntries; ++i) {
-            String topic = readShortString(buffer);
-            int partition = buffer.getInt();
-            partitionsRemaining.add(new TopicAndPartition(topic, partition));
-        }
-
-        return new ControlledShutdownResponse(correlationId, errorCode, partitionsRemaining);
+    var partitionsRemaining = Set<TopicAndPartition>();
+    for (_ <- 0 until numEntries){
+      val topic = readShortString(buffer);
+      val partition = buffer.getInt;
+      partitionsRemaining += new TopicAndPartition(topic, partition);
     }
+    new ControlledShutdownResponse(correlationId, error, partitionsRemaining);
+  }
+}
 
-    public short errorCode; /* ErrorMapping.NoError,*/
-    public Set<TopicAndPartition> partitionsRemaining;
 
-    public ControlledShutdownResponse(int correlationId, Set<TopicAndPartition> partitionsRemaining) {
-        this(correlationId, ErrorMapping.NoError, partitionsRemaining);
+case class ControlledShutdownResponse Integer correlationId,
+                                      Errors error = Errors.NONE,
+                                      Set partitionsRemaining<TopicAndPartition>);
+  extends RequestOrResponse() {
+  public void  sizeInBytes(): Integer ={
+    var size =
+      4 /* correlation id */ +;
+        2 /* error code */ +;
+        4 /* number of responses */
+    for (topicAndPartition <- partitionsRemaining) {
+      size +=
+        2 + topicAndPartition.topic.length /* topic */ +;
+        4 /* partition */
     }
+    size;
+  }
 
-    public ControlledShutdownResponse(int correlationId, short errorCode, Set<TopicAndPartition> partitionsRemaining) {
-        super(correlationId);
-
-        this.errorCode = errorCode;
-        this.partitionsRemaining = partitionsRemaining;
-
+  public void  writeTo(ByteBuffer buffer) {
+    buffer.putInt(correlationId);
+    buffer.putShort(error.code);
+    buffer.putInt(partitionsRemaining.size);
+    for (TopicAndPartition topicAndPartition <- partitionsRemaining){
+      writeShortString(buffer, topicAndPartition.topic);
+      buffer.putInt(topicAndPartition.partition);
     }
+  }
 
-    @Override
-    public int sizeInBytes() {
-        return 4 /* correlation id */ + 2 /* error code */ + 4 /* number of responses */
-                        + Utils.foldLeft(partitionsRemaining, 0, new Function2<Integer, TopicAndPartition, Integer>() {
-                            @Override
-                            public Integer apply(Integer arg1, TopicAndPartition topicAndPartition) {
-                                return arg1 + 2 + topicAndPartition.topic.length() /* topic */ + 4 /* partition */;
-                            }
-                        });
-    }
+  override public void  describe(Boolean details):String = { toString }
 
-    @Override
-    public void writeTo(final ByteBuffer buffer) {
-        buffer.putInt(correlationId);
-        buffer.putShort(errorCode);
-        buffer.putInt(partitionsRemaining.size());
-
-        Utils.foreach(partitionsRemaining, new Callable1<TopicAndPartition>() {
-            @Override
-            public void apply(TopicAndPartition topicAndPartition) {
-                writeShortString(buffer, topicAndPartition.topic);
-                buffer.putInt(topicAndPartition.partition);
-            }
-        });
-    }
 }

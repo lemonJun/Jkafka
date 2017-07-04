@@ -1,149 +1,137 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package kafka.admin;
 
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
+import joptsimple.OptionParser;
+import kafka.utils._;
 import org.I0Itec.zkclient.ZkClient;
 import org.I0Itec.zkclient.exception.ZkNodeExistsException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import kafka.common.{TopicAndPartition, AdminCommandFailedException}
+import collection._;
+import org.apache.kafka.common.utils.Utils;
+import org.apache.kafka.common.security.JaasUtils;
 
-import com.alibaba.fastjson.JSONArray;
-import com.alibaba.fastjson.JSONObject;
-import com.google.common.base.Predicate;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+object PreferredReplicaLeaderElectionCommand extends Logging {
 
-import joptsimple.OptionParser;
-import joptsimple.OptionSet;
-import joptsimple.OptionSpec;
-import kafka.common.AdminCommandFailedException;
-import kafka.common.TopicAndPartition;
-import kafka.utils.Callable1;
-import kafka.utils.CommandLineUtils;
-import kafka.utils.Function1;
-import kafka.utils.Json;
-import kafka.utils.Utils;
-import kafka.utils.ZKStringSerializer;
-import kafka.utils.ZkUtils;
+  public void  main(Array args<String>): Unit = {
+    val parser = new OptionParser(false);
+    val jsonFileOpt = parser.accepts("path-to-json-file", "The JSON file with the list of partitions " +;
+      "for which preferred replica leader election should be done, in the following format - \n" +;
+       "{\"partitions\":\n\t[{\"topic\": \"foo\", \"partition\": 1},\n\t {\"topic\": \"foobar\", \"partition\": 2}]\n}\n" +;
+      "Defaults to all existing partitions");
+      .withRequiredArg;
+      .describedAs("list of partitions for which preferred replica leader election needs to be triggered")
+      .ofType(classOf<String>);
+    val zkConnectOpt = parser.accepts("zookeeper", "The REQUIRED connection string for the zookeeper connection in the " +;
+      "form port host. Multiple URLS can be given to allow fail-over.")
+      .withRequiredArg;
+      .describedAs("urls");
+      .ofType(classOf<String>);
+      ;
+    if(args.length == 0)
+      CommandLineUtils.printUsageAndDie(parser, "This tool causes leadership for each partition to be transferred back to the 'preferred replica'," + ;
+                                                " it can be used to balance leadership among the servers.");
 
-public class PreferredReplicaLeaderElectionCommand {
-    public static void main(String[] args) {
-        OptionParser parser = new OptionParser();
-        OptionSpec<String> jsonFileOpt = parser.accepts("path-to-json-file", "The JSON file with the list of partitions " + "for which preferred replica leader election should be done, in the following format - \n" + "{\"partitions\":\n\t[{\"topic\": \"foo\", \"partition\": 1},\n\t {\"topic\": \"foobar\", \"partition\": 2}]\n}\n" + "Defaults to all existing partitions").withRequiredArg().describedAs("list of partitions for which preferred replica leader election needs to be triggered").ofType(String.class);
-        OptionSpec<String> zkConnectOpt = parser.accepts("zookeeper", "REQUIRED: The connection string for the zookeeper connection in the " + "form host:port. Multiple URLS can be given to allow fail-over.").withRequiredArg().describedAs("urls").ofType(String.class);
+    val options = parser.parse(args : _*);
 
-        OptionSet options = parser.parse(args);
+    CommandLineUtils.checkRequiredArgs(parser, options, zkConnectOpt);
 
-        CommandLineUtils.checkRequiredArgs(parser, options, zkConnectOpt);
+    val zkConnect = options.valueOf(zkConnectOpt);
+    var ZkClient zkClient = null;
+    var ZkUtils zkUtils = null;
+    try {
+      zkClient = ZkUtils.createZkClient(zkConnect, 30000, 30000);
+      zkUtils = ZkUtils(zkConnect, ;
+                        30000,
+                        30000,
+                        JaasUtils.isZkSecurityEnabled());
+      val partitionsForPreferredReplicaElection =
+        if (!options.has(jsonFileOpt))
+          zkUtils.getAllPartitions();
+        else;
+          parsePreferredReplicaElectionData(Utils.readFileAsString(options.valueOf(jsonFileOpt)));
+      val preferredReplicaElectionCommand = new PreferredReplicaLeaderElectionCommand(zkUtils, partitionsForPreferredReplicaElection);
 
-        String zkConnect = options.valueOf(zkConnectOpt);
-        ZkClient zkClient = null;
-
-        try {
-            zkClient = new ZkClient(zkConnect, 30000, 30000, ZKStringSerializer.instance);
-            Set<TopicAndPartition> partitionsForPreferredReplicaElection = (!options.has(jsonFileOpt)) ? ZkUtils.getAllPartitions(zkClient) : parsePreferredReplicaElectionData(Utils.readFileAsString(options.valueOf(jsonFileOpt)));
-            PreferredReplicaLeaderElectionCommand preferredReplicaElectionCommand = new PreferredReplicaLeaderElectionCommand(zkClient, partitionsForPreferredReplicaElection);
-
-            preferredReplicaElectionCommand.moveLeaderToPreferredReplica();
-            System.out.println(String.format("Successfully started preferred replica election for partitions %s", partitionsForPreferredReplicaElection));
-        } catch (Throwable e) {
-            System.out.println("Failed to start preferred replica election");
-            System.out.println(Utils.stackTrace(e));
-        } finally {
-            if (zkClient != null)
-                zkClient.close();
-        }
+      preferredReplicaElectionCommand.moveLeaderToPreferredReplica();
+    } catch {
+      case Throwable e =>
+        println("Failed to start preferred replica election");
+        println(Utils.stackTrace(e));
+    } finally {
+      if (zkClient != null)
+        zkClient.close();
     }
+  }
 
-    public static Set<TopicAndPartition> parsePreferredReplicaElectionData(String jsonString) {
-        JSONObject m = Json.parseFull(jsonString);
-        if (m == null)
-            throw new AdminOperationException("Preferred replica election data is empty");
-
-        JSONArray partitions = m.getJSONArray("partitions");
-        if (partitions == null)
-            throw new AdminOperationException("Preferred replica election data is empty");
-
-        return Utils.mapSet(partitions, new Function1<Object, TopicAndPartition>() {
-            @Override
-            public TopicAndPartition apply(Object arg) {
-                JSONObject p = (JSONObject) arg;
-
-                String topic = p.getString("topic");
-                int partition = p.getIntValue("partition");
-                return new TopicAndPartition(topic, partition);
+  public void  parsePreferredReplicaElectionData(String jsonString): immutable.Set<TopicAndPartition> = {
+    Json.parseFull(jsonString) match {
+      case Some(m) =>
+        m.asInstanceOf<Map[String, Any]>.get("partitions") match {
+          case Some(partitionsList) =>
+            val partitionsRaw = partitionsList.asInstanceOf<List[Map[String, Any]]>;
+            val partitions = partitionsRaw.map { p =>
+              val topic = p.get("topic").get.asInstanceOf<String>;
+              val partition = p.get("partition").get.asInstanceOf<Int>;
+              TopicAndPartition(topic, partition);
             }
-        });
-    }
-
-    public static void writePreferredReplicaElectionData(ZkClient zkClient, Set<TopicAndPartition> partitionsUndergoingPreferredReplicaElection) {
-        String zkPath = ZkUtils.PreferredReplicaLeaderElectionPath;
-        Map<String, Object> map = Maps.newHashMap();
-        final List<Object> partitionsList = Lists.newArrayList();
-        Utils.foreach(partitionsUndergoingPreferredReplicaElection, new Callable1<TopicAndPartition>() {
-            @Override
-            public void apply(TopicAndPartition e) {
-                Map<String, Object> m = Maps.newHashMap();
-                partitionsList.add(m);
-                m.put("topic", e.topic);
-                m.put("partition", e.partition);
-            }
-        });
-
-        map.put("version", 1);
-        map.put("partitions", partitionsList);
-        String jsonData = Json.encode(map);
-        try {
-            ZkUtils.createPersistentPath(zkClient, zkPath, jsonData);
-            logger.info("Created preferred replica election path with {}", jsonData);
-        } catch (ZkNodeExistsException e) {
-            Set<TopicAndPartition> partitionsUndergoingPreferredReplicaElection1 = PreferredReplicaLeaderElectionCommand.parsePreferredReplicaElectionData(ZkUtils.readData(zkClient, zkPath)._1);
-            throw new AdminOperationException("Preferred replica leader election currently in progress for " + "{}. Aborting operation", partitionsUndergoingPreferredReplicaElection1);
-        } catch (Throwable e) {
-            throw new AdminOperationException(e.toString());
+            val duplicatePartitions = CoreUtils.duplicates(partitions);
+            val partitionsSet = partitions.toSet;
+            if (duplicatePartitions.nonEmpty)
+              throw new AdminOperationException(String.format("Preferred replica election data contains duplicate partitions: %s",duplicatePartitions.mkString(",")))
+            partitionsSet;
+          case None => throw new AdminOperationException("Preferred replica election data is empty");
         }
+      case None => throw new AdminOperationException("Preferred replica election data is empty");
     }
+  }
 
-    static Logger logger = LoggerFactory.getLogger(PreferredReplicaLeaderElectionCommand.class);
-
-    public ZkClient zkClient;
-    public Set<TopicAndPartition> partitions;
-
-    public PreferredReplicaLeaderElectionCommand(ZkClient zkClient, Set<TopicAndPartition> partitions) {
-        this.zkClient = zkClient;
-        this.partitions = partitions;
+  public void  writePreferredReplicaElectionData(ZkUtils zkUtils,
+                                        scala partitionsUndergoingPreferredReplicaElection.collection.Set<TopicAndPartition>) {
+    val zkPath = ZkUtils.PreferredReplicaLeaderElectionPath;
+    val jsonData = ZkUtils.preferredReplicaLeaderElectionZkData(partitionsUndergoingPreferredReplicaElection);
+    try {
+      zkUtils.createPersistentPath(zkPath, jsonData);
+      println(String.format("Created preferred replica election path with %s",jsonData))
+    } catch {
+      case ZkNodeExistsException _ =>
+        val partitionsUndergoingPreferredReplicaElection =
+          PreferredReplicaLeaderElectionCommand.parsePreferredReplicaElectionData(zkUtils.readData(zkPath)._1);
+        throw new AdminOperationException("Preferred replica leader election currently in progress for " +;
+          String.format("%s. Aborting operation",partitionsUndergoingPreferredReplicaElection))
+      case Throwable e2 => throw new AdminOperationException(e2.toString);
     }
+  }
+}
 
-    public void moveLeaderToPreferredReplica() {
-        try {
-            Set<TopicAndPartition> validPartitions = Utils.filterSet(partitions, new Predicate<TopicAndPartition>() {
-                @Override
-                public boolean apply(TopicAndPartition p) {
-                    return validatePartition(zkClient, p.topic, p.partition);
-                }
-            });
-            PreferredReplicaLeaderElectionCommand.writePreferredReplicaElectionData(zkClient, validPartitions);
-        } catch (Throwable e) {
-            throw new AdminCommandFailedException(e, "Admin command failed");
-        }
+class PreferredReplicaLeaderElectionCommand(ZkUtils zkUtils, scala partitionsFromUser.collection.Set<TopicAndPartition>) {
+  public void  moveLeaderToPreferredReplica() = {
+    try {
+      val topics = partitionsFromUser.map(_.topic).toSet;
+      val partitionsFromZk = zkUtils.getPartitionsForTopics(topics.toSeq).flatMap{ case (topic, partitions) =>
+        partitions.map(TopicAndPartition(topic, _));
+      }.toSet;
+
+      val (validPartitions, invalidPartitions) = partitionsFromUser.partition(partitionsFromZk.contains);
+      PreferredReplicaLeaderElectionCommand.writePreferredReplicaElectionData(zkUtils, validPartitions);
+
+      println(String.format("Successfully started preferred replica election for partitions %s",validPartitions))
+      invalidPartitions.foreach(p => println(String.format("Skipping preferred replica leader election for partition %s since it doesn't exist.",p)))
+    } catch {
+      case Throwable e => throw new AdminCommandFailedException("Admin command failed", e);
     }
-
-    public boolean validatePartition(ZkClient zkClient, String topic, int partition) {
-        // check if partition exists
-        Collection<Integer> partitions = ZkUtils.getPartitionsForTopics(zkClient, Lists.newArrayList(topic)).get(topic);
-        if (partitions == null) {
-            logger.error("Skipping preferred replica leader election for partition " + "[{},{}] since topic {} doesn't exist", topic, partition, topic);
-            return false;
-        }
-
-        if (partitions.contains(partition)) {
-            return true;
-        }
-
-        logger.error("Skipping preferred replica leader election for partition [{},{}] since it doesn't exist", topic, partition);
-        return false;
-    }
+  }
 }

@@ -1,88 +1,80 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.consumer;
 
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent._;
+import java.util.concurrent.atomic._;
+import kafka.message._;
+import kafka.utils.Logging;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+@deprecated("This class has been deprecated and will be removed in a future release.", "0.11.0.0")
+class PartitionTopicInfo(val String topic,
+                         val Integer partitionId,
+                         private val BlockingQueue chunkQueue<FetchedDataChunk>,
+                         private val AtomicLong consumedOffset,
+                         private val AtomicLong fetchedOffset,
+                         private val AtomicInteger fetchSize,
+                         private val String clientId) extends Logging {
 
-import com.google.common.collect.Lists;
+  debug("initial consumer offset of " + this + " is " + consumedOffset.get);
+  debug("initial fetch offset of " + this + " is " + fetchedOffset.get);
 
-import kafka.message.ByteBufferMessageSet;
-import kafka.utils.Utils;
+  private val consumerTopicStats = ConsumerTopicStatsRegistry.getConsumerTopicStat(clientId);
 
-public class PartitionTopicInfo {
-    public static final long InvalidOffset = -1L;
+  public void  getConsumeOffset() = consumedOffset.get;
 
-    public static boolean isOffsetInvalid(long offset) {
-        return offset < 0L;
+  public void  getFetchOffset() = fetchedOffset.get;
+
+  public void  resetConsumeOffset(Long newConsumeOffset) = {
+    consumedOffset.set(newConsumeOffset);
+    debug("reset consume offset of " + this + " to " + newConsumeOffset);
+  }
+
+  public void  resetFetchOffset(Long newFetchOffset) = {
+    fetchedOffset.set(newFetchOffset);
+    debug(String.format("reset fetch offset of ( %s ) to %d",this, newFetchOffset))
+  }
+
+  /**
+   * Enqueue a message set for processing.
+   */
+  public void  enqueue(ByteBufferMessageSet messages) {
+    val size = messages.validBytes;
+    if(size > 0) {
+      val next = messages.shallowIterator.toSeq.last.nextOffset;
+      trace("Updating fetch offset = " + fetchedOffset.get + " to " + next);
+      chunkQueue.put(new FetchedDataChunk(messages, this, fetchedOffset.get));
+      fetchedOffset.set(next);
+      debug(String.format("updated fetch offset of (%s) to %d",this, next))
+      consumerTopicStats.getConsumerTopicStats(topic).byteRate.mark(size);
+      consumerTopicStats.getConsumerAllTopicStats().byteRate.mark(size);
+    } else if(messages.sizeInBytes > 0) {
+      chunkQueue.put(new FetchedDataChunk(messages, this, fetchedOffset.get));
     }
+  }
 
-    public String topic;
-    public int partitionId;
-    private BlockingQueue<FetchedDataChunk> chunkQueue;
-    private AtomicLong consumedOffset;
-    private AtomicLong fetchedOffset;
-    private AtomicInteger fetchSize;
-    private String clientId;
+  override public void  String toString = topic + ":" + partitionId.toString + ": fetched offset = " + fetchedOffset.get +;
+    ": consumed offset = " + consumedOffset.get;
+}
 
-    public PartitionTopicInfo(String topic, int partitionId, BlockingQueue<FetchedDataChunk> chunkQueue, AtomicLong consumedOffset, AtomicLong fetchedOffset, AtomicInteger fetchSize, String clientId) {
-        this.topic = topic;
-        this.partitionId = partitionId;
-        this.chunkQueue = chunkQueue;
-        this.consumedOffset = consumedOffset;
-        this.fetchedOffset = fetchedOffset;
-        this.fetchSize = fetchSize;
-        this.clientId = clientId;
+@deprecated("This object has been deprecated and will be removed in a future release.", "0.11.0.0")
+object PartitionTopicInfo {
+  val InvalidOffset = -1L;
 
-        logger.debug("initial consumer offset of {} is {}", this, consumedOffset.get());
-        logger.debug("initial fetch offset of {} is {}", this, fetchedOffset.get());
-        consumerTopicStats = ConsumerTopicStatsRegistry.getConsumerTopicStat(clientId);
-    }
-
-    Logger logger = LoggerFactory.getLogger(PartitionTopicInfo.class);
-
-    private ConsumerTopicStatsRegistry.ConsumerTopicStats consumerTopicStats;
-
-    public long getConsumeOffset() {
-        return consumedOffset.get();
-    }
-
-    public long getFetchOffset() {
-        return fetchedOffset.get();
-    }
-
-    public void resetConsumeOffset(long newConsumeOffset) {
-        consumedOffset.set(newConsumeOffset);
-        logger.debug("reset consume offset of {} to {}", this, newConsumeOffset);
-    }
-
-    public void resetFetchOffset(long newFetchOffset) {
-        fetchedOffset.set(newFetchOffset);
-        logger.debug("reset fetch offset of ({}) to {}", this, newFetchOffset);
-    }
-
-    /**
-     * Enqueue a message set for processing.
-     */
-    public void enqueue(ByteBufferMessageSet messages) {
-        int size = messages.validBytes();
-        if (size > 0) {
-            long next = Utils.last(Lists.newArrayList(messages.shallowIterator())).nextOffset();
-            logger.trace("Updating fetch offset = {} to {}", fetchedOffset.get(), next);
-            Utils.put(chunkQueue, new FetchedDataChunk(messages, this, fetchedOffset.get()));
-            fetchedOffset.set(next);
-            logger.debug("updated fetch offset of ({}) to {}", this, next);
-            consumerTopicStats.getConsumerTopicStats(topic).byteRate.mark(size);
-            consumerTopicStats.getConsumerAllTopicStats().byteRate.mark(size);
-        } else if (messages.sizeInBytes() > 0) {
-            Utils.put(chunkQueue, new FetchedDataChunk(messages, this, fetchedOffset.get()));
-        }
-    }
-
-    @Override
-    public String toString() {
-        return topic + ":" + partitionId + ": fetched offset = " + fetchedOffset.get() + ": consumed offset = " + consumedOffset.get();
-    }
+  public void  isOffsetInvalid(Long offset) = offset < 0L;
 }

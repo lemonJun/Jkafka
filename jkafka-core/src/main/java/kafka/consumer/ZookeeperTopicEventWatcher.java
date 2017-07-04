@@ -1,99 +1,103 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.consumer;
 
-import java.util.List;
+import scala.collection.JavaConverters._;
+import kafka.utils.{ZkUtils, Logging}
+import org.I0Itec.zkclient.{IZkStateListener, IZkChildListener}
+import org.apache.zookeeper.Watcher.Event.KeeperState;
 
-import org.I0Itec.zkclient.IZkChildListener;
-import org.I0Itec.zkclient.IZkStateListener;
-import org.I0Itec.zkclient.ZkClient;
-import org.apache.zookeeper.Watcher;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+@deprecated("This class has been deprecated and will be removed in a future release.", "0.11.0.0")
+class ZookeeperTopicEventWatcher(val ZkUtils zkUtils,
+    val TopicEventHandler eventHandler<String>) extends Logging {
 
-import kafka.utils.ZkUtils;
+  val lock = new Object();
 
-public class ZookeeperTopicEventWatcher {
-    public ZkClient zkClient;
-    public TopicEventHandler<String> eventHandler;
+  startWatchingTopicEvents();
 
-    public ZookeeperTopicEventWatcher(ZkClient zkClient, TopicEventHandler<String> eventHandler) {
-        this.zkClient = zkClient;
-        this.eventHandler = eventHandler;
-        startWatchingTopicEvents();
+  private public void  startWatchingTopicEvents() {
+    val topicEventListener = new ZkTopicEventListener();
+    zkUtils.makeSurePersistentPathExists(ZkUtils.BrokerTopicsPath);
+
+    zkUtils.zkClient.subscribeStateChanges(
+      new ZkSessionExpireListener(topicEventListener));
+
+    val topics = zkUtils.zkClient.subscribeChildChanges(
+      ZkUtils.BrokerTopicsPath, topicEventListener);
+
+    // call to bootstrap topic list;
+    topicEventListener.handleChildChange(ZkUtils.BrokerTopicsPath, topics);
+  }
+
+  private public void  stopWatchingTopicEvents() { zkUtils.zkClient.unsubscribeAll() }
+
+  public void  shutdown() {
+    lock.synchronized {
+      info("Shutting down topic event watcher.");
+      if (zkUtils != null) {
+        stopWatchingTopicEvents();
+      }
+      else {
+        warn("Cannot shutdown since the embedded zookeeper client has already closed.");
+      }
+    }
+  }
+
+  class ZkTopicEventListener extends IZkChildListener {
+
+    @throws<Exception>
+    public void  handleChildChange(String parent, java children.util.List<String>) {
+      lock.synchronized {
+        try {
+          if (zkUtils != null) {
+            val latestTopics = zkUtils.zkClient.getChildren(ZkUtils.BrokerTopicsPath).asScala;
+            debug(String.format("all topics: %s",latestTopics))
+            eventHandler.handleTopicEvent(latestTopics);
+          }
+        }
+        catch {
+          case Throwable e =>
+            error("error in handling child changes", e);
+        }
+      }
     }
 
-    Logger logger = LoggerFactory.getLogger(ZookeeperTopicEventWatcher.class);
-    public Object lock = new Object();
+  }
 
-    private void startWatchingTopicEvents() {
-        ZkTopicEventListener topicEventListener = new ZkTopicEventListener();
-        ZkUtils.makeSurePersistentPathExists(zkClient, ZkUtils.BrokerTopicsPath);
+  class ZkSessionExpireListener(val ZkTopicEventListener topicEventListener);
+    extends IZkStateListener {
 
-        zkClient.subscribeStateChanges(new ZkSessionExpireListener(topicEventListener));
+    @throws<Exception>
+    public void  handleStateChanged(KeeperState state) { }
 
-        List<String> topics = zkClient.subscribeChildChanges(ZkUtils.BrokerTopicsPath, topicEventListener);
-
-        // call to bootstrap topic list
-        topicEventListener.handleChildChange(ZkUtils.BrokerTopicsPath, topics);
+    @throws<Exception>
+    public void  handleNewSession() {
+      lock.synchronized {
+        if (zkUtils != null) {
+          info("ZK resubscribing expired topic event listener to topic registry");
+          zkUtils.zkClient.subscribeChildChanges(ZkUtils.BrokerTopicsPath, topicEventListener);
+        }
+      }
     }
 
-    private void stopWatchingTopicEvents() {
-        zkClient.unsubscribeAll();
+    override public void  handleSessionEstablishmentError(Throwable error): Unit = {
+      //no-op ZookeeperConsumerConnector should log error.;
     }
-
-    public void shutdown() {
-        synchronized (lock) {
-            logger.info("Shutting down topic event watcher.");
-            if (zkClient != null) {
-                stopWatchingTopicEvents();
-            } else {
-                logger.warn("Cannot shutdown since the embedded zookeeper client has already closed.");
-            }
-        }
-    }
-
-    class ZkTopicEventListener implements IZkChildListener {
-
-        @Override
-        public void handleChildChange(String s, List<String> strings) {
-            synchronized (lock) {
-                try {
-                    if (zkClient != null) {
-                        List<String> latestTopics = zkClient.getChildren(ZkUtils.BrokerTopicsPath);
-                        logger.debug("all topics: {}", latestTopics);
-                        eventHandler.handleTopicEvent(latestTopics);
-                    }
-                } catch (Throwable e) {
-                    logger.error("error in handling child changes", e);
-                }
-            }
-        }
-    }
-
-    class ZkSessionExpireListener implements IZkStateListener {
-        public ZkTopicEventListener topicEventListener;
-
-        ZkSessionExpireListener(ZkTopicEventListener topicEventListener) {
-            this.topicEventListener = topicEventListener;
-        }
-
-        @Override
-        public void handleStateChanged(Watcher.Event.KeeperState keeperState) throws Exception {
-
-        }
-
-        @Override
-        public void handleNewSession() throws Exception {
-            synchronized (lock) {
-                if (zkClient != null) {
-                    logger.info("ZK expired: resubscribing topic event listener to topic registry");
-                    zkClient.subscribeChildChanges(ZkUtils.BrokerTopicsPath, topicEventListener);
-                }
-            }
-        }
-
-        public void handleSessionEstablishmentError(Throwable throwable) throws Exception {
-
-        }
-    }
-
+  }
 }
+

@@ -5,7 +5,7 @@
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
- * 
+ *
  *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
@@ -27,7 +27,7 @@ import java.nio.channels.Selector;
 
 /**
  * an useful tools to close some streams or file descriptions
- * 
+ *
  * @author adyliu (imxylz@gmail.com)
  * @since 1.0
  */
@@ -96,7 +96,7 @@ public final class Closer {
 
     /**
      * Close a closeable object quietly(not throwing {@link IOException})
-     * 
+     *
      * @param closeable A closeable object
      * @see java.io.Closeable
      */

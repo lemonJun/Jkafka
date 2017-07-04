@@ -1,11 +1,15 @@
 package kafka.utils;
 
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
 import com.google.common.base.Function;
 import com.google.common.collect.Maps;
-import kafka.common.KafkaException;
 
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import kafka.common.KafkaException;
 
 public class Pool<K, V> implements Iterable<Map.Entry<K, V>> {
     public Function<K, V> valueFactory;

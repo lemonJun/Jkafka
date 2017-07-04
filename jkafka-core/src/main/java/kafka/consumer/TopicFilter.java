@@ -1,71 +1,50 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package kafka.consumer;
 
-import kafka.utils.Logging;
-import java.util.regex.{Pattern, PatternSyntaxException}
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
-import org.apache.kafka.common.internals.Topic;
+public abstract class TopicFilter {
+    public final String rawRegex;
 
-@deprecated("This class has been deprecated and will be removed in a future release.", "0.11.0.0")
-sealed abstract class TopicFilter(String rawRegex) extends Logging {
+    protected TopicFilter(String rawRegex) {
+        this.rawRegex = rawRegex;
 
-  val regex = rawRegex;
-          .trim;
-          .replace(',', '|');
-          .replace(" ", "");
-          .replaceAll("""^<"'>+""","");
-          .replaceAll("""<"'>+$""","") // property files may bring quotes;
+        regex = rawRegex.trim().replace(',', '|').replace(" ", "").replaceAll("^[\"']+", "").replaceAll("[\"']+$", ""); // property files may bring quotes
 
-  try {
-    Pattern.compile(regex);
-  }
-  catch {
-    case PatternSyntaxException _ =>
-      throw new RuntimeException(regex + " is an invalid regex.");
-  }
+        try {
+            Pattern.compile(regex);
+        } catch (PatternSyntaxException e) {
+            throw new RuntimeException(regex + " is an invalid regex.");
+        }
 
-  override public void  toString = regex;
+    }
 
-  public void  isTopicAllowed(String topic, Boolean excludeInternalTopics): Boolean;
+    public String regex;
+
+    @Override
+    public String toString() {
+        return regex;
+    }
+
+    public abstract boolean isTopicAllowed(String topic);
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
+
+        TopicFilter that = (TopicFilter) o;
+
+        if (regex != null ? !regex.equals(that.regex) : that.regex != null)
+            return false;
+
+        return true;
+    }
+
+    @Override
+    public int hashCode() {
+        return regex != null ? regex.hashCode() : 0;
+    }
 }
-
-@deprecated("This class has been deprecated and will be removed in a future release.", "0.11.0.0")
-case class Whitelist(String rawRegex) extends TopicFilter(rawRegex) {
-  override public void  isTopicAllowed(String topic, Boolean excludeInternalTopics) = {
-    val allowed = topic.matches(regex) && !(Topic.isInternal(topic) && excludeInternalTopics);
-
-    debug(String.format("%s %s",
-      topic, if (allowed) "allowed" else "filtered"))
-
-    allowed;
-  }
-}
-
-@deprecated("This class has been deprecated and will be removed in a future release.", "0.11.0.0")
-case class Blacklist(String rawRegex) extends TopicFilter(rawRegex) {
-  override public void  isTopicAllowed(String topic, Boolean excludeInternalTopics) = {
-    val allowed = (!topic.matches(regex)) && !(Topic.isInternal(topic) && excludeInternalTopics);
-
-    debug(String.format("%s %s",
-      topic, if (allowed) "allowed" else "filtered"))
-
-    allowed;
-  }
-}
-

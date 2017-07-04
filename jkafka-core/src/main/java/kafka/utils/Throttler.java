@@ -50,7 +50,7 @@ public class Throttler {
                 boolean needAdjustment = !(throttleDown ^ (rateInSecs > desiredRatePerSec));
                 if (needAdjustment) {
                     // solve for the amount of time to sleep to make us hit the desired rate
-                    double desiredRateMs = desiredRatePerSec / (double) Times.MsPerSec;
+                    double desiredRateMs = desiredRatePerSec / Times.MsPerSec;
                     long elapsedMs = elapsedNs / Times.NsPerMs;
                     long sleepTime = Math.round(observedSoFar / desiredRateMs - elapsedMs);
                     if (sleepTime > 0) {

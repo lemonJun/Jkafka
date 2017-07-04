@@ -22,11 +22,15 @@ import java.util.concurrent.CountDownLatch;
 
 import org.apache.kafka.common.internals.FatalExitError;
 
-abstract class ShutdownableThread(val String name, val Boolean isInterruptible = true);
-        extends Thread(name) with Logging {
+abstract class ShutdownableThread(
+val String name,
+val Boolean isInterruptible=true);extends
+
+Thread(name) with Logging {
   this.setDaemon(false);
   this.logIdent = "[" + name + "]: ";
   val AtomicBoolean isRunning = new AtomicBoolean(true);
+
   private val shutdownLatch = new CountDownLatch(1);
 
   public void  shutdown(): Unit = {
@@ -57,7 +61,9 @@ abstract class ShutdownableThread(val String name, val Boolean isInterruptible =
    */
   public void  doWork(): Unit;
 
-  override public void  run(): Unit = {
+  override
+
+    public void  run(): Unit = {
     info("Starting");
     try {
       while (isRunning.get);

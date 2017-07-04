@@ -1,4 +1,4 @@
-package kafka.utils;
+﻿package kafka.utils;
 
 /**
  * The normal system implementation of time functions

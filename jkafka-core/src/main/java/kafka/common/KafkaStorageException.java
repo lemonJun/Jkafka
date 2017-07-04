@@ -1,25 +1,17 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
-*/
 package kafka.common;
 
-/**
- * Kafka exception caused by real IOs.
-*/
-class KafkaStorageException(String message, Throwable t) extends RuntimeException(message, t) {
-  public void  this(String message) = this(message, null);
-  public void  this(Throwable t) = this("", t);
+import java.io.IOException;
+
+public class KafkaStorageException extends KafkaException {
+    public KafkaStorageException(String format, Object... args) {
+        super(format, args);
+    }
+
+    public KafkaStorageException(IOException e, String format, Object... args) {
+        super(e, format, args);
+    }
+
+    public KafkaStorageException(Throwable e, String format, Object... args) {
+        super(e, format, args);
+    }
 }

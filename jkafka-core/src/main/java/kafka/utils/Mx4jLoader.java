@@ -5,7 +5,7 @@
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
- * 
+ *
  *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
@@ -22,15 +22,15 @@ import org.slf4j.LoggerFactory;
 
 /**
  * If mx4j-tools is in the classpath call maybeLoad to load the HTTP interface of mx4j.
- * 
+ *
  * The default port is 8082. To override that provide e.g. -Dmx4jport=8083 The default listen
  * address is 0.0.0.0. To override that provide -Dmx4jaddress=127.0.0.1 This feature must be
  * enabled with -Dmx4jenable=true
- * 
+ *
  * <p>
  * see https://github.com/apache/cassandra/blob/trunk/src/java/org/apache/cassandra/utils/
  * Mx4jTool.java
- * 
+ *
  * @author adyliu (imxylz@gmail.com)
  * @since 1.0
  */
@@ -44,7 +44,7 @@ public class Mx4jLoader {
 
     /**
      * Starts a JMX over http interface if and mx4j-tools.jar is in the classpath.
-     * 
+     *
      * @return true if successfully loaded.
      */
     public synchronized static boolean maybeLoad() {

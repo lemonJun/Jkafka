@@ -1,11 +1,15 @@
 package kafka.utils;
 
+import static com.google.common.base.Preconditions.checkState;
+
+import java.util.Enumeration;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.*;
-
-import static com.google.common.base.Preconditions.checkState;
 
 public class VerifiableProperties {
     public final Properties props;

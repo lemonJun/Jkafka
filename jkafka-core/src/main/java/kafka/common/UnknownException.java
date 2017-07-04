@@ -20,4 +20,6 @@ package kafka.common;
 /**
  * If we don't know what else it is, call it this
  */
-class UnknownException extends RuntimeException;
+public class UnknownException extends RuntimeException {
+    
+}

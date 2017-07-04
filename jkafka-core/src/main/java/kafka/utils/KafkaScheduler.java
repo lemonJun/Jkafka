@@ -1,134 +1,102 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- * 
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package kafka.utils;
 
-import java.util.concurrent._;
-import atomic._;
-import org.apache.kafka.common.utils.Utils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-/**
- * A scheduler for running jobs
- * 
- * This interface controls a job scheduler that allows scheduling either repeating background jobs 
- * that execute periodically or delayed one-time actions that are scheduled in the future.
- */
-trait Scheduler {
-  ;
-  /**
-   * Initialize this scheduler so it is ready to accept scheduling of tasks
-   */
-  public void  startup();
-  ;
-  /**
-   * Shutdown this scheduler. When this method is complete no more executions of background tasks will occur. 
-   * This includes tasks scheduled with a delayed execution.
-   */
-  public void  shutdown();
-  ;
-  /**
-   * Check if the scheduler has been started
-   */
-  public void  Boolean isStarted;
-  ;
-  /**
-   * Schedule a task
-   * @param name The name of this task
-   * @param delay The amount of time to wait before the first execution
-   * @param period The period with which to execute the task. If < 0 the task will execute only once.
-   * @param unit The unit for the preceding times.
-   */
-  public void  schedule(String name, fun: ()=>Unit, Long delay = 0, Long period = -1, TimeUnit unit = TimeUnit.MILLISECONDS);
-}
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * A scheduler based on java.util.concurrent.ScheduledThreadPoolExecutor
- * 
- * It has a pool of kafka-scheduler- threads that do the actual work.
- * 
- * @param threads The number of threads in the thread pool
- * @param threadNamePrefix The name to use for scheduler threads. This prefix will have a number appended to it.
- * @param daemon If true the scheduler threads will be "daemon" threads and will not block jvm shutdown.
- */
-@threadsafe
-class KafkaScheduler(val Integer threads, ;
-                     val String threadNamePrefix = "kafka-scheduler-", ;
-                     Boolean daemon = true) extends Scheduler with Logging {
-  private var ScheduledThreadPoolExecutor executor = null;
-  private val schedulerThreadId = new AtomicInteger(0);
+public class KafkaScheduler extends Scheduler {
+    public final int threads;
+    public final String threadNamePrefix /*= "kafka-scheduler-"*/;
+    public final boolean daemon/* = true*/;
 
-  override public void  startup() {
-    debug("Initializing task scheduler.");
-    this synchronized {
-      if(isStarted)
-        throw new IllegalStateException("This scheduler has already been started!");
-      executor = new ScheduledThreadPoolExecutor(threads);
-      executor.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
-      executor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
-      executor.setThreadFactory(new ThreadFactory() {
-                                  public void  newThread(Runnable runnable): Thread = ;
-                                    Utils.newThread(threadNamePrefix + schedulerThreadId.getAndIncrement(), runnable, daemon);
-                                });
+    /**
+     * A scheduler based on java.util.concurrent.ScheduledThreadPoolExecutor
+     * <p/>
+     * It has a pool of kafka-scheduler- threads that do the actual work.
+     *
+     * @param threads          The number of threads in the thread pool
+     * @param threadNamePrefix The name to use for scheduler threads. This prefix will have a number appended to it.
+     * @param daemon           If true the scheduler threads will be "daemon" threads and will not block jvm shutdown.
+     */
+    public KafkaScheduler(int threads, String threadNamePrefix, boolean daemon) {
+        this.threads = threads;
+        this.threadNamePrefix = threadNamePrefix;
+        this.daemon = daemon;
     }
-  }
-  ;
-  override public void  shutdown() {
-    debug("Shutting down task scheduler.");
-    // We use the local variable to avoid NullPointerException if another thread shuts down scheduler at same time.;
-    val cachedExecutor = this.executor;
-    if (cachedExecutor != null) {
-      this synchronized {
-        cachedExecutor.shutdown();
-        this.executor = null;
-      }
-      cachedExecutor.awaitTermination(1, TimeUnit.DAYS);
-    }
-  }
 
-  public void  schedule(String name, fun: ()=>Unit, Long delay, Long period, TimeUnit unit) {
-    debug("Scheduling task %s with initial delay %d ms and period %d ms.";
-        .format(name, TimeUnit.MILLISECONDS.convert(delay, unit), TimeUnit.MILLISECONDS.convert(period, unit)))
-    this synchronized {
-      ensureRunning;
-      val runnable = CoreUtils.runnable {
-        try {
-          trace(String.format("Beginning execution of scheduled task '%s'.",name))
-          fun();
-        } catch {
-          case Throwable t => error("Uncaught exception in scheduled task '" + name +"'", t);
-        } finally {
-          trace(String.format("Completed execution of scheduled task '%s'.",name))
+    public KafkaScheduler(int threads, String threadNamePrefix) {
+        this(threads, threadNamePrefix, true);
+    }
+
+    public KafkaScheduler(int threads) {
+        this(threads, "kafka-scheduler-", true);
+    }
+
+    volatile private ScheduledThreadPoolExecutor executor = null;
+    private AtomicInteger schedulerThreadId = new AtomicInteger(0);
+
+    Logger logger = LoggerFactory.getLogger(KafkaScheduler.class);
+
+    @Override
+    public void startup() {
+        logger.debug("Initializing task scheduler.");
+        synchronized (this) {
+            if (executor != null)
+                throw new IllegalStateException("This scheduler has already been started!");
+            executor = new ScheduledThreadPoolExecutor(threads);
+            executor.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
+            executor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+            executor.setThreadFactory(new ThreadFactory() {
+                @Override
+                public Thread newThread(Runnable r) {
+                    return Utils.newThread(threadNamePrefix + schedulerThreadId.getAndIncrement(), r, daemon);
+                }
+            });
         }
-      }
-      if(period >= 0)
-        executor.scheduleAtFixedRate(runnable, delay, period, unit);
-      else;
-        executor.schedule(runnable, delay, unit);
     }
-  }
-  ;
-  public void  Boolean isStarted = {
-    this synchronized {
-      executor != null;
+
+    @Override
+    public void shutdown() {
+        logger.debug("Shutting down task scheduler.");
+        ensureStarted();
+        executor.shutdown();
+        try {
+            executor.awaitTermination(1, TimeUnit.DAYS);
+        } catch (InterruptedException e) {
+            logger.warn("shutdown", e);
+        }
+        this.executor = null;
     }
-  }
-  ;
-  private public void  ensureRunning = {
-    if(!isStarted)
-      throw new IllegalStateException("Kafka scheduler is not running.");
-  }
+
+    @Override
+    public void schedule(final String name, final Runnable fun, long delay, long period, TimeUnit unit) {
+        logger.debug("Scheduling task {} with initial delay {} ms and period {} ms.", name, TimeUnit.MILLISECONDS.convert(delay, unit), TimeUnit.MILLISECONDS.convert(period, unit));
+        ensureStarted();
+        Runnable runnable = new Runnable() {
+            public void run() {
+                try {
+                    logger.trace("Begining execution of scheduled task '{}'.", name);
+                    fun.run();
+                } catch (Throwable e) {
+                    logger.error("Uncaught exception in scheduled task '{}'", name, e);
+                } finally {
+                    logger.trace("Completed execution of scheduled task '{}'.", name);
+                }
+            }
+        };
+
+        if (period >= 0)
+            executor.scheduleAtFixedRate(runnable, delay, period, unit);
+        else
+            executor.schedule(runnable, delay, unit);
+    }
+
+    private void ensureStarted() {
+        if (executor == null)
+            throw new IllegalStateException("Kafka scheduler has not been started");
+    }
 }

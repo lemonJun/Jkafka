@@ -19,8 +19,19 @@ package kafka.common;
 
 /**
  * Indicates the client has requested a range no longer available on the server
+ * @author adyliu (imxylz@gmail.com)
+ * @since 1.0
  */
-class UnknownMagicByteException(String message) extends RuntimeException(message) {
-  public void  this() = this(null);
-}
+public class UnknownMagicByteException extends RuntimeException {
 
+    private static final long serialVersionUID = 1L;
+
+    public UnknownMagicByteException() {
+        super();
+    }
+
+    public UnknownMagicByteException(String message) {
+        super(message);
+    }
+
+}

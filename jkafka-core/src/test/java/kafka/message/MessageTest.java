@@ -1,16 +1,20 @@
 package kafka.message;
 
-import com.google.common.collect.Lists;
-import kafka.utils.TestUtils;
-import kafka.utils.Utils;
-import org.junit.Before;
-import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
 
-import static org.junit.Assert.*;
+import org.junit.Before;
+import org.junit.Test;
+
+import com.google.common.collect.Lists;
+
+import kafka.utils.TestUtils;
+import kafka.utils.Utils;
 
 public class MessageTest {
     public static class MessageTestVal {
@@ -31,9 +35,9 @@ public class MessageTest {
 
     @Before
     public void setUp() {
-        byte[][] keys = new byte[][]{null, "key".getBytes(), "".getBytes()};
-        byte[][] vals = new byte[][]{"value".getBytes(), "".getBytes(), null};
-        CompressionCodec[] codecs = new CompressionCodec[]{NoCompressionCodec.instance, GZIPCompressionCodec.instance};
+        byte[][] keys = new byte[][] { null, "key".getBytes(), "".getBytes() };
+        byte[][] vals = new byte[][] { "value".getBytes(), "".getBytes(), null };
+        CompressionCodec[] codecs = new CompressionCodec[] { NoCompressionCodec.instance, GZIPCompressionCodec.instance };
         for (byte[] k : keys) {
             for (byte[] v : vals) {
                 for (CompressionCodec codec : codecs) {

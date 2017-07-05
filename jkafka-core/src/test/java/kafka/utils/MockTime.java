@@ -18,7 +18,6 @@ public class MockTime implements Time {
         this.currentMs = currentMs;
     }
 
-
     public MockScheduler scheduler = new MockScheduler(this);
 
     public MockTime() {

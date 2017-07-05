@@ -1,15 +1,13 @@
 package kafka.utils;
 
-import com.google.common.base.Joiner;
-import junit.framework.AssertionFailedError;
-import kafka.common.KafkaException;
-import kafka.message.*;
-import kafka.server.KafkaConfig;
-import kafka.server.KafkaServer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.net.ServerSocket;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -17,10 +15,21 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
-import java.util.concurrent.Callable;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.common.base.Joiner;
+
+import junit.framework.AssertionFailedError;
+import kafka.common.KafkaException;
+import kafka.message.ByteBufferMessageSet;
+import kafka.message.CompressionCodec;
+import kafka.message.Message;
+import kafka.message.MessageAndOffset;
+import kafka.message.NoCompressionCodec;
+import kafka.server.KafkaConfig;
+import kafka.server.KafkaServer;
 
 /**
  * Utility functions to help with testing
@@ -35,7 +44,6 @@ public class TestUtils {
     /* A consistent random number generator to make tests repeatable */
     public static Random seededRandom = new Random(192348092834L);
     public static Random random = new Random();
-
 
     /**
      * Choose a number of random available ports
@@ -193,6 +201,7 @@ public class TestUtils {
     public static ByteBufferMessageSet singleMessageSet(byte[] payload, byte[] key) {
         return singleMessageSet(payload, NoCompressionCodec.instance, key);
     }
+
     public static ByteBufferMessageSet singleMessageSet(byte[] payload, CompressionCodec codec, byte[] key) {
         return new ByteBufferMessageSet(codec, new Message(payload, key));
     }
@@ -207,7 +216,6 @@ public class TestUtils {
         seededRandom.nextBytes(bytes);
         return bytes;
     }
-
 
     /**
      * Generate a random string of letters and digits of the given length
@@ -276,7 +284,6 @@ public class TestUtils {
         assertEquals(expectedLength, n);
     }
 
-
     public static Iterator<Message> getMessageIterator(final Iterator<MessageAndOffset> iter) {
         return new IteratorTemplate<Message>() {
             @Override
@@ -337,7 +344,7 @@ public class TestUtils {
         return builder.toString();
     }
 
-    static  Logger logger = LoggerFactory.getLogger(TestUtils.class);
+    static Logger logger = LoggerFactory.getLogger(TestUtils.class);
 
     /**
      * Execute the given block. If it throws an assert error, retry. Repeat
@@ -346,23 +353,23 @@ public class TestUtils {
     public static void retry(long maxWaitMs, Runnable block) {
         long wait = 1L;
         long startTime = System.currentTimeMillis();
-        while(true) {
+        while (true) {
             try {
                 block.run();
                 return;
-            } catch (AssertionFailedError e){
-                    long ellapsed = System.currentTimeMillis() - startTime;
-                    if(ellapsed > maxWaitMs) {
-                        throw e;
-                    } else {
-                        logger.info("Attempt failed, sleeping for " + wait + ", and then retrying.");
-                        try {
-                            Thread.sleep(wait);
-                        } catch (InterruptedException e1) {
-                            throw new KafkaException(e1);
-                        }
-                        wait += Math.min(wait, 1000);
+            } catch (AssertionFailedError e) {
+                long ellapsed = System.currentTimeMillis() - startTime;
+                if (ellapsed > maxWaitMs) {
+                    throw e;
+                } else {
+                    logger.info("Attempt failed, sleeping for " + wait + ", and then retrying.");
+                    try {
+                        Thread.sleep(wait);
+                    } catch (InterruptedException e1) {
+                        throw new KafkaException(e1);
                     }
+                    wait += Math.min(wait, 1000);
+                }
             }
         }
     }
@@ -379,18 +386,16 @@ public class TestUtils {
         }
     }
 
-
     public static void appendNonsenseToFile(File fileName, int size) {
         try {
             FileOutputStream file = new FileOutputStream(fileName, true);
             for (int i = 0; i < size; ++i)
-            file.write(random.nextInt(255));
+                file.write(random.nextInt(255));
             file.close();
         } catch (IOException e) {
             throw new KafkaException(e);
         }
     }
-
 
     /**
      * Wait until the given condition is true or the given wait time ellapses

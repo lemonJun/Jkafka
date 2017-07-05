@@ -1,12 +1,13 @@
 package kafka.utils;
 
+import static org.junit.Assert.assertEquals;
+
+import org.junit.Test;
+
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import org.junit.Test;
-
-import static org.junit.Assert.assertEquals;
 
 public class JsonTest {
     @Test
@@ -22,7 +23,7 @@ public class JsonTest {
         assertEquals("false", Json.encode(false));
         assertEquals("[]", Json.encode(Lists.newArrayList()));
         assertEquals("[1,2,3]", Json.encode(ImmutableList.of(1, 2, 3)));
-        assertEquals("[1,\"2\",[3]]", Json.encode(ImmutableList.<Object>of(1, "2", Lists.newArrayList(3))));
+        assertEquals("[1,\"2\",[3]]", Json.encode(ImmutableList.<Object> of(1, "2", Lists.newArrayList(3))));
         assertEquals("{}", Json.encode(Maps.newHashMap()));
         assertEquals("{\"a\":1,\"b\":2}", Json.encode(ImmutableMap.of("a", 1, "b", 2)));
         assertEquals("{\"a\":[1,2],\"c\":[3,4]}", Json.encode(ImmutableMap.of("a", Lists.newArrayList(1, 2), "c", Lists.newArrayList(3, 4))));

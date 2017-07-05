@@ -1,13 +1,14 @@
 package kafka.message;
 
-import com.google.common.collect.Lists;
-import org.junit.Test;
+import static org.junit.Assert.assertEquals;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
+import org.junit.Test;
+
+import com.google.common.collect.Lists;
 
 public class MessageCompressionTest {
     @Test
@@ -20,9 +21,7 @@ public class MessageCompressionTest {
     }
 
     public void testSimpleCompressDecompress(CompressionCodec compressionCodec) {
-        List<Message> messages = Lists.newArrayList(new Message("hi there".getBytes()),
-                new Message("I am fine".getBytes()),
-                new Message("I am not so well today".getBytes()));
+        List<Message> messages = Lists.newArrayList(new Message("hi there".getBytes()), new Message("I am fine".getBytes()), new Message("I am not so well today".getBytes()));
         ByteBufferMessageSet messageSet = new ByteBufferMessageSet(/*compressionCodec = */compressionCodec, messages);
         assertEquals(compressionCodec, messageSet.shallowIterator().next().message.compressionCodec());
         List<Message> decompressed = Lists.newArrayList();
@@ -34,10 +33,8 @@ public class MessageCompressionTest {
 
     @Test
     public void testComplexCompressDecompress() {
-        List<Message> messages = Lists.newArrayList(new Message("hi there".getBytes()),
-                new Message("I am fine".getBytes()), new Message("I am not so well today".getBytes()));
-        ByteBufferMessageSet message = new ByteBufferMessageSet(/*compressionCodec = */DefaultCompressionCodec.instance,
-                messages.subList(0, 2));
+        List<Message> messages = Lists.newArrayList(new Message("hi there".getBytes()), new Message("I am fine".getBytes()), new Message("I am not so well today".getBytes()));
+        ByteBufferMessageSet message = new ByteBufferMessageSet(/*compressionCodec = */DefaultCompressionCodec.instance, messages.subList(0, 2));
         List<Message> complexMessages = Lists.newArrayList(message.shallowIterator().next().message);
         complexMessages.addAll(messages.subList(2, 3));
         ByteBufferMessageSet complexMessage = new ByteBufferMessageSet(DefaultCompressionCodec.instance, complexMessages);

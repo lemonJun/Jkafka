@@ -1,17 +1,8 @@
 package kafka.log;
 
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import kafka.common.KafkaException;
-import kafka.common.OffsetOutOfRangeException;
-import kafka.common.TopicAndPartition;
-import kafka.message.ByteBufferMessageSet;
-import kafka.server.OffsetCheckpoint;
-import kafka.utils.*;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.File;
 import java.io.UnsupportedEncodingException;
@@ -19,7 +10,25 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.Assert.*;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+
+import kafka.common.KafkaException;
+import kafka.common.OffsetOutOfRangeException;
+import kafka.common.TopicAndPartition;
+import kafka.message.ByteBufferMessageSet;
+import kafka.server.OffsetCheckpoint;
+import kafka.utils.Callable1;
+import kafka.utils.Function1;
+import kafka.utils.MockTime;
+import kafka.utils.TestUtils;
+import kafka.utils.Tuple2;
+import kafka.utils.Utils;
 
 public class LogManagerTest {
 
@@ -47,22 +56,15 @@ public class LogManagerTest {
     @Before
     public void setUp() {
         logDir = TestUtils.tempDir();
-        logManager = new LogManager(/*logDirs = Array*/Lists.newArrayList(logDir),
-                /*topicConfigs = Map()*/ Maps.<String, LogConfig>newHashMap(),
-                /*defaultConfig = */logConfig,
-                /*cleanerConfig = */cleanerConfig,
-                /*flushCheckMs = */1000L,
-                /*flushCheckpointMs = */100000L,
-                /*retentionCheckMs = */1000L,
-                time.scheduler,
-                time);
+        logManager = new LogManager(/*logDirs = Array*/Lists.newArrayList(logDir), /*topicConfigs = Map()*/ Maps.<String, LogConfig> newHashMap(), /*defaultConfig = */logConfig, /*cleanerConfig = */cleanerConfig, /*flushCheckMs = */1000L, /*flushCheckpointMs = */100000L, /*retentionCheckMs = */1000L, time.scheduler, time);
         logManager.startup();
         logDir = logManager.logDirs.get(0);
     }
 
     @After
     public void tearDown() {
-        if (logManager != null) logManager.shutdown();
+        if (logManager != null)
+            logManager.shutdown();
         Utils.rm(logDir);
         Utils.foreach(logManager.logDirs, new Callable1<File>() {
             @Override
@@ -143,8 +145,7 @@ public class LogManagerTest {
 
         config.segmentSize = 10 * (setSize - 1);
         config.retentionSize = 5L * 10L * setSize + 10L;
-        logManager = new LogManager(Lists.newArrayList(logDir), Maps.<String, LogConfig>newHashMap(), config,
-                cleanerConfig, 1000L, 100000L, 1000L, time.scheduler, time);
+        logManager = new LogManager(Lists.newArrayList(logDir), Maps.<String, LogConfig> newHashMap(), config, cleanerConfig, 1000L, 100000L, 1000L, time.scheduler, time);
         logManager.startup();
 
         // create a log
@@ -159,8 +160,7 @@ public class LogManagerTest {
             offset = info.firstOffset;
         }
 
-        assertEquals("Check we have the expected number of segments.",
-                numMessages * setSize / config.segmentSize, log.numberOfSegments());
+        assertEquals("Check we have the expected number of segments.", numMessages * setSize / config.segmentSize, log.numberOfSegments());
 
         // this cleanup shouldn't find any expired segments but should delete some to reduce size
         // logManager.cleanupLogs();
@@ -187,8 +187,7 @@ public class LogManagerTest {
         logManager.shutdown();
         LogConfig config = logConfig.clone();
         config.flushMs = 1000;
-        logManager = new LogManager(Lists.newArrayList(logDir), Maps.<String, LogConfig>newHashMap(),
-                config, cleanerConfig, 1000L, 10000L, 1000L, time.scheduler, time);
+        logManager = new LogManager(Lists.newArrayList(logDir), Maps.<String, LogConfig> newHashMap(), config, cleanerConfig, 1000L, 10000L, 1000L, time.scheduler, time);
         logManager.startup();
         Log log = logManager.createLog(new TopicAndPartition(name, 0), config);
         long lastFlush = log.lastFlushTime();
@@ -206,12 +205,9 @@ public class LogManagerTest {
     @Test
     public void testLeastLoadedAssignment() {
         // create a log manager with multiple data directories
-        List<File> dirs = Lists.newArrayList(TestUtils.tempDir(),
-                TestUtils.tempDir(),
-                TestUtils.tempDir());
+        List<File> dirs = Lists.newArrayList(TestUtils.tempDir(), TestUtils.tempDir(), TestUtils.tempDir());
         logManager.shutdown();
-        logManager = new LogManager(dirs, Maps.<String, LogConfig>newHashMap(),
-                logConfig, cleanerConfig, 1000L, 10000L, 1000L, time.scheduler, time);
+        logManager = new LogManager(dirs, Maps.<String, LogConfig> newHashMap(), logConfig, cleanerConfig, 1000L, 10000L, 1000L, time.scheduler, time);
 
         // verify that logs are always assigned to the least loaded partition
         for (int partition = 0; partition < 20; ++partition) {
@@ -241,8 +237,7 @@ public class LogManagerTest {
     @Test
     public void testTwoLogManagersUsingSameDirFails() {
         try {
-            new LogManager(Lists.newArrayList(logDir), Maps.<String, LogConfig>newHashMap(),
-                    logConfig, cleanerConfig, 1000L, 10000L, 1000L, time.scheduler, time);
+            new LogManager(Lists.newArrayList(logDir), Maps.<String, LogConfig> newHashMap(), logConfig, cleanerConfig, 1000L, 10000L, 1000L, time.scheduler, time);
             fail("Should not be able to create a second log manager instance with the same data directory");
         } catch (KafkaException e) {
             // this is good

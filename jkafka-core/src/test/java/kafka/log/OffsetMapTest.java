@@ -1,10 +1,10 @@
 package kafka.log;
 
-import org.junit.Test;
+import static org.junit.Assert.assertEquals;
 
 import java.nio.ByteBuffer;
 
-import static org.junit.Assert.assertEquals;
+import org.junit.Test;
 
 public class OffsetMapTest {
     @Test

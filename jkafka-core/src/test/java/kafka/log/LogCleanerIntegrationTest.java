@@ -1,23 +1,25 @@
 package kafka.log;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import kafka.common.TopicAndPartition;
-import kafka.message.MessageAndOffset;
-import kafka.utils.MockTime;
-import kafka.utils.Pool;
-import kafka.utils.TestUtils;
-import kafka.utils.Utils;
-import org.junit.After;
-import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import org.junit.After;
+import org.junit.Test;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+
+import kafka.common.TopicAndPartition;
+import kafka.message.MessageAndOffset;
+import kafka.utils.MockTime;
+import kafka.utils.Pool;
+import kafka.utils.TestUtils;
+import kafka.utils.Utils;
 
 /**
  * This is an integration test that tests the fully integrated log cleaner
@@ -29,15 +31,14 @@ public class LogCleanerIntegrationTest {
     String logName = "log";
     File logDir = TestUtils.tempDir();
     int counter = 0;
-    List<TopicAndPartition> topics = Lists.newArrayList(new TopicAndPartition("log", 0),
-            new TopicAndPartition("log", 1), new TopicAndPartition("log", 2));
+    List<TopicAndPartition> topics = Lists.newArrayList(new TopicAndPartition("log", 0), new TopicAndPartition("log", 1), new TopicAndPartition("log", 2));
 
     @Test
     public void cleanerTest() throws InterruptedException {
         LogCleaner cleaner = makeCleaner(/*parts = */3);
         Log log = cleaner.logs.get(topics.get(0));
 
-        Map<Integer, Integer> appends = writeDups(/*numKeys = */100,/* numDups = */3, log);
+        Map<Integer, Integer> appends = writeDups(/*numKeys = */100, /* numDups = */3, log);
         long startSize = log.size();
         cleaner.startup();
 
@@ -97,11 +98,7 @@ public class LogCleanerIntegrationTest {
         return makeCleaner(parts, 0, 1, "dedupe", new HashMap<String, String>());
     }
 
-    public LogCleaner makeCleaner(int parts,
-                                  int minDirtyMessages /*= 0*/,
-                                  int numThreads /* = 1*/,
-                                  String defaultPolicy/*:  "dedupe"*/,
-                                  Map<String, String> policyOverrides /* Map()*/) {
+    public LogCleaner makeCleaner(int parts, int minDirtyMessages /*= 0*/, int numThreads /* = 1*/, String defaultPolicy/*:  "dedupe"*/, Map<String, String> policyOverrides /* Map()*/) {
 
         // create partitions and add them to the pool
         Pool<TopicAndPartition, Log> logs = new Pool<TopicAndPartition, Log>();
@@ -113,19 +110,12 @@ public class LogCleanerIntegrationTest {
             logConfig.maxIndexSize = 100 * 1024;
             logConfig.fileDeleteDelayMs = deleteDelay;
             logConfig.dedupe = true;
-            Log log = new Log(/*dir = */dir,
-                    logConfig,
-                    /*recoveryPoint =*/ 0L,
-                    time.scheduler,
-                    time);
+            Log log = new Log(/*dir = */dir, logConfig, /*recoveryPoint =*/ 0L, time.scheduler, time);
             logs.put(new TopicAndPartition("log", i), log);
         }
 
         CleanerConfig cleanerConfig = new CleanerConfig();
         cleanerConfig.numThreads = numThreads;
-        return new LogCleaner(cleanerConfig,
-                /*logDirs = */Lists.newArrayList(logDir),
-                logs,
-                time);
+        return new LogCleaner(cleanerConfig, /*logDirs = */Lists.newArrayList(logDir), logs, time);
     }
 }

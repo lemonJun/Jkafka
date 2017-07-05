@@ -1,22 +1,29 @@
 package kafka.log;
 
-import com.google.common.collect.Lists;
-import kafka.message.*;
-import kafka.utils.Function1;
-import kafka.utils.TestUtils;
-import kafka.utils.Utils;
-import org.junit.Test;
+import static kafka.utils.TestUtils.checkEquals;
+import static kafka.utils.TestUtils.singleMessageSet;
+import static kafka.utils.Utils.head;
+import static kafka.utils.Utils.tail;
+import static org.junit.Assert.assertEquals;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static kafka.utils.TestUtils.checkEquals;
-import static kafka.utils.TestUtils.singleMessageSet;
-import static kafka.utils.Utils.head;
-import static kafka.utils.Utils.tail;
-import static org.junit.Assert.assertEquals;
+import org.junit.Test;
+
+import com.google.common.collect.Lists;
+
+import kafka.message.BaseMessageSetTestCases;
+import kafka.message.ByteBufferMessageSet;
+import kafka.message.Message;
+import kafka.message.MessageAndOffset;
+import kafka.message.MessageSets;
+import kafka.message.NoCompressionCodec;
+import kafka.utils.Function1;
+import kafka.utils.TestUtils;
+import kafka.utils.Utils;
 
 public class FileMessageSetTest extends BaseMessageSetTestCases {
     FileMessageSet messageSet = createMessageSet(messages);
@@ -28,7 +35,6 @@ public class FileMessageSetTest extends BaseMessageSetTestCases {
         set.flush();
         return set;
     }
-
 
     /**
      * Test that the cached size variable matches the actual file size as we append messages
@@ -109,23 +115,13 @@ public class FileMessageSetTest extends BaseMessageSetTestCases {
         Message lastMessage = new Message("test".getBytes());
         messageSet.append(new ByteBufferMessageSet(NoCompressionCodec.instance, new AtomicLong(50), lastMessage));
         int position = 0;
-        assertEquals("Should be able to find the first message by its offset",
-                new OffsetPosition(0L, position),
-                messageSet.searchFor(0, 0));
+        assertEquals("Should be able to find the first message by its offset", new OffsetPosition(0L, position), messageSet.searchFor(0, 0));
         position += MessageSets.entrySize(head(messageSet).message);
-        assertEquals("Should be able to find second message when starting from 0",
-                new OffsetPosition(1L, position),
-                messageSet.searchFor(1, 0));
-        assertEquals("Should be able to find second message starting from its offset",
-                new OffsetPosition(1L, position),
-                messageSet.searchFor(1, position));
+        assertEquals("Should be able to find second message when starting from 0", new OffsetPosition(1L, position), messageSet.searchFor(1, 0));
+        assertEquals("Should be able to find second message starting from its offset", new OffsetPosition(1L, position), messageSet.searchFor(1, position));
         position += MessageSets.entrySize(head(tail(messageSet)).message) + MessageSets.entrySize(head(tail(tail(messageSet))).message);
-        assertEquals("Should be able to find fourth message from a non-existant offset",
-                new OffsetPosition(50L, position),
-                messageSet.searchFor(3, position));
-        assertEquals("Should be able to find fourth message by correct offset",
-                new OffsetPosition(50L, position),
-                messageSet.searchFor(50, position));
+        assertEquals("Should be able to find fourth message from a non-existant offset", new OffsetPosition(50L, position), messageSet.searchFor(3, position));
+        assertEquals("Should be able to find fourth message by correct offset", new OffsetPosition(50L, position), messageSet.searchFor(50, position));
     }
 
     /**

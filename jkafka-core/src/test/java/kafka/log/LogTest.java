@@ -1,17 +1,9 @@
 package kafka.log;
 
-import com.google.common.base.Predicate;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
-import kafka.common.KafkaException;
-import kafka.common.KafkaStorageException;
-import kafka.common.OffsetOutOfRangeException;
-import kafka.message.*;
-import kafka.server.KafkaConfig;
-import kafka.utils.*;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.File;
 import java.io.IOException;
@@ -20,7 +12,30 @@ import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static org.junit.Assert.*;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
+import com.google.common.base.Predicate;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
+
+import kafka.common.KafkaException;
+import kafka.common.KafkaStorageException;
+import kafka.common.OffsetOutOfRangeException;
+import kafka.message.ByteBufferMessageSet;
+import kafka.message.ByteBufferMessageSets;
+import kafka.message.DefaultCompressionCodec;
+import kafka.message.Message;
+import kafka.message.MessageAndOffset;
+import kafka.message.MessageSet;
+import kafka.message.NoCompressionCodec;
+import kafka.server.KafkaConfig;
+import kafka.utils.Callable1;
+import kafka.utils.Function1;
+import kafka.utils.MockTime;
+import kafka.utils.TestUtils;
+import kafka.utils.Utils;
 
 public class LogTest {
 
@@ -63,11 +78,7 @@ public class LogTest {
         LogConfig clone = logConfig.clone();
         clone.segmentMs = 1 * 60 * 60L;
         // create a log
-        Log log = new Log(logDir,
-                clone,
-                /*recoveryPoint = */0L,
-                /*scheduler = */time.scheduler,
-                /*time = */time);
+        Log log = new Log(logDir, clone, /*recoveryPoint = */0L, /*scheduler = */time.scheduler, /*time = */time);
         assertEquals("Log begins with a single empty segment.", 1, log.numberOfSegments());
         time.sleep(log.config.segmentMs + 1);
         log.append(set);
@@ -170,8 +181,7 @@ public class LogTest {
 
         // now test the case that we give the offsets and use non-sequential offsets
         for (int i = 0; i < messages.size(); ++i)
-            log.append(new ByteBufferMessageSet(NoCompressionCodec.instance,
-                    new AtomicLong(messageIds.get(i)), messages.get(i)));
+            log.append(new ByteBufferMessageSet(NoCompressionCodec.instance, new AtomicLong(messageIds.get(i)), messages.get(i)));
         for (int i = 50; i < messages.size(); ++i) {
             final int finalI = i;
             Integer idx = Utils.indexWhere(messageIds, new Predicate<Integer>() {
@@ -240,7 +250,7 @@ public class LogTest {
      */
     @Test
     public void testLogRolls() {
-    /* create a multipart log with 100 messages */
+        /* create a multipart log with 100 messages */
         LogConfig clone = logConfig.clone();
         clone.segmentSize = 100;
         final Log log = new Log(logDir, clone, /*recoveryPoint =*/ 0L, time.scheduler, time);
@@ -261,7 +271,7 @@ public class LogTest {
 
         log.flush();
 
-    /* do successive reads to ensure all our messages are there */
+        /* do successive reads to ensure all our messages are there */
         long offset = 0L;
         for (int i = 0; i < numMessages; ++i) {
             MessageSet messages = log.read(offset, 1024 * 1024);
@@ -287,12 +297,12 @@ public class LogTest {
      */
     @Test
     public void testCompressedMessages() {
-    /* this log should roll after every messageset */
+        /* this log should roll after every messageset */
         LogConfig clone = logConfig.clone();
         clone.segmentSize = 100;
         final Log log = new Log(logDir, clone, /*recoveryPoint =*/ 0L, time.scheduler, time);
 
-    /* append 2 compressed message sets, each with two messages giving offsets 0, 1, 2, 3 */
+        /* append 2 compressed message sets, each with two messages giving offsets 0, 1, 2, 3 */
         log.append(new ByteBufferMessageSet(DefaultCompressionCodec.instance, new Message("hello".getBytes()), new Message("there".getBytes())));
         log.append(new ByteBufferMessageSet(DefaultCompressionCodec.instance, new Message("alpha".getBytes()), new Message("beta".getBytes())));
 
@@ -303,8 +313,7 @@ public class LogTest {
             }
         };
 
-
-    /* we should always get the first message in the compressed set when reading any offset in the set */
+        /* we should always get the first message in the compressed set when reading any offset in the set */
         assertEquals("Read at offset 0 should produce 0", 0, Utils.head(read.apply(0)).offset);
         assertEquals("Read at offset 1 should produce 0", 0, Utils.head(read.apply(1)).offset);
         assertEquals("Read at offset 2 should produce 2", 2, Utils.head(read.apply(2)).offset);
@@ -345,9 +354,7 @@ public class LogTest {
                 }
             }));
             assertEquals("Still no change in the logEndOffset", currOffset, log.logEndOffset());
-            assertEquals("Should still be able to append and should get the logEndOffset assigned to the new append",
-                    currOffset,
-                    (long) log.append(TestUtils.singleMessageSet("hello".getBytes())).firstOffset);
+            assertEquals("Should still be able to append and should get the logEndOffset assigned to the new append", currOffset, (long) log.append(TestUtils.singleMessageSet("hello".getBytes())).firstOffset);
 
             // cleanup the log
             log.delete();
@@ -551,11 +558,7 @@ public class LogTest {
         config.segmentSize = set.sizeInBytes() * 5;
         config.maxIndexSize = 1000;
         config.indexInterval = 1;
-        Log log = new Log(logDir,
-                config,
-                /*recoveryPoint =*/ 0L,
-                time.scheduler,
-                time);
+        Log log = new Log(logDir, config, /*recoveryPoint =*/ 0L, time.scheduler, time);
 
         assertTrue("The first index file should have been replaced with a larger file", bogusIndex1.length() > 0);
         assertFalse("The second index file should have been deleted.", bogusIndex2.exists());
@@ -579,21 +582,13 @@ public class LogTest {
         config.indexInterval = 10000;
 
         // create a log
-        Log log = new Log(logDir,
-                config,
-                /*recoveryPoint =*/ 0L,
-                time.scheduler,
-                time);
+        Log log = new Log(logDir, config, /*recoveryPoint =*/ 0L, time.scheduler, time);
 
         // add enough messages to roll over several segments then close and re-open and attempt to truncate
         for (int i = 0; i < 100; ++i)
             log.append(set);
         log.close();
-        log = new Log(logDir,
-                config,
-                /*recoveryPoint =*/ 0L,
-                time.scheduler,
-                time);
+        log = new Log(logDir, config, /*recoveryPoint =*/ 0L, time.scheduler, time);
         log.truncateTo(3L);
         assertEquals("All but one segment should be deleted.", 1, log.numberOfSegments());
         assertEquals("Log end offset should be 3.", 3L, (long) log.logEndOffset());
@@ -611,11 +606,7 @@ public class LogTest {
         config.fileDeleteDelayMs = asyncDeleteMs;
         config.maxIndexSize = 1000;
         config.indexInterval = 10000;
-        Log log = new Log(logDir,
-                config,
-                /*recoveryPoint =*/ 0L,
-                time.scheduler,
-                time);
+        Log log = new Log(logDir, config, /*recoveryPoint =*/ 0L, time.scheduler, time);
 
         // append some messages to create some segments
         for (int i = 0; i < 100; ++i)
@@ -660,13 +651,12 @@ public class LogTest {
             public boolean apply(LogSegment _) {
                 return _.log.file.exists();
             }
-        }) &&
-                Utils.forall(segments, new Predicate<LogSegment>() {
-                    @Override
-                    public boolean apply(LogSegment _) {
-                        return _.index.file.exists();
-                    }
-                }));
+        }) && Utils.forall(segments, new Predicate<LogSegment>() {
+            @Override
+            public boolean apply(LogSegment _) {
+                return _.index.file.exists();
+            }
+        }));
         assertTrue("The original file should be gone.", Utils.forall(oldFiles, new Predicate<File>() {
             @Override
             public boolean apply(File _) {
@@ -707,11 +697,7 @@ public class LogTest {
 
         config.segmentSize = set.sizeInBytes() * 5;
         config.maxIndexSize = 1000;
-        Log log = new Log(logDir,
-                config,
-                /*recoveryPoint =*/ 0L,
-                time.scheduler,
-                time);
+        Log log = new Log(logDir, config, /*recoveryPoint =*/ 0L, time.scheduler, time);
 
         // append some messages to create some segments
         for (int i = 0; i < 100; ++i)
@@ -725,21 +711,13 @@ public class LogTest {
         });
         log.close();
 
-        log = new Log(logDir,
-                config,
-                /*recoveryPoint =*/ 0L,
-                time.scheduler,
-                time);
+        log = new Log(logDir, config, /*recoveryPoint =*/ 0L, time.scheduler, time);
         assertEquals("The deleted segments should be gone.", 1, log.numberOfSegments());
     }
 
     @Test
     public void testAppendMessageWithNullPayload() {
-        Log log = new Log(logDir,
-                new LogConfig(),
-                /*recoveryPoint =*/ 0L,
-                time.scheduler,
-                time);
+        Log log = new Log(logDir, new LogConfig(), /*recoveryPoint =*/ 0L, time.scheduler, time);
         log.append(new ByteBufferMessageSet(new Message((byte[]) null)));
         MessageSet ms = log.read(0L, 4096, null);
         assertEquals(0, Utils.head(ms).offset);
@@ -758,11 +736,7 @@ public class LogTest {
         for (int iteration = 0; iteration < 50; ++iteration) {
             // create a log and write some messages to it
             logDir.mkdirs();
-            Log log = new Log(logDir,
-                    config,
-                    /*recoveryPoint =*/ 0L,
-                    time.scheduler,
-                    time);
+            Log log = new Log(logDir, config, /*recoveryPoint =*/ 0L, time.scheduler, time);
             int numMessages = 50 + TestUtils.random.nextInt(50);
             for (int i = 0; i < numMessages; ++i)
                 log.append(set);
@@ -781,13 +755,12 @@ public class LogTest {
             // attempt recovery
             log = new Log(logDir, config, recoveryPoint, time.scheduler, time);
             assertEquals(numMessages, log.logEndOffset());
-            assertEquals("Messages in the log after recovery should be the same.", messages,
-                    Utils.mapLists(log.logSegments(), new Function1<LogSegment, Collection<MessageAndOffset>>() {
-                        @Override
-                        public Collection<MessageAndOffset> apply(LogSegment _) {
-                            return Lists.newArrayList(_.log.iterator());
-                        }
-                    }));
+            assertEquals("Messages in the log after recovery should be the same.", messages, Utils.mapLists(log.logSegments(), new Function1<LogSegment, Collection<MessageAndOffset>>() {
+                @Override
+                public Collection<MessageAndOffset> apply(LogSegment _) {
+                    return Lists.newArrayList(_.log.iterator());
+                }
+            }));
             Utils.rm(logDir);
         }
     }
@@ -807,11 +780,7 @@ public class LogTest {
         assertTrue(".kafka_cleanshutdown must exist", cleanShutdownFile.exists());
         long recoveryPoint = 0L;
         // create a log and write some messages to it
-        Log log = new Log(logDir,
-                config,
-                /*recoveryPoint =*/ 0L,
-                time.scheduler,
-                time);
+        Log log = new Log(logDir, config, /*recoveryPoint =*/ 0L, time.scheduler, time);
         for (int i = 0; i < 100; ++i)
             log.append(set);
         log.close();

@@ -44,10 +44,10 @@ public class MockScheduler extends Scheduler {
         synchronized (this) {
             long now = time.milliseconds();
             while (!tasks.isEmpty() && tasks.peek().nextExecution <= now) {
-        /* pop and execute the task with the lowest next execution time */
+                /* pop and execute the task with the lowest next execution time */
                 MockTask curr = tasks.poll();
                 curr.fun.run();
-        /* if the task is periodic, reschedule it and re-enqueue */
+                /* if the task is periodic, reschedule it and re-enqueue */
                 if (curr.periodic()) {
                     curr.nextExecution += curr.period;
                     this.tasks.add(curr);

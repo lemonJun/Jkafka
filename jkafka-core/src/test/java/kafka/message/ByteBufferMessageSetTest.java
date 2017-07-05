@@ -1,9 +1,7 @@
 package kafka.message;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
-import kafka.utils.TestUtils;
-import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import java.nio.ByteBuffer;
 import java.util.Iterator;
@@ -11,8 +9,12 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import org.junit.Test;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+
+import kafka.utils.TestUtils;
 
 public class ByteBufferMessageSetTest extends BaseMessageSetTestCases {
     @Override
@@ -23,8 +25,7 @@ public class ByteBufferMessageSetTest extends BaseMessageSetTestCases {
     @Test
     public void testValidBytes() {
         {
-            ByteBufferMessageSet messages = new ByteBufferMessageSet(NoCompressionCodec.instance,
-                    Lists.newArrayList(new Message("hello".getBytes()), new Message("there".getBytes())));
+            ByteBufferMessageSet messages = new ByteBufferMessageSet(NoCompressionCodec.instance, Lists.newArrayList(new Message("hello".getBytes()), new Message("there".getBytes())));
             ByteBuffer buffer = ByteBuffer.allocate(messages.sizeInBytes() + 2);
             buffer.put(messages.buffer);
             buffer.putShort((short) 4);
@@ -34,16 +35,14 @@ public class ByteBufferMessageSetTest extends BaseMessageSetTestCases {
 
         // test valid bytes on empty ByteBufferMessageSet
         {
-            assertEquals("Valid bytes on an empty ByteBufferMessageSet should return 0", 0,
-                    MessageSets.Empty.validBytes());
+            assertEquals("Valid bytes on an empty ByteBufferMessageSet should return 0", 0, MessageSets.Empty.validBytes());
         }
     }
 
     @Test
     public void testValidBytesWithCompression() {
         {
-            ByteBufferMessageSet messages = new ByteBufferMessageSet(DefaultCompressionCodec.instance,
-                    new Message("hello".getBytes()), new Message("there".getBytes()));
+            ByteBufferMessageSet messages = new ByteBufferMessageSet(DefaultCompressionCodec.instance, new Message("hello".getBytes()), new Message("there".getBytes()));
             ByteBuffer buffer = ByteBuffer.allocate(messages.sizeInBytes() + 2);
             buffer.put(messages.buffer);
             buffer.putShort((short) 4);
@@ -54,29 +53,20 @@ public class ByteBufferMessageSetTest extends BaseMessageSetTestCases {
 
     @Test
     public void testEquals() {
-        ByteBufferMessageSet messages = new ByteBufferMessageSet(DefaultCompressionCodec.instance,
-                new Message("hello".getBytes()), new Message("there".getBytes()));
-        ByteBufferMessageSet moreMessages = new ByteBufferMessageSet(DefaultCompressionCodec.instance,
-                new Message("hello".getBytes()), new Message("there".getBytes()));
+        ByteBufferMessageSet messages = new ByteBufferMessageSet(DefaultCompressionCodec.instance, new Message("hello".getBytes()), new Message("there".getBytes()));
+        ByteBufferMessageSet moreMessages = new ByteBufferMessageSet(DefaultCompressionCodec.instance, new Message("hello".getBytes()), new Message("there".getBytes()));
 
         assertTrue(messages.equals(moreMessages));
 
-        messages = new ByteBufferMessageSet(NoCompressionCodec.instance,
-                new Message("hello".getBytes()), new Message("there".getBytes()));
-        moreMessages = new ByteBufferMessageSet(NoCompressionCodec.instance,
-                new Message("hello".getBytes()), new Message("there".getBytes()));
+        messages = new ByteBufferMessageSet(NoCompressionCodec.instance, new Message("hello".getBytes()), new Message("there".getBytes()));
+        moreMessages = new ByteBufferMessageSet(NoCompressionCodec.instance, new Message("hello".getBytes()), new Message("there".getBytes()));
 
         assertTrue(messages.equals(moreMessages));
     }
 
-
     @Test
     public void testIterator() {
-        List<Message> messageList = Lists.newArrayList(
-                new Message("msg1".getBytes()),
-                new Message("msg2".getBytes()),
-                new Message("msg3".getBytes())
-        );
+        List<Message> messageList = Lists.newArrayList(new Message("msg1".getBytes()), new Message("msg2".getBytes()), new Message("msg3".getBytes()));
 
         // test for uncompressed regular messages
         {
@@ -86,8 +76,7 @@ public class ByteBufferMessageSetTest extends BaseMessageSetTestCases {
             TestUtils.checkEquals(messageList.iterator(), TestUtils.getMessageIterator(messageSet.iterator()));
 
             //make sure shallow iterator is the same as deep iterator
-            TestUtils.checkEquals(TestUtils.getMessageIterator(messageSet.shallowIterator()),
-                    TestUtils.getMessageIterator(messageSet.iterator()));
+            TestUtils.checkEquals(TestUtils.getMessageIterator(messageSet.shallowIterator()), TestUtils.getMessageIterator(messageSet.iterator()));
         }
 
         // test for compressed regular messages
@@ -113,8 +102,7 @@ public class ByteBufferMessageSetTest extends BaseMessageSetTestCases {
             //make sure ByteBufferMessageSet is re-iterable.
             TestUtils.checkEquals(messageList.iterator(), TestUtils.getMessageIterator(mixedMessageSet.iterator()));
             //make sure shallow iterator is the same as deep iterator
-            TestUtils.checkEquals(TestUtils.getMessageIterator(mixedMessageSet.shallowIterator()),
-                    TestUtils.getMessageIterator(mixedMessageSet.iterator()));
+            TestUtils.checkEquals(TestUtils.getMessageIterator(mixedMessageSet.shallowIterator()), TestUtils.getMessageIterator(mixedMessageSet.iterator()));
         }
 
         // test for mixed empty and non-empty messagesets compressed
@@ -136,17 +124,13 @@ public class ByteBufferMessageSetTest extends BaseMessageSetTestCases {
 
     @Test
     public void testOffsetAssignment() {
-        ByteBufferMessageSet messages = new ByteBufferMessageSet(NoCompressionCodec.instance,
-                new Message("hello".getBytes()),
-                new Message("there".getBytes()),
-                new Message("beautiful".getBytes()));
+        ByteBufferMessageSet messages = new ByteBufferMessageSet(NoCompressionCodec.instance, new Message("hello".getBytes()), new Message("there".getBytes()), new Message("beautiful".getBytes()));
 
         List<Message> listMessages = Lists.newArrayList();
         for (MessageAndOffset messageAndOffset : messages) {
             listMessages.add(messageAndOffset.message);
         }
-        ByteBufferMessageSet compressedMessages = new ByteBufferMessageSet(DefaultCompressionCodec.instance,
-                listMessages);
+        ByteBufferMessageSet compressedMessages = new ByteBufferMessageSet(DefaultCompressionCodec.instance, listMessages);
         // check uncompressed offsets 
         checkOffsets(messages, 0);
         int offset = 1234567;
@@ -181,7 +165,6 @@ public class ByteBufferMessageSetTest extends BaseMessageSetTestCases {
             MessageAndOffset next = iterator.next();
             deepOffsets.add(next.offset);
         }
-
 
         assertTrue(deepOffsets.containsAll(shallowOffsets));
     }

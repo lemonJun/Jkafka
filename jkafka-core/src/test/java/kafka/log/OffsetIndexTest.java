@@ -1,12 +1,11 @@
 package kafka.log;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import kafka.common.InvalidOffsetException;
-import kafka.utils.*;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import static kafka.utils.Utils.flatList;
+import static kafka.utils.Utils.foreach;
+import static kafka.utils.Utils.last;
+import static kafka.utils.Utils.zip;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 import java.io.File;
 import java.util.Collections;
@@ -14,16 +13,27 @@ import java.util.List;
 import java.util.Random;
 import java.util.TreeMap;
 
-import static kafka.utils.Utils.*;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+
+import kafka.common.InvalidOffsetException;
+import kafka.utils.Callable1;
+import kafka.utils.Function1;
+import kafka.utils.Function2;
+import kafka.utils.TestUtils;
+import kafka.utils.Tuple2;
+import kafka.utils.Utils;
 
 public class OffsetIndexTest {
     OffsetIndex idx = null;
 
     @Before
     public void setup() {
-        this.idx = new OffsetIndex(nonExistantTempFile(),/* baseOffset =*/ 45L,/* maxIndexSize = */30 * 8);
+        this.idx = new OffsetIndex(nonExistantTempFile(), /* baseOffset =*/ 45L, /* maxIndexSize = */30 * 8);
     }
 
     @After
@@ -79,10 +89,7 @@ public class OffsetIndexTest {
 
         Collections.shuffle(offsets);
         for (Long offset : Utils.take(offsets, 30)) {
-            OffsetPosition rightAnswer =
-                    (offset < valMap.firstKey())
-                            ? new OffsetPosition(idx.baseOffset, 0)
-                            : new OffsetPosition(valMap.floorEntry(offset).getKey(), valMap.floorEntry(offset).getValue()._2);
+            OffsetPosition rightAnswer = (offset < valMap.firstKey()) ? new OffsetPosition(idx.baseOffset, 0) : new OffsetPosition(valMap.floorEntry(offset).getKey(), valMap.floorEntry(offset).getValue()._2);
             assertEquals("The index should give the same answer as the sorted map", rightAnswer, idx.lookup(offset));
         }
     }

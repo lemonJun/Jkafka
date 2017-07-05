@@ -1,27 +1,40 @@
 package kafka.log;
 
+import static junit.framework.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.io.File;
+import java.nio.ByteBuffer;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Set;
+
+import org.junit.After;
+import org.junit.Test;
+
 import com.google.common.base.Charsets;
 import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+
 import kafka.common.OptimisticLockFailureException;
 import kafka.common.TopicAndPartition;
 import kafka.message.ByteBufferMessageSet;
 import kafka.message.Message;
 import kafka.message.MessageAndOffset;
-import kafka.utils.*;
-import org.junit.After;
-import org.junit.Test;
-
-import java.io.File;
-import java.nio.ByteBuffer;
-import java.util.*;
-
-import static junit.framework.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import kafka.utils.Callable1;
+import kafka.utils.Function1;
+import kafka.utils.Function2;
+import kafka.utils.MockTime;
+import kafka.utils.TestUtils;
+import kafka.utils.Throttler;
+import kafka.utils.Tuple2;
+import kafka.utils.Utils;
 
 /**
  * Unit tests for the log cleaning logic
@@ -111,14 +124,13 @@ public class CleanerTest {
 
         cleaner.clean(new LogToClean(new TopicAndPartition("test", 0), log, 0));
         final Set<Integer> keys = Sets.newHashSet(keysInLog(log));
-        assertTrue("None of the keys we deleted should still exist.",
-                Utils.forall(0, (int) leo, 2, new Predicate<Integer>() {
+        assertTrue("None of the keys we deleted should still exist.", Utils.forall(0, (int) leo, 2, new Predicate<Integer>() {
 
-                    @Override
-                    public boolean apply(Integer _) {
-                        return !keys.contains(_);
-                    }
-                }));
+            @Override
+            public boolean apply(Integer _) {
+                return !keys.contains(_);
+            }
+        }));
     }
 
     /* extract all the keys from a log */
@@ -140,7 +152,6 @@ public class CleanerTest {
             }
         });
     }
-
 
     /**
      * Test that a truncation during cleaning throws an OptimisticLockFailureException
@@ -195,7 +206,7 @@ public class CleanerTest {
         }
 
         // grouping by very large values should result in a single group with all the segments in it
-        List<List<LogSegment>> groups = cleaner.groupSegmentsBySize(log.logSegments(), /*maxSize = */Integer.MAX_VALUE,/* maxIndexSize = */Integer.MAX_VALUE);
+        List<List<LogSegment>> groups = cleaner.groupSegmentsBySize(log.logSegments(), /*maxSize = */Integer.MAX_VALUE, /* maxIndexSize = */Integer.MAX_VALUE);
         assertEquals(1, groups.size());
         assertEquals(log.numberOfSegments(), groups.get(0).size());
         checkSegmentOrder(groups);
@@ -210,7 +221,7 @@ public class CleanerTest {
             }
         }));
         checkSegmentOrder(groups);
-        groups = cleaner.groupSegmentsBySize(log.logSegments(), /*maxSize = */Integer.MAX_VALUE,/* maxIndexSize =*/ 1);
+        groups = cleaner.groupSegmentsBySize(log.logSegments(), /*maxSize = */Integer.MAX_VALUE, /* maxIndexSize =*/ 1);
         assertEquals(log.numberOfSegments(), groups.size());
         assertTrue("All groups should be singletons.", Utils.forall(groups, new Predicate<List<LogSegment>>() {
             @Override
@@ -271,7 +282,6 @@ public class CleanerTest {
         List<Long> offsets2 = Lists.newArrayList(offsets);
         Collections.sort(offsets);
 
-
         assertEquals("Offsets should be in increasing order.", offsets, offsets2);
     }
 
@@ -308,17 +318,11 @@ public class CleanerTest {
     }
 
     public Log makeLog(File dir, LogConfig config) {
-        return new Log(dir, config,/* recoveryPoint = */0L, time.scheduler, time);
+        return new Log(dir, config, /* recoveryPoint = */0L, time.scheduler, time);
     }
 
     public Cleaner makeCleaner(int capacity) {
-        return new Cleaner(/*id = */0,
-                        /*offsetMap = */new FakeOffsetMap(capacity),
-    /*ioBufferSize = */64 * 1024,
-   /* maxIoBufferSize = */64 * 1024,
-    /*dupBufferLoadFactor =*/ 0.75,
-    /*throttler =*/ throttler,
-    /*time = */time);
+        return new Cleaner(/*id = */0, /*offsetMap = */new FakeOffsetMap(capacity), /*ioBufferSize = */64 * 1024, /* maxIoBufferSize = */64 * 1024, /*dupBufferLoadFactor =*/ 0.75, /*throttler =*/ throttler, /*time = */time);
     }
 
     public List<Long> writeToLog(Log log, List<Tuple2<Integer, Integer>> seq) {

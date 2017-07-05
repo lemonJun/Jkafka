@@ -17,7 +17,6 @@ public class MockTask implements Comparable {
         return period >= 0;
     }
 
-
     @Override
     public int compareTo(Object o) {
         MockTask t = (MockTask) o;
@@ -32,15 +31,21 @@ public class MockTask implements Comparable {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
 
         MockTask mockTask = (MockTask) o;
 
-        if (nextExecution != mockTask.nextExecution) return false;
-        if (period != mockTask.period) return false;
-        if (fun != null ? !fun.equals(mockTask.fun) : mockTask.fun != null) return false;
-        if (name != null ? !name.equals(mockTask.name) : mockTask.name != null) return false;
+        if (nextExecution != mockTask.nextExecution)
+            return false;
+        if (period != mockTask.period)
+            return false;
+        if (fun != null ? !fun.equals(mockTask.fun) : mockTask.fun != null)
+            return false;
+        if (name != null ? !name.equals(mockTask.name) : mockTask.name != null)
+            return false;
 
         return true;
     }

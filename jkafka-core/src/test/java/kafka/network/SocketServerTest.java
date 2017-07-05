@@ -1,14 +1,8 @@
 package kafka.network;
 
-import com.google.common.collect.Maps;
-import kafka.api.ProducerRequest;
-import kafka.common.TopicAndPartition;
-import kafka.message.ByteBufferMessageSet;
-import kafka.producer.SyncProducerConfigs;
-import kafka.utils.Function0;
-import kafka.utils.TestUtils;
-import org.junit.After;
-import org.junit.Test;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -18,17 +12,20 @@ import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.util.Random;
 
-import static org.junit.Assert.*;
+import org.junit.After;
+import org.junit.Test;
+
+import com.google.common.collect.Maps;
+
+import kafka.api.ProducerRequest;
+import kafka.common.TopicAndPartition;
+import kafka.message.ByteBufferMessageSet;
+import kafka.producer.SyncProducerConfigs;
+import kafka.utils.Function0;
+import kafka.utils.TestUtils;
 
 public class SocketServerTest {
-    SocketServer server = new SocketServer(0,
-                                               /* host = */null,
-                                               /* port = */kafka.utils.TestUtils.choosePort(),
-                                              /*  numProcessorThreads =*/ 1,
-                                              /*  maxQueuedRequests =*/ 50,
-                                              /*  sendBufferSize =*/ 300000,
-                                               /* recvBufferSize =*/ 300000,
-                                               /* maxRequestSize =*/ 50);
+    SocketServer server = new SocketServer(0, /* host = */null, /* port = */kafka.utils.TestUtils.choosePort(), /*  numProcessorThreads =*/ 1, /*  maxQueuedRequests =*/ 50, /*  sendBufferSize =*/ 300000, /* recvBufferSize =*/ 300000, /* maxRequestSize =*/ 50);
 
     {
         server.startup();
@@ -77,8 +74,7 @@ public class SocketServerTest {
         String clientId = SyncProducerConfigs.DefaultClientId;
         int ackTimeoutMs = SyncProducerConfigs.DefaultAckTimeoutMs;
         short ack = SyncProducerConfigs.DefaultRequiredAcks;
-        ProducerRequest emptyRequest =
-                new ProducerRequest(correlationId, clientId, ack, ackTimeoutMs, Maps.<TopicAndPartition, ByteBufferMessageSet>newHashMap());
+        ProducerRequest emptyRequest = new ProducerRequest(correlationId, clientId, ack, ackTimeoutMs, Maps.<TopicAndPartition, ByteBufferMessageSet> newHashMap());
 
         ByteBuffer byteBuffer = ByteBuffer.allocate(emptyRequest.sizeInBytes());
         emptyRequest.writeTo(byteBuffer);
@@ -107,8 +103,7 @@ public class SocketServerTest {
         String clientId = SyncProducerConfigs.DefaultClientId;
         int ackTimeoutMs = SyncProducerConfigs.DefaultAckTimeoutMs;
         short ack = 0;
-        ProducerRequest emptyRequest =
-                new ProducerRequest(correlationId, clientId, ack, ackTimeoutMs, Maps.<TopicAndPartition, ByteBufferMessageSet>newHashMap());
+        ProducerRequest emptyRequest = new ProducerRequest(correlationId, clientId, ack, ackTimeoutMs, Maps.<TopicAndPartition, ByteBufferMessageSet> newHashMap());
 
         ByteBuffer byteBuffer = ByteBuffer.allocate(emptyRequest.sizeInBytes());
         emptyRequest.writeTo(byteBuffer);
@@ -125,12 +120,11 @@ public class SocketServerTest {
         server.requestChannel.sendResponse(new Response(0, request, null));
 
         // After the response is sent to the client (which is async and may take a bit of time), the socket key should be available for reads.
-        assertTrue(
-                TestUtils.waitUntilTrue(new Function0<Boolean>() {
-                    @Override
-                    public Boolean apply() {
-                        return (((SelectionKey) request.requestKey).interestOps() & SelectionKey.OP_READ) == SelectionKey.OP_READ;
-                    }
-                }, 5000));
+        assertTrue(TestUtils.waitUntilTrue(new Function0<Boolean>() {
+            @Override
+            public Boolean apply() {
+                return (((SelectionKey) request.requestKey).interestOps() & SelectionKey.OP_READ) == SelectionKey.OP_READ;
+            }
+        }, 5000));
     }
 }

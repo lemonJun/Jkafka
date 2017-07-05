@@ -1,18 +1,30 @@
 package kafka.log;
 
-import com.google.common.base.Predicate;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
-import kafka.message.*;
-import kafka.utils.*;
-import org.junit.After;
-import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static org.junit.Assert.*;
+import org.junit.After;
+import org.junit.Test;
+
+import com.google.common.base.Predicate;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
+
+import kafka.message.ByteBufferMessageSet;
+import kafka.message.Message;
+import kafka.message.MessageAndOffset;
+import kafka.message.MessageSet;
+import kafka.message.NoCompressionCodec;
+import kafka.utils.Callable1;
+import kafka.utils.Function1;
+import kafka.utils.SystemTime;
+import kafka.utils.TestUtils;
+import kafka.utils.Utils;
 
 public class LogSegmentTest {
 
@@ -32,14 +44,12 @@ public class LogSegmentTest {
 
     /* create a ByteBufferMessageSet for the given messages starting from the given offset */
     public ByteBufferMessageSet messages(long offset, String... messages) {
-        return new ByteBufferMessageSet(NoCompressionCodec.instance,
-                new AtomicLong(offset),
-                Utils.mapList(messages, new Function1<String, Message>() {
-                    @Override
-                    public Message apply(String arg) {
-                        return new Message(arg.getBytes());
-                    }
-                }));
+        return new ByteBufferMessageSet(NoCompressionCodec.instance, new AtomicLong(offset), Utils.mapList(messages, new Function1<String, Message>() {
+            @Override
+            public Message apply(String arg) {
+                return new Message(arg.getBytes());
+            }
+        }));
     }
 
     @After
@@ -92,8 +102,7 @@ public class LogSegmentTest {
                     public boolean apply(MessageAndOffset _) {
                         return _.offset == offset;
                     }
-                }),
-                        Lists.newArrayList(seg.read(/*startOffset =*/ offset, /*maxOffset = Some*/(offset + 1), /*maxSize =*/ 1024)));
+                }), Lists.newArrayList(seg.read(/*startOffset =*/ offset, /*maxOffset = Some*/(offset + 1), /*maxSize =*/ 1024)));
             }
         };
 
@@ -110,7 +119,7 @@ public class LogSegmentTest {
         LogSegment seg = createSegment(40);
         ByteBufferMessageSet ms = messages(50, "hello", "there");
         seg.append(50, ms);
-        MessageSet read = seg.read(/*startOffset = */52,/*maxOffset = */ null,/* maxSize =*/ 200);
+        MessageSet read = seg.read(/*startOffset = */52, /*maxOffset = */ null, /* maxSize =*/ 200);
         assertNull("Read beyond the last offset in the segment should give null", read);
     }
 
@@ -226,13 +235,12 @@ public class LogSegmentTest {
             int position = seg.log.searchFor(offsetToBeginCorruption, 0).position + TestUtils.random.nextInt(15);
             TestUtils.writeNonsenseToFile(seg.log.file, position, (int) seg.log.file.length() - position);
             seg.recover(64 * 1024);
-            assertEquals("Should have truncated off bad messages.",
-                    Utils.flatList(0, offsetToBeginCorruption, new Function1<Integer, Long>() {
-                        @Override
-                        public Long apply(Integer arg) {
-                            return (long) arg;
-                        }
-                    }), Utils.mapList(seg.log, new Function1<MessageAndOffset, Long>() {
+            assertEquals("Should have truncated off bad messages.", Utils.flatList(0, offsetToBeginCorruption, new Function1<Integer, Long>() {
+                @Override
+                public Long apply(Integer arg) {
+                    return (long) arg;
+                }
+            }), Utils.mapList(seg.log, new Function1<MessageAndOffset, Long>() {
                 @Override
                 public Long apply(MessageAndOffset arg) {
                     return arg.offset;

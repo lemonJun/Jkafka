@@ -1,13 +1,14 @@
 package kafka.utils;
 
-import com.google.common.collect.ImmutableList;
-import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 import java.util.List;
 import java.util.NoSuchElementException;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import org.junit.Test;
+
+import com.google.common.collect.ImmutableList;
 
 public class IteratorTemplateTest {
 

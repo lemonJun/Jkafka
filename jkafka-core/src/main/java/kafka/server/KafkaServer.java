@@ -106,8 +106,8 @@ public class KafkaServer {
             this.logIdent = "[Kafka Server " + config.brokerId + "],";
 
             socketServer = new SocketServer(config, metrics, kafkaMetricsTime);
-            socketServer.startup();
-
+            socketServer.startup(); 
+            
             KafkaController kafkaController = new KafkaController(config, zkUtils, brokerState, kafkaMetricsTime, metrics, threadNamePrefix);
             kafkaController.startup();
             //   
@@ -118,7 +118,7 @@ public class KafkaServer {
             //   kafkaController.startup();
 
             //   apis = new KafkaApis();
-            
+
             //   consumerCoordinator = new GroupCoordinator();
             //   consumerCoordinator.startup();
             //   
@@ -145,31 +145,26 @@ public class KafkaServer {
         logger.info("Connecting to zookeeper on ");
 
         String chroot = config.zkConnect.indexOf("/") > 0 ? config.zkConnect.substring(config.zkConnect.indexOf("/")) : "";
-
         //        boolean secureAclsEnabled = JaasUtils.isZkSecurityEnabled() && config.ZkEnableSecureAcls;
-
         //        if (config.ZkEnableSecureAcls && !secureAclsEnabled) {
         //            //        throw new java.lang.SecurityException("zkEnableSecureAcls is true, but the verification of the JAAS login file failed.");
         //        }
 
         if (chroot.length() > 1) {
-            //   String zkConnForChrootCreation = config.zkConnect.substring(0, config.zkConnect.indexOf("/"));
-            //   ZkUtils zkClientForChrootCreation = ZkUtils.getInstance(config.zkConnect, 
-            //             config.zkSessionTimeoutMs, 
-            //             3000, 
-            //             secureAclsEnabled);
-            //   zkClientForChrootCreation.makeSurePersistentPathExists(chroot, null);
+            String zkConnForChrootCreation = config.zkConnect.substring(0, config.zkConnect.indexOf("/"));
+            ZkUtils zkClientForChrootCreation = ZkUtils.getInstance(config.zkConnect, config.zkSessionTimeoutMs, 3000, false);
+            zkClientForChrootCreation.makeSurePersistentPathExists(chroot);
             //   logger.info("Created zookeeper path " + chroot);
         }
-        ZkUtils zkUtils = ZkUtils.getInstance(config.zkConnect, config.zkSessionTimeoutMs, 6000, secureAclsEnabled);
+        ZkUtils zkUtils = ZkUtils.getInstance(config.zkConnect, config.zkSessionTimeoutMs, 6000, false);
         return zkUtils;
     }
 
     public LogManager createLogManager(ZkClient zkClient, BrokerState brokerState) {
         List<File> logDirs = Lists.newArrayList();
-        logDirs.add(new File("/tmp/kafka-logs"));
+        logDirs.add(new File("D:/kafka-logs"));
         Map map = new HashMap<>();
-        return new LogManager(logDirs, map, null, null, 10, 3000L, 3000L, 6000L, kafkaScheduler, brokerState, new SystemTime());
+        return new LogManager(logDirs, map, null, null, 3000L, 3000L, 6000L, kafkaScheduler, new SystemTime());
     }
 
 }

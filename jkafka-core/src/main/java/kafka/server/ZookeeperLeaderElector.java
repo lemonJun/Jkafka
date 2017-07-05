@@ -1,7 +1,6 @@
 package kafka.server;
 
 import static kafka.utils.ZkUtils.deletePath;
-import static kafka.utils.ZkUtils.makeSurePersistentPathExists;
 import static kafka.utils.ZkUtils.readDataMaybeNull;
 
 import org.I0Itec.zkclient.IZkDataListener;
@@ -39,7 +38,7 @@ public class ZookeeperLeaderElector implements LeaderElector {
 
         index = electionPath.lastIndexOf("/");
         if (index > 0)
-            makeSurePersistentPathExists(controllerContext.zkClient, electionPath.substring(0, index));
+            zmakeSurePersistentPathExists(electionPath.substring(0, index));
     }
 
     public int leaderId = -1;

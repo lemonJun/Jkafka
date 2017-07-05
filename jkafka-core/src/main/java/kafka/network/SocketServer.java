@@ -57,6 +57,7 @@ public class SocketServer {
             processors[i] = new Processor(i, time, maxRequestSize, requestChannel);
             Utils.newThread(String.format("kafka-processor-%d-%d", port, i), processors[i], false).start();
         }
+        
         // register the processor threads for notification of responses
         requestChannel.addResponseListener(new ResponseListener() {
             @Override

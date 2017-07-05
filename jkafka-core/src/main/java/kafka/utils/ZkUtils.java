@@ -1,5 +1,6 @@
 package kafka.utils;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -7,8 +8,11 @@ import java.util.Map;
 import java.util.Set;
 
 import org.I0Itec.zkclient.ZkClient;
+import org.I0Itec.zkclient.ZkConnection;
 import org.I0Itec.zkclient.exception.ZkNoNodeException;
 import org.I0Itec.zkclient.exception.ZkNodeExistsException;
+import org.apache.zookeeper.ZooDefs;
+import org.apache.zookeeper.data.ACL;
 import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,7 +20,6 @@ import org.slf4j.LoggerFactory;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.google.common.collect.HashMultimap;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -39,21 +42,80 @@ import kafka.controller.LeaderIsrAndControllerEpoch;
 import kafka.controller.PartitionAndReplica;
 import kafka.controller.ReassignedPartitionsContext;
 
-public abstract class ZkUtils {
+public class ZkUtils {
+    public static final String TopicConfigPath = "/config/topics";
+    public static final String TopicConfigChangesPath = "/config/changes";
+
     public static final String ConsumersPath = "/consumers";
     public static final String BrokerIdsPath = "/brokers/ids";
     public static final String BrokerTopicsPath = "/brokers/topics";
-    public static final String TopicConfigPath = "/config/topics";
-    public static final String TopicConfigChangesPath = "/config/changes";
     public static final String ControllerPath = "/controller";
     public static final String ControllerEpochPath = "/controller_epoch";
     public static final String ReassignPartitionsPath = "/admin/reassign_partitions";
+    public static final String DeleteTopicsPath = "/admin/delete_topics";
     public static final String PreferredReplicaLeaderElectionPath = "/admin/preferred_replica_election";
+    public static final String BrokerSequenceIdPath = "/brokers/seqid";
+    public static final String IsrChangeNotificationPath = "/isr_change_notification";
+    public static final String EntityConfigPath = "/config";
+    public static final String EntityConfigChangesPath = "/config/changes";
 
     static Logger logger = LoggerFactory.getLogger(ZkUtils.class);
 
     public static String getTopicPath(String topic) {
         return BrokerTopicsPath + "/" + topic;
+    }
+
+    public ZkClient zkClient;
+    private ZkConnection zkConnection;
+    private static boolean isSecure;
+
+    private static List<String> persistentZkPaths = new ArrayList<String>();
+    private static List<ACL> DefaultAcls;
+
+    static {
+        persistentZkPaths.add(ConsumersPath);
+        persistentZkPaths.add(BrokerIdsPath);
+        persistentZkPaths.add(BrokerTopicsPath);
+        persistentZkPaths.add(EntityConfigChangesPath);
+        //  persistentZkPaths.add(getEntityConfigRootPath(ConfigType.Topic));
+        //  persistentZkPaths.add(getEntityConfigRootPath(ConfigType.Client));
+        persistentZkPaths.add(DeleteTopicsPath);
+        persistentZkPaths.add(BrokerSequenceIdPath);
+        persistentZkPaths.add(IsrChangeNotificationPath);
+
+        DefaultAcls = new ArrayList<ACL>();
+        if (isSecure) {
+            DefaultAcls.addAll(ZooDefs.Ids.CREATOR_ALL_ACL);
+            DefaultAcls.addAll(ZooDefs.Ids.READ_ACL_UNSAFE);
+        } else {
+            DefaultAcls.addAll(ZooDefs.Ids.OPEN_ACL_UNSAFE);
+        }
+    }
+
+    public ZkUtils(ZkClient zkClient, ZkConnection zkConnection, boolean isSecure) {
+        this.zkClient = zkClient;
+        this.zkConnection = zkConnection;
+        this.isSecure = isSecure;
+    }
+
+    public static ZkUtils getInstance(String zkUrl, int sessionTimeout, int connectionTimeout, boolean isZkSecurityEnabled) {
+        Object[] objs = createZkClientAndConnection(zkUrl, sessionTimeout, connectionTimeout);
+        return new ZkUtils((ZkClient) objs[0], (ZkConnection) objs[1], isZkSecurityEnabled);
+    }
+
+    public ZkUtils(ZkClient zkClient, boolean isZkSecurityEnabled) {
+        this(zkClient, null, isZkSecurityEnabled);
+    }
+
+    public ZkClient createZkClient(String zkUrl, int sessionTimeout, int connectionTimeout) {
+        return new ZkClient(zkUrl, sessionTimeout, connectionTimeout, new ZKStringSerializer());
+    }
+
+    public static Object[] createZkClientAndConnection(String zkUrl, int sessionTimeout, int connectionTimeout) {
+        ZkConnection zkConnection = new ZkConnection(zkUrl, sessionTimeout);
+        ZkClient zkClient = new ZkClient(zkConnection, connectionTimeout, new ZKStringSerializer());
+        Object[] objs = { zkClient, zkConnection };
+        return objs;
     }
 
     public static String getTopicPartitionsPath(String topic) {
@@ -128,9 +190,9 @@ public abstract class ZkUtils {
         return getLeaderIsrAndEpochForPartition(zkClient, topic, partition).leaderAndIsr;
     }
 
-    public static void setupCommonPaths(ZkClient zkClient) {
-        for (String path : ImmutableList.of(ConsumersPath, BrokerIdsPath, BrokerTopicsPath, TopicConfigChangesPath, TopicConfigPath))
-            makeSurePersistentPathExists(zkClient, path);
+    public void setupCommonPaths() {
+        for (String path : persistentZkPaths)
+            makeSurePersistentPathExists(path);
     }
 
     public static LeaderIsrAndControllerEpoch parseLeaderAndIsr(String leaderAndIsrStr, String topic, int partition, Stat stat) {
@@ -259,9 +321,9 @@ public abstract class ZkUtils {
     /**
      * make sure a persistent path exists in ZK. Create the path if not exist.
      */
-    public static void makeSurePersistentPathExists(ZkClient client, String path) {
-        if (!client.exists(path))
-            client.createPersistent(path, true); // won't throw NoNodeException or NodeExistsException
+    public void makeSurePersistentPathExists(String path) {
+        if (!zkClient.exists(path))
+            zkClient.createPersistent(path, true); // won't throw NoNodeException or NodeExistsException
     }
 
     /**

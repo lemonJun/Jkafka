@@ -1,15 +1,15 @@
 package kafka.api;
 
+import static kafka.api.ApiUtils.readShortString;
+
+import java.nio.ByteBuffer;
+import java.util.Map;
+
 import kafka.common.TopicAndPartition;
 import kafka.message.ByteBufferMessageSet;
 import kafka.utils.Function0;
 import kafka.utils.Tuple2;
 import kafka.utils.Utils;
-
-import java.nio.ByteBuffer;
-import java.util.Map;
-
-import static kafka.api.ApiUtils.readShortString;
 
 public class ProducerRequestReader implements RequestReader {
     public static final RequestReader instance = new ProducerRequestReader();

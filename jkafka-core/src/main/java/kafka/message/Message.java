@@ -1,8 +1,8 @@
 package kafka.message;
 
-import kafka.utils.Utils;
-
 import java.nio.ByteBuffer;
+
+import kafka.utils.Utils;
 
 /**
  * A message. The format of an N byte message is the following:

@@ -1,14 +1,15 @@
 package kafka.utils;
 
-import kafka.common.KafkaException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.channels.FileChannel;
 import java.nio.channels.OverlappingFileLockException;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import kafka.common.KafkaException;
 
 /**
  * A file lock a la flock/funlock

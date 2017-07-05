@@ -1,15 +1,15 @@
 package kafka.api;
 
-import kafka.network.MultiSend;
-import kafka.network.Send;
-import kafka.utils.Function2;
-import kafka.utils.Utils;
+import static kafka.api.ApiUtils.writeShortString;
 
 import java.nio.ByteBuffer;
 import java.nio.channels.GatheringByteChannel;
 import java.util.List;
 
-import static kafka.api.ApiUtils.writeShortString;
+import kafka.network.MultiSend;
+import kafka.network.Send;
+import kafka.utils.Function2;
+import kafka.utils.Utils;
 
 public class TopicDataSend extends Send {
     public TopicData topicData;

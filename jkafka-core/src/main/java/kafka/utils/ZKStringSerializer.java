@@ -1,8 +1,9 @@
 package kafka.utils;
 
-import com.google.common.base.Charsets;
 import org.I0Itec.zkclient.exception.ZkMarshallingError;
 import org.I0Itec.zkclient.serialize.ZkSerializer;
+
+import com.google.common.base.Charsets;
 
 public class ZKStringSerializer implements ZkSerializer {
     public static ZkSerializer instance = new ZKStringSerializer();

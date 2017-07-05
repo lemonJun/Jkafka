@@ -1,96 +1,32 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- * 
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package kafka.producer;
-
-import static kafka.utils.Utils.getInt;
-import static kafka.utils.Utils.getString;
 
 import java.util.Properties;
 
-import kafka.producer.serializer.DefaultEncoders;
+import kafka.utils.VerifiableProperties;
 
-/**
- * config of producer
- * @author adyliu (imxylz@gmail.com)
- * @since 1.0
- */
-public class SyncProducerConfig implements SyncProducerConfigShared {
+public class SyncProducerConfig extends SyncProducerConfigShared {
+    public static String DefaultClientId = "";
+    public static short DefaultRequiredAcks = 0;
+    public static int DefaultAckTimeoutMs = 10000;
 
-    protected final Properties props;
+    public SyncProducerConfig(VerifiableProperties props) {
+        super(props);
+        host = props.getString("host");
+        port = props.getInt("port");
+    }
 
-    final int bufferSize;
-
-    final int connectTimeoutMs;
-
-    final int socketTimeoutMs;
-
-    final int reconnectInterval;
-
-    final int reconnectTimeInterval;
-
-    final int maxMessageSize;
-
-    public SyncProducerConfig(Properties props) {
-        this.props = props;
-        this.bufferSize = getInt(props, "buffer.size", 100 * 1024);
-        this.connectTimeoutMs = getInt(props, "connect.timeout.ms", 5000);
-        this.socketTimeoutMs = getInt(props, "socket.timeout.ms", 30000);
-        this.reconnectInterval = getInt(props, "reconnect.interval", 100000);
-        this.reconnectTimeInterval = getInt(props, "reconnect.time.interval.ms", 1000 * 1000 * 10);
-        this.maxMessageSize = getInt(props, "max.message.size", 1000 * 1000);//1MB
-        //
+    public SyncProducerConfig(Properties originalProps) {
+        this(new VerifiableProperties(originalProps));
+        // no need to verify the property since SyncProducerConfig is supposed to be used internally
     }
 
     /**
-     * @return the host
+     * the broker to which the producer sends events
      */
-    public String getHost() {
-        return getString(props, "host");
-    }
+    public String host;
 
     /**
-     * @return the port
+     * the port on which the broker is running
      */
-    public int getPort() {
-        return getInt(props, "port");
-    }
-
-    public Properties getProperties() {
-        return props;
-    }
-
-    public int getBufferSize() {
-        return bufferSize;
-    }
-
-    public int getConnectTimeoutMs() {
-        return connectTimeoutMs;
-    }
-
-    public int getSocketTimeoutMs() {
-        return socketTimeoutMs;
-    }
-
-    public int getMaxMessageSize() {
-        return maxMessageSize;
-    }
-
-    public String getSerializerClass() {
-        return getString(props, "serializer.class", DefaultEncoders.class.getName());
-    }
+    public int port;
 }

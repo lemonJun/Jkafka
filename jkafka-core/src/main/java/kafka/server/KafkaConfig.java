@@ -1,5 +1,10 @@
 package kafka.server;
 
+import static com.google.common.base.Preconditions.checkState;
+
+import java.util.List;
+import java.util.Properties;
+
 import kafka.consumer.ConsumerConfigs;
 import kafka.message.MessageSets;
 import kafka.message.Messages;
@@ -7,11 +12,6 @@ import kafka.utils.Range;
 import kafka.utils.Utils;
 import kafka.utils.VerifiableProperties;
 import kafka.utils.ZKConfig;
-
-import java.util.List;
-import java.util.Properties;
-
-import static com.google.common.base.Preconditions.checkState;
 
 /**
  * Configuration settings for the kafka server

@@ -1,13 +1,14 @@
 package kafka.cluster;
 
-import com.alibaba.fastjson.JSONObject;
-import kafka.common.BrokerNotAvailableException;
-import kafka.common.KafkaException;
-import kafka.utils.Json;
+import static kafka.api.ApiUtils.readShortString;
 
 import java.nio.ByteBuffer;
 
-import static kafka.api.ApiUtils.readShortString;
+import com.alibaba.fastjson.JSONObject;
+
+import kafka.common.BrokerNotAvailableException;
+import kafka.common.KafkaException;
+import kafka.utils.Json;
 
 public class Brokers {
     public static Broker createBroker(int id, String brokerInfoString) {

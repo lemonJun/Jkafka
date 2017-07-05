@@ -1,12 +1,13 @@
 package kafka.cluster;
 
-import com.google.common.collect.Sets;
-import kafka.log.LogConfig;
+import static com.google.common.base.Preconditions.checkState;
 
 import java.util.Properties;
 import java.util.Set;
 
-import static com.google.common.base.Preconditions.checkState;
+import com.google.common.collect.Sets;
+
+import kafka.log.LogConfig;
 
 public class LogConfigs {
     public static final String SegmentBytesProp = "segment.bytes";

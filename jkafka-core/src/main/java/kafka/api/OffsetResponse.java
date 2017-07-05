@@ -1,15 +1,25 @@
 package kafka.api;
 
-import com.google.common.collect.Table;
-import kafka.common.ErrorMapping;
-import kafka.common.TopicAndPartition;
-import kafka.utils.*;
+import static kafka.api.ApiUtils.readShortString;
+import static kafka.api.ApiUtils.shortStringLength;
+import static kafka.api.ApiUtils.writeShortString;
 
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
 
-import static kafka.api.ApiUtils.*;
+import com.google.common.collect.Table;
+
+import kafka.common.ErrorMapping;
+import kafka.common.TopicAndPartition;
+import kafka.utils.Callable1;
+import kafka.utils.Callable2;
+import kafka.utils.Function0;
+import kafka.utils.Function1;
+import kafka.utils.Function2;
+import kafka.utils.Function3;
+import kafka.utils.Tuple2;
+import kafka.utils.Utils;
 
 public class OffsetResponse extends RequestOrResponse {
     public static OffsetResponse readFrom(final ByteBuffer buffer) {

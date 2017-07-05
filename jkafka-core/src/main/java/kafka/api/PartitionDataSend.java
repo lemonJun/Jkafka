@@ -1,10 +1,10 @@
 package kafka.api;
 
-import kafka.network.Send;
-import kafka.utils.Utils;
-
 import java.nio.ByteBuffer;
 import java.nio.channels.GatheringByteChannel;
+
+import kafka.network.Send;
+import kafka.utils.Utils;
 
 public class PartitionDataSend extends Send {
     public int partitionId;

@@ -1,5 +1,11 @@
 package kafka.api;
 
+import static kafka.api.ApiUtils.writeShortString;
+
+import java.nio.ByteBuffer;
+import java.util.Map;
+import java.util.Set;
+
 import kafka.cluster.Broker;
 import kafka.common.ErrorMapping;
 import kafka.common.TopicAndPartition;
@@ -7,13 +13,11 @@ import kafka.network.BoundedByteBufferSend;
 import kafka.network.Request;
 import kafka.network.RequestChannel;
 import kafka.network.Response;
-import kafka.utils.*;
-
-import java.nio.ByteBuffer;
-import java.util.Map;
-import java.util.Set;
-
-import static kafka.api.ApiUtils.writeShortString;
+import kafka.utils.Callable1;
+import kafka.utils.Callable2;
+import kafka.utils.Function2;
+import kafka.utils.Function3;
+import kafka.utils.Utils;
 
 public class UpdateMetadataRequest extends RequestOrResponse {
     public short versionId;

@@ -1,12 +1,14 @@
 package kafka.consumer;
 
-import com.google.common.collect.Maps;
-import kafka.utils.ZkUtils;
-import org.I0Itec.zkclient.ZkClient;
-
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import org.I0Itec.zkclient.ZkClient;
+
+import com.google.common.collect.Maps;
+
+import kafka.utils.ZkUtils;
 
 public class WildcardTopicCount extends TopicCount {
     public final ZkClient zkClient;

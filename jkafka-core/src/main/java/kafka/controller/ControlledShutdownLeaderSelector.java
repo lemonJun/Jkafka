@@ -1,17 +1,19 @@
 package kafka.controller;
 
+import java.util.Collection;
+import java.util.List;
+import java.util.Set;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.google.common.base.Predicate;
+
 import kafka.api.LeaderAndIsr;
 import kafka.common.StateChangeFailedException;
 import kafka.common.TopicAndPartition;
 import kafka.utils.Tuple2;
 import kafka.utils.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.Collection;
-import java.util.List;
-import java.util.Set;
 
 /**
  * Picks one of the alive replicas (other than the current leader) in ISR as

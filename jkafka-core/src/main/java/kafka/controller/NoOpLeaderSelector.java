@@ -1,13 +1,15 @@
 package kafka.controller;
 
-import com.google.common.collect.Lists;
-import kafka.api.LeaderAndIsr;
-import kafka.common.TopicAndPartition;
-import kafka.utils.Tuple2;
+import java.util.List;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.List;
+import com.google.common.collect.Lists;
+
+import kafka.api.LeaderAndIsr;
+import kafka.common.TopicAndPartition;
+import kafka.utils.Tuple2;
 
 /**
  * Essentially does nothing. Returns the current leader and ISR, and the current

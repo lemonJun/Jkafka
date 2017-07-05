@@ -33,6 +33,7 @@ import kafka.message.CompressionCodec;
 import kafka.message.Message;
 import kafka.message.MessageAndOffset;
 import kafka.message.MessageSet;
+import kafka.message.MessageSets;
 import kafka.message.NoCompressionCodec;
 import kafka.metrics.KafkaMetricsGroup;
 import kafka.utils.Callable1;
@@ -317,8 +318,8 @@ public class Log extends KafkaMetricsGroup implements Closeable {
                 Iterator<MessageAndOffset> iterator = validMessages.shallowIterator();
                 while (iterator.hasNext()) {
                     MessageAndOffset messageAndOffset = iterator.next();
-                    if (MessageSet.entrySize(messageAndOffset.message) > config.maxMessageSize)
-                        throw new MessageSizeTooLargeException("Message size is %d bytes which exceeds the maximum configured message size of %d.", MessageSet.entrySize(messageAndOffset.message), config.maxMessageSize);
+                    if (MessageSets.entrySize(messageAndOffset.message) > config.maxMessageSize)
+                        throw new MessageSizeTooLargeException("Message size is %d bytes which exceeds the maximum configured message size of %d.", MessageSets.entrySize(messageAndOffset.message), config.maxMessageSize);
                 }
 
                 // now append to the log
@@ -424,7 +425,7 @@ public class Log extends KafkaMetricsGroup implements Closeable {
         // check if the offset is valid and in range
         long next = nextOffset.get();
         if (startOffset == next)
-            return MessageSet.Empty;
+            return MessageSets.Empty;
 
         Map.Entry<Long, LogSegment> entry = segments.floorEntry(startOffset);
 
@@ -444,7 +445,7 @@ public class Log extends KafkaMetricsGroup implements Closeable {
         }
 
         // okay we are beyond the end of the last segment but less than the log end offset
-        return MessageSet.Empty;
+        return MessageSets.Empty;
     }
 
     /**

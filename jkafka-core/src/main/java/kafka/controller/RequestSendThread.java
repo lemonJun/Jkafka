@@ -5,7 +5,11 @@ import java.util.concurrent.BlockingQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import kafka.api.LeaderAndIsrResponse;
 import kafka.api.RequestKeys;
+import kafka.api.RequestOrResponse;
+import kafka.api.StopReplicaResponse;
+import kafka.api.UpdateMetadataResponse;
 import kafka.network.BlockingChannel;
 import kafka.network.Receive;
 import kafka.utils.Callable1;

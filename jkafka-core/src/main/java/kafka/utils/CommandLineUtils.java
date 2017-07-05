@@ -1,10 +1,10 @@
 package kafka.utils;
 
+import java.io.IOException;
+
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
-
-import java.io.IOException;
 
 /**
  * Helper functions for dealing with command line utilities

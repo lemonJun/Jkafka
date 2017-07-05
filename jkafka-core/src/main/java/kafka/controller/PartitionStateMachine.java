@@ -1,18 +1,11 @@
 package kafka.controller;
 
-import com.google.common.base.Joiner;
-import com.google.common.base.Predicate;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Multimap;
-import com.google.common.collect.Sets;
-import kafka.api.LeaderAndIsr;
-import kafka.api.RequestOrResponse;
-import kafka.common.LeaderElectionNotNeededException;
-import kafka.common.NoReplicaOnlineException;
-import kafka.common.StateChangeFailedException;
-import kafka.common.TopicAndPartition;
-import kafka.utils.*;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import org.I0Itec.zkclient.IZkChildListener;
 import org.I0Itec.zkclient.IZkDataListener;
 import org.I0Itec.zkclient.ZkClient;
@@ -20,11 +13,24 @@ import org.I0Itec.zkclient.exception.ZkNodeExistsException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
+import com.google.common.base.Joiner;
+import com.google.common.base.Predicate;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.Sets;
+
+import kafka.api.LeaderAndIsr;
+import kafka.api.RequestOrResponse;
+import kafka.common.LeaderElectionNotNeededException;
+import kafka.common.NoReplicaOnlineException;
+import kafka.common.StateChangeFailedException;
+import kafka.common.TopicAndPartition;
+import kafka.utils.Callable1;
+import kafka.utils.Callable3;
+import kafka.utils.Tuple2;
+import kafka.utils.Utils;
+import kafka.utils.ZkUtils;
 
 /**
  * This class represents the state machine for partitions. It defines the states that a partition can be in, and

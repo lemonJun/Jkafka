@@ -1,6 +1,15 @@
 package kafka.api;
 
+import static kafka.api.ApiUtils.shortStringLength;
+import static kafka.api.ApiUtils.writeShortString;
+
+import java.nio.ByteBuffer;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+
 import com.google.common.collect.Multimap;
+
 import kafka.common.ErrorMapping;
 import kafka.common.OffsetMetadataAndError;
 import kafka.common.TopicAndPartition;
@@ -8,15 +17,12 @@ import kafka.network.BoundedByteBufferSend;
 import kafka.network.Request;
 import kafka.network.RequestChannel;
 import kafka.network.Response;
-import kafka.utils.*;
-
-import java.nio.ByteBuffer;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-
-import static kafka.api.ApiUtils.shortStringLength;
-import static kafka.api.ApiUtils.writeShortString;
+import kafka.utils.Callable1;
+import kafka.utils.Callable2;
+import kafka.utils.Function1;
+import kafka.utils.Function3;
+import kafka.utils.Tuple2;
+import kafka.utils.Utils;
 
 public class OffsetFetchRequest extends RequestOrResponse {
     public String groupId;

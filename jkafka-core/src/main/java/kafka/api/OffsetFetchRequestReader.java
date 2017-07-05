@@ -1,13 +1,13 @@
 package kafka.api;
 
-import kafka.common.TopicAndPartition;
-import kafka.utils.Function1;
-import kafka.utils.Utils;
+import static kafka.api.ApiUtils.readShortString;
 
 import java.nio.ByteBuffer;
 import java.util.List;
 
-import static kafka.api.ApiUtils.readShortString;
+import kafka.common.TopicAndPartition;
+import kafka.utils.Function1;
+import kafka.utils.Utils;
 
 public class OffsetFetchRequestReader implements RequestReader {
     public static final RequestReader instance = new OffsetFetchRequestReader();

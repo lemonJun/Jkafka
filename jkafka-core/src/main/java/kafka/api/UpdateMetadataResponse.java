@@ -1,8 +1,8 @@
 package kafka.api;
 
-import kafka.common.ErrorMapping;
-
 import java.nio.ByteBuffer;
+
+import kafka.common.ErrorMapping;
 
 public class UpdateMetadataResponse extends RequestOrResponse {
 

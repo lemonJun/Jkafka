@@ -1,8 +1,8 @@
 package kafka.cluster;
 
-import com.google.common.collect.Maps;
-
 import java.util.Map;
+
+import com.google.common.collect.Maps;
 
 /**
  * The set of active brokers in the cluster

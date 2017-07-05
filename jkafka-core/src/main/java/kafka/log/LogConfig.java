@@ -1,8 +1,8 @@
 package kafka.log;
 
-import kafka.cluster.LogConfigs;
-
 import java.util.Properties;
+
+import kafka.cluster.LogConfigs;
 
 public class LogConfig implements Cloneable {
     public int segmentSize = 1024 * 1024;

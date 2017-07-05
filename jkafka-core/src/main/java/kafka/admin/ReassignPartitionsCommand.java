@@ -1,23 +1,36 @@
 package kafka.admin;
 
+import java.io.IOException;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+
+import org.I0Itec.zkclient.ZkClient;
+import org.I0Itec.zkclient.exception.ZkNodeExistsException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.google.common.base.Predicate;
-import com.google.common.collect.*;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.Table;
+
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import kafka.common.AdminCommandFailedException;
 import kafka.common.TopicAndPartition;
 import kafka.controller.ReassignedPartitionsContext;
-import kafka.utils.*;
-import org.I0Itec.zkclient.ZkClient;
-import org.I0Itec.zkclient.exception.ZkNodeExistsException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
+import kafka.utils.Callable2;
+import kafka.utils.CommandLineUtils;
+import kafka.utils.Function1;
+import kafka.utils.Function2;
+import kafka.utils.Predicate2;
+import kafka.utils.Utils;
+import kafka.utils.ZKStringSerializer;
+import kafka.utils.ZkUtils;
 
 public class ReassignPartitionsCommand {
     public static void main(String[] args) throws IOException {

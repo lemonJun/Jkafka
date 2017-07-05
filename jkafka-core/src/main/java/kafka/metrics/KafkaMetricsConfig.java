@@ -1,9 +1,9 @@
 package kafka.metrics;
 
+import java.util.List;
+
 import kafka.utils.Utils;
 import kafka.utils.VerifiableProperties;
-
-import java.util.List;
 
 public class KafkaMetricsConfig {
     public VerifiableProperties props;

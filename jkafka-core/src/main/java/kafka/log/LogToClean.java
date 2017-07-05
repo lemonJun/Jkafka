@@ -1,10 +1,10 @@
 package kafka.log;
 
+import java.util.Collection;
+
 import kafka.common.TopicAndPartition;
 import kafka.utils.Function2;
 import kafka.utils.Utils;
-
-import java.util.Collection;
 
 /**
  * Helper class for a log, its topic/partition, and the last clean position

@@ -1,16 +1,16 @@
 package kafka.api;
 
+import java.nio.ByteBuffer;
+import java.nio.channels.GatheringByteChannel;
+import java.util.List;
+import java.util.Map;
+
 import kafka.common.TopicAndPartition;
 import kafka.network.MultiSend;
 import kafka.network.Send;
 import kafka.utils.Function2;
 import kafka.utils.Tuple2;
 import kafka.utils.Utils;
-
-import java.nio.ByteBuffer;
-import java.nio.channels.GatheringByteChannel;
-import java.util.List;
-import java.util.Map;
 
 public class FetchResponseSend extends Send {
     public FetchResponse fetchResponse;

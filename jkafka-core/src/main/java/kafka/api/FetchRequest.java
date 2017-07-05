@@ -1,113 +1,157 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- * 
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package kafka.api;
 
-import java.nio.ByteBuffer;
+import static kafka.api.ApiUtils.shortStringLength;
+import static kafka.api.ApiUtils.writeShortString;
 
-import kafka.common.annotations.ClientSide;
-import kafka.common.annotations.ServerSide;
+import java.nio.ByteBuffer;
+import java.util.Map;
+
+import com.google.common.collect.Table;
+
+import kafka.common.ErrorMapping;
+import kafka.common.TopicAndPartition;
+import kafka.consumer.ConsumerConfigs;
+import kafka.message.MessageSets;
 import kafka.network.Request;
+import kafka.network.RequestChannel;
+import kafka.network.Response;
+import kafka.utils.Function2;
+import kafka.utils.Tuple2;
 import kafka.utils.Utils;
 
-/**
- * fetching data from server
- * 
- * @author adyliu (imxylz@gmail.com)
- * @since 1.0
- */
-@ClientSide
-@ServerSide
-public class FetchRequest implements Request {
+public class FetchRequest extends RequestOrResponse {
+    public short versionId /*= FetchRequestReader.CurrentVersion*/;
+    //  override val correlationId: Int = FetchRequest.DefaultCorrelationId,
+    public String clientId;/* = ConsumerConfig.DefaultClientId,*/
+    public int replicaId; /*Request.OrdinaryConsumerId,*/
+    public int maxWait; /* FetchRequest.DefaultMaxWait,*/
+    public int minBytes; /*FetchRequest.DefaultMinBytes,*/
+    public Map<TopicAndPartition, PartitionFetchInfo> requestInfo;
 
-    /**
-     * message topic
-     */
-    public final String topic;
+    public FetchRequest(Map<TopicAndPartition, PartitionFetchInfo> requestInfo) {
+        this(FetchRequestReader.CurrentVersion, FetchRequestReader.DefaultCorrelationId, ConsumerConfigs.DefaultClientId, Requests.OrdinaryConsumerId, FetchRequestReader.DefaultMaxWait, FetchRequestReader.DefaultMinBytes, requestInfo);
+    }
 
-    /**
-     * partition of log file
-     */
-    public final int partition;
+    public FetchRequest(short versionId, int correlationId, String clientId, int replicaId, int maxWait, int minBytes, Map<TopicAndPartition, PartitionFetchInfo> requestInfo) {
+        super(RequestKeys.FetchKey, correlationId);
+        this.versionId = versionId;
+        this.clientId = clientId;
+        this.replicaId = replicaId;
+        this.maxWait = maxWait;
+        this.minBytes = minBytes;
+        this.requestInfo = requestInfo;
 
-    /**
-     * ofset of topic(log file)
-     */
-    public final long offset;
-
-    /**
-     * the max data size in bytes for this request
-     */
-    public final int maxSize;
-
-    public FetchRequest(String topic, int partition, long offset) {
-        this(topic, partition, offset, 64 * 1024);//64KB
+        // = requestInfo.groupBy(_._1.topic)
+        requestInfoGroupedByTopic = Utils.groupBy(requestInfo, new Function2<TopicAndPartition, PartitionFetchInfo, String>() {
+            @Override
+            public String apply(TopicAndPartition arg1, PartitionFetchInfo arg2) {
+                return arg1.topic;
+            }
+        });
     }
 
     /**
-     * create a fetch request
-     * 
-     * @param topic the topic with messages
-     * @param partition the partition of log file
-     * @param offset offset of the topic(log file)
-     * @param maxSize the max data size in bytes
+     * Partitions the request info into a map of maps (one for each topic).
      */
-    public FetchRequest(String topic, int partition, long offset, int maxSize) {
-        this.topic = topic;
-        if (topic == null) {
-            throw new IllegalArgumentException("no topic");
-        }
-        this.partition = partition;
-        this.offset = offset;
-        this.maxSize = maxSize;
-    }
+    Table<String, TopicAndPartition, PartitionFetchInfo> requestInfoGroupedByTopic;
 
-    public RequestKeys getRequestKey() {
-        return RequestKeys.FETCH;
-    }
-
-    public int getSizeInBytes() {
-        return Utils.caculateShortString(topic) + 4 + 8 + 4;
+    /**
+     * Public constructor for the clients
+     */
+    public FetchRequest(int correlationId, String clientId, int maxWait, int minBytes, Map<TopicAndPartition, PartitionFetchInfo> requestInfo) {
+        this(FetchRequestReader.CurrentVersion, correlationId, clientId, Requests.OrdinaryConsumerId, maxWait, minBytes, requestInfo);
     }
 
     public void writeTo(ByteBuffer buffer) {
-        Utils.writeShortString(buffer, topic);
-        buffer.putInt(partition);
-        buffer.putLong(offset);
-        buffer.putInt(maxSize);
+        buffer.putShort(versionId);
+        buffer.putInt(correlationId);
+        writeShortString(buffer, clientId);
+        buffer.putInt(replicaId);
+        buffer.putInt(maxWait);
+        buffer.putInt(minBytes);
+        buffer.putInt(requestInfoGroupedByTopic.size()); // topic count
+
+        for (String topic : requestInfoGroupedByTopic.rowKeySet()) {
+            Map<TopicAndPartition, PartitionFetchInfo> partitionFetchInfos = requestInfoGroupedByTopic.row(topic);
+
+            writeShortString(buffer, topic);
+            buffer.putInt(partitionFetchInfos.size()); // partition count
+
+            for (Map.Entry<TopicAndPartition, PartitionFetchInfo> currPartition : partitionFetchInfos.entrySet()) {
+                int partition = currPartition.getKey().partition;
+                long offset = currPartition.getValue().offset;
+                int fetchSize = currPartition.getValue().fetchSize;
+                buffer.putInt(partition);
+                buffer.putLong(offset);
+                buffer.putInt(fetchSize);
+            }
+        }
+    }
+
+    public int sizeInBytes() {
+        return 2 + /* versionId */
+                        4 + /* correlationId */
+                        shortStringLength(clientId) + 4 + /* replicaId */
+                        4 + /* maxWait */
+                        4 + /* minBytes */
+                        4 + /* topic count */
+                        +compute();
+    }
+
+    private int compute() {
+        int total = 0;
+        for (String topic : requestInfoGroupedByTopic.rowKeySet()) {
+            Map<TopicAndPartition, PartitionFetchInfo> partitionFetchInfos = requestInfoGroupedByTopic.row(topic);
+            total += shortStringLength(topic);
+            total += 4; /* partition count */
+            total += partitionFetchInfos.size() * (4 + /* partition id */
+                            8 + /* offset */
+                            4 /* fetch size */
+            );
+        }
+        return total;
+    }
+
+    public boolean isFromFollower() {
+        return Requests.isReplicaIdFromFollower(replicaId);
+    }
+
+    public boolean isFromOrdinaryConsumer() {
+        return replicaId == Requests.OrdinaryConsumerId;
+    }
+
+    public boolean isFromLowLevelConsumer() {
+        return replicaId == Requests.DebuggingConsumerId;
+    }
+
+    public int numPartitions() {
+        return requestInfo.size();
     }
 
     @Override
     public String toString() {
-        return "FetchRequest(topic:" + topic + ", part:" + partition + " offset:" + offset + " maxSize:" + maxSize + ")";
+        StringBuilder fetchRequest = new StringBuilder();
+        fetchRequest.append("Name: " + this.getClass().getSimpleName());
+        fetchRequest.append("; Version: " + versionId);
+        fetchRequest.append("; CorrelationId: " + correlationId);
+        fetchRequest.append("; ClientId: " + clientId);
+        fetchRequest.append("; ReplicaId: " + replicaId);
+        fetchRequest.append("; MaxWait: " + maxWait + " ms");
+        fetchRequest.append("; MinBytes: " + minBytes + " bytes");
+        fetchRequest.append("; RequestInfo: " + requestInfo);
+        return fetchRequest.toString();
     }
 
-    /**
-     * Read a fetch request from buffer(socket data)
-     * 
-     * @param buffer the buffer data
-     * @return a fetch request
-     * @throws IllegalArgumentException while error data format(no topic)
-     */
-    public static FetchRequest readFrom(ByteBuffer buffer) {
-        String topic = Utils.readShortString(buffer);
-        int partition = buffer.getInt();
-        long offset = buffer.getLong();
-        int size = buffer.getInt();
-        return new FetchRequest(topic, partition, offset, size);
+    @Override
+    public void handleError(final Throwable e, RequestChannel requestChannel, Request request) {
+        Map<TopicAndPartition, FetchResponsePartitionData> fetchResponsePartitionData = Utils.map(requestInfo, new Function2<TopicAndPartition, PartitionFetchInfo, Tuple2<TopicAndPartition, FetchResponsePartitionData>>() {
+            @Override
+            public Tuple2<TopicAndPartition, FetchResponsePartitionData> apply(TopicAndPartition arg1, PartitionFetchInfo arg2) {
+                return Tuple2.make(arg1, new FetchResponsePartitionData(ErrorMapping.codeFor(e.getClass()), -1, MessageSets.Empty));
+            }
+        });
+
+        FetchResponse errorResponse = new FetchResponse(correlationId, fetchResponsePartitionData);
+        requestChannel.sendResponse(new Response(request, new FetchResponseSend(errorResponse)));
     }
 }

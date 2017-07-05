@@ -1,9 +1,10 @@
 package kafka.api;
 
-import com.google.common.collect.ImmutableMap;
-import kafka.utils.Json;
-
 import java.util.List;
+
+import com.google.common.collect.ImmutableMap;
+
+import kafka.utils.Json;
 
 public class LeaderAndIsr {
     public final int leader;

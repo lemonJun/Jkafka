@@ -1,10 +1,10 @@
 package kafka.api;
 
+import java.nio.ByteBuffer;
+
 import kafka.common.ErrorMapping;
 import kafka.message.ByteBufferMessageSet;
 import kafka.message.MessageSet;
-
-import java.nio.ByteBuffer;
 
 public class FetchResponsePartitionData {
     public static FetchResponsePartitionData readFrom(ByteBuffer buffer) {

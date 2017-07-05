@@ -1,159 +1,135 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- * 
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package kafka.api;
 
-import java.nio.ByteBuffer;
-import java.util.List;
+import static kafka.api.ApiUtils.shortStringLength;
+import static kafka.api.ApiUtils.writeShortString;
 
-import kafka.common.annotations.ClientSide;
-import kafka.common.annotations.ServerSide;
+import java.nio.ByteBuffer;
+import java.util.Map;
+
+import com.google.common.collect.Table;
+
+import kafka.common.ErrorMapping;
+import kafka.common.TopicAndPartition;
+import kafka.network.BoundedByteBufferSend;
 import kafka.network.Request;
+import kafka.network.RequestChannel;
+import kafka.network.Response;
+import kafka.utils.Callable2;
+import kafka.utils.Function2;
+import kafka.utils.Function3;
+import kafka.utils.Tuple2;
 import kafka.utils.Utils;
 
-/**
- * offset request
- * <p>
- * Jafka will returns all offsets earlier than given time with max number
- * limit. The fist offset of result is the biggest and the the last is the
- * smallest.
- * 
- * @author adyliu (imxylz@gmail.com)
- * @since 1.0
- */
-@ClientSide
-@ServerSide
-public class OffsetRequest implements Request {
+public class OffsetRequest extends RequestOrResponse {
+    public Map<TopicAndPartition, PartitionOffsetRequestInfo> requestInfo;
+    public short versionId;
+    public String clientId;
+    public int replicaId;
 
-    public static final String SMALLES_TIME_STRING = "smallest";
-
-    public static final String LARGEST_TIME_STRING = "largest";
-
-    /**
-     * reading the latest offset
-     */
-    public static final long LATES_TTIME = -1L;
-
-    /**
-     * reading the earilest offset
-     */
-    public static final long EARLIES_TTIME = -2L;
-
-    ///////////////////////////////////////////////////////////////////////
-    /**
-     * message topic
-     */
-    public String topic;
-
-    /**
-     * topic partition,default value is 0
-     */
-    public int partition;
-
-    /**
-     * the earliest time of messages(unix milliseconds time)
-     *
-     * <ul>
-     * <li>{@link #LATES_TTIME}: the latest(largest) offset</li>
-     * <li>{@link #EARLIES_TTIME}: the earilest(smallest) offset</li>
-     * <li>time&gt;0: the log file offset which lastmodified time earlier
-     * than the time</li>
-     * </ul>
-     */
-    public long time;
-
-    /**
-     * number of offsets
-     */
-    public int maxNumOffsets;
-
-    /**
-     * create a offset request
-     * 
-     * @param topic topic name
-     * @param partition partition id
-     * @param time the log file created time {@link #time}
-     * @param maxNumOffsets the number of offsets
-     * @see #time
-     */
-    public OffsetRequest(String topic, int partition, long time, int maxNumOffsets) {
-        this.topic = topic;
-        this.partition = partition;
-        this.time = time;
-        this.maxNumOffsets = maxNumOffsets;
+    public OffsetRequest(Map<TopicAndPartition, PartitionOffsetRequestInfo> requestInfo) {
+        this(requestInfo, OffsetRequestReader.CurrentVersion, 0, OffsetRequestReader.DefaultClientId, Requests.OrdinaryConsumerId);
     }
 
-    public RequestKeys getRequestKey() {
-        return RequestKeys.OFFSETS;
+    public OffsetRequest(Map<TopicAndPartition, PartitionOffsetRequestInfo> requestInfo, short versionId, int correlationId, String clientId, int replicaId) {
+        super(RequestKeys.OffsetsKey, correlationId);
+        this.requestInfo = requestInfo;
+        this.versionId = versionId;
+        this.clientId = clientId;
+        this.replicaId = replicaId;
+
+        requestInfoGroupedByTopic = Utils.groupBy(requestInfo, new Function2<TopicAndPartition, PartitionOffsetRequestInfo, String>() {
+            @Override
+            public String apply(TopicAndPartition arg1, PartitionOffsetRequestInfo arg2) {
+                return arg1.topic;
+            }
+        });
     }
 
-    public void writeTo(ByteBuffer buffer) {
-        Utils.writeShortString(buffer, topic);
-        buffer.putInt(partition);
-        buffer.putLong(time);
-        buffer.putInt(maxNumOffsets);
+    public OffsetRequest(Map<TopicAndPartition, PartitionOffsetRequestInfo> requestInfo, int correlationId, int replicaId) {
+        this(requestInfo, OffsetRequestReader.CurrentVersion, correlationId, OffsetRequestReader.DefaultClientId, replicaId);
     }
 
-    public int getSizeInBytes() {
-        return Utils.caculateShortString(topic) + 4 + 8 + 4;
+    Table<String, TopicAndPartition, PartitionOffsetRequestInfo> requestInfoGroupedByTopic;
+
+    public OffsetRequest(Map<TopicAndPartition, PartitionOffsetRequestInfo> requestInfo, String clientId, int consumerId) {
+        this(requestInfo, OffsetRequestReader.CurrentVersion, 0, clientId, consumerId);
+    }
+
+    @Override
+    public int sizeInBytes() {
+        return 2 + /* versionId */
+                        4 + /* correlationId */
+                        shortStringLength(clientId) + 4 + /* replicaId */
+                        4 /* topic count */
+                        + Utils.foldLeft(requestInfoGroupedByTopic, 0, new Function3<Integer, String, Map<TopicAndPartition, PartitionOffsetRequestInfo>, Integer>() {
+                            @Override
+                            public Integer apply(Integer foldedTopics, String topic, Map<TopicAndPartition, PartitionOffsetRequestInfo> partitionInfos) {
+                                return foldedTopics + shortStringLength(topic) + 4 + /* partition count */
+                                partitionInfos.size() * (4 + /* partition */
+                                8 + /* time */
+                                4 /* maxNumOffsets */
+                                );
+                            }
+                        });
+    }
+
+    @Override
+    public void writeTo(final ByteBuffer buffer) {
+        buffer.putShort(versionId);
+        buffer.putInt(correlationId);
+        writeShortString(buffer, clientId);
+        buffer.putInt(replicaId);
+
+        buffer.putInt(requestInfoGroupedByTopic.size()); // topic count
+
+        Utils.foreach(requestInfoGroupedByTopic, new Callable2<String, Map<TopicAndPartition, PartitionOffsetRequestInfo>>() {
+            @Override
+            public void apply(String topic, Map<TopicAndPartition, PartitionOffsetRequestInfo> partitionInfos) {
+                writeShortString(buffer, topic);
+                buffer.putInt(partitionInfos.size()); // partition count
+
+                Utils.foreach(partitionInfos, new Callable2<TopicAndPartition, PartitionOffsetRequestInfo>() {
+                    @Override
+                    public void apply(TopicAndPartition arg1, PartitionOffsetRequestInfo partitionInfo) {
+                        buffer.putInt(arg1.partition);
+                        buffer.putLong(partitionInfo.time);
+                        buffer.putInt(partitionInfo.maxNumOffsets);
+                    }
+                });
+            }
+        });
+    }
+
+    public boolean isFromOrdinaryClient() {
+        return replicaId == Requests.OrdinaryConsumerId;
+    }
+
+    public boolean isFromDebuggingClient() {
+        return replicaId == Requests.DebuggingConsumerId;
     }
 
     @Override
     public String toString() {
-        return "OffsetRequest(topic:" + topic + ", part:" + partition + ", time:" + time + ", maxNumOffsets:" + maxNumOffsets + ")";
+        StringBuilder offsetRequest = new StringBuilder();
+        offsetRequest.append("Name: " + this.getClass().getSimpleName());
+        offsetRequest.append("; Version: " + versionId);
+        offsetRequest.append("; CorrelationId: " + correlationId);
+        offsetRequest.append("; ClientId: " + clientId);
+        offsetRequest.append("; RequestInfo: " + requestInfo);
+        offsetRequest.append("; ReplicaId: " + replicaId);
+        return offsetRequest.toString();
     }
 
-    ///////////////////////////////////////////////////////////////////////
-    public static OffsetRequest readFrom(ByteBuffer buffer) {
-        String topic = Utils.readShortString(buffer);
-        int partition = buffer.getInt();
-        long offset = buffer.getLong();
-        int maxNumOffsets = buffer.getInt();
-        return new OffsetRequest(topic, partition, offset, maxNumOffsets);
-    }
+    @Override
+    public void handleError(final Throwable e, RequestChannel requestChannel, Request request) {
+        Map<TopicAndPartition, PartitionOffsetsResponse> partitionOffsetResponseMap = Utils.map(requestInfo, new Function2<TopicAndPartition, PartitionOffsetRequestInfo, Tuple2<TopicAndPartition, PartitionOffsetsResponse>>() {
+            @Override
+            public Tuple2<TopicAndPartition, PartitionOffsetsResponse> apply(TopicAndPartition topicAndPartition, PartitionOffsetRequestInfo partitionOffsetRequest) {
+                return Tuple2.make(topicAndPartition, new PartitionOffsetsResponse(ErrorMapping.codeFor(e.getClass()), null));
+            }
+        });
 
-    public static ByteBuffer serializeOffsetArray(List<Long> offsets) {
-        int size = 4 + 8 * offsets.size();
-        ByteBuffer buffer = ByteBuffer.allocate(size);
-        buffer.putInt(offsets.size());
-        for (int i = 0; i < offsets.size(); i++) {
-            buffer.putLong(offsets.get(i));
-        }
-        buffer.rewind();
-        return buffer;
-    }
-
-    public static ByteBuffer serializeOffsetArray(long[] offsets) {
-        int size = 4 + 8 * offsets.length;
-        ByteBuffer buffer = ByteBuffer.allocate(size);
-        buffer.putInt(offsets.length);
-        for (int i = 0; i < offsets.length; i++) {
-            buffer.putLong(offsets[i]);
-        }
-        buffer.rewind();
-        return buffer;
-    }
-
-    public static long[] deserializeOffsetArray(ByteBuffer buffer) {
-        int size = buffer.getInt();
-        long[] offsets = new long[size];
-        for (int i = 0; i < size; i++) {
-            offsets[i] = buffer.getLong();
-        }
-        return offsets;
+        OffsetResponse errorResponse = new OffsetResponse(correlationId, partitionOffsetResponseMap);
+        requestChannel.sendResponse(new Response(request, new BoundedByteBufferSend(errorResponse)));
     }
 }

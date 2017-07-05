@@ -1,57 +1,58 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- * 
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package kafka.consumer;
 
-import java.io.Closeable;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
-import kafka.producer.serializer.Decoder;
+import com.google.common.collect.Multimap;
+
+import kafka.serializer.Decoder;
 
 /**
- * Main interface for consumer
- * 
- * @author adyliu (imxylz@gmail.com)
- * @since 1.0
+ *  Main interface for consumer
  */
-public interface ConsumerConnector extends Closeable {
+public interface ConsumerConnector {
 
     /**
-     * Create a list of {@link MessageStream} for each topic
-     * @param <T> message type
-     * @param topicCountMap a map of (topic,#streams) pair
-     * @param decoder message decoder
-     * @return a map of (topic,list of MessageStream) pair. The number of
-     *         items in the list is #streams. Each MessageStream supports
-     *         an iterator of messages.
+     *  Create a list of MessageStreams for each topic.
+     *
+     *  @param topicCountMap  a map of (topic, #streams) pair
+     *  @return a map of (topic, list of  KafkaStream) pairs.
+     *          The number of items in the list is #streams. Each stream supports
+     *          an iterator over message/metadata pairs.
      */
-    <T> Map<String, List<MessageStream<T>>> createMessageStreams(//
-                    Map<String, Integer> topicCountMap, Decoder<T> decoder);
+    Multimap<String, KafkaStream<byte[], byte[]>> createMessageStreams(Map<String, Integer> topicCountMap);
 
     /**
-     * Commit the offsets of all broker partitions connected by this
-     * connector
+     *  Create a list of MessageStreams for each topic.
+     *
+     *  @param topicCountMap  a map of (topic, #streams) pair
+     *  @param keyDecoder Decoder to decode the key portion of the message
+     *  @param valueDecoder Decoder to decode the value portion of the message
+     *  @return a map of (topic, list of  KafkaStream) pairs.
+     *          The number of items in the list is #streams. Each stream supports
+     *          an iterator over message/metadata pairs.
+     */
+    <K, V> Multimap<String, KafkaStream<K, V>> createMessageStreams(Map<String, Integer> topicCountMap, Decoder<K> keyDecoder, Decoder<V> valueDecoder);
+
+    /**
+     *  Create a list of message streams for all topics that match a given filter.
+     *
+     *  @param topicFilter Either a Whitelist or Blacklist TopicFilter object.
+     *  @param numStreams Number of streams to return
+     *  @param keyDecoder Decoder to decode the key portion of the message
+     *  @param valueDecoder Decoder to decode the value portion of the message
+     *  @return a list of KafkaStream each of which provides an
+     *          iterator over message/metadata pairs over allowed topics.
+     */
+    <K, V> List<KafkaStream<K, V>> createMessageStreamsByFilter(TopicFilter topicFilter, int numStreams /*= 1*/, Decoder<K> keyDecoder /*= new DefaultDecoder()*/, Decoder<V> valueDecoder /* = new DefaultDecoder()*/);
+
+    /**
+     *  Commit the offsets of all broker partitions connected by this connector.
      */
     void commitOffsets();
 
     /**
-     * Shut down the connector
+     *  Shut down the connector
      */
-    public void close() throws IOException;
+    void shutdown();
 }

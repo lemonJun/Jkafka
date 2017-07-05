@@ -1,14 +1,5 @@
 package kafka.log;
 
-import com.google.common.base.Predicate;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
-import kafka.common.TopicAndPartition;
-import kafka.server.OffsetCheckpoint;
-import kafka.utils.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.File;
 import java.util.List;
 import java.util.Map;
@@ -16,6 +7,23 @@ import java.util.Set;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.common.base.Predicate;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+
+import kafka.common.TopicAndPartition;
+import kafka.server.OffsetCheckpoint;
+import kafka.utils.Callable1;
+import kafka.utils.Function1;
+import kafka.utils.Pool;
+import kafka.utils.Throttler;
+import kafka.utils.Time;
+import kafka.utils.Tuple2;
+import kafka.utils.Utils;
 
 public class LogCleaner {
     /**

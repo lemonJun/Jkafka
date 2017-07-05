@@ -1,12 +1,13 @@
 package kafka.log;
 
-import kafka.common.OptimisticLockFailureException;
-import kafka.utils.Throttler;
-import kafka.utils.Time;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.concurrent.atomic.AtomicInteger;
+import kafka.common.OptimisticLockFailureException;
+import kafka.utils.Throttler;
+import kafka.utils.Time;
 
 /**
  * The cleaner threads do the actual log cleaning. Each thread processes does its cleaning repeatedly by

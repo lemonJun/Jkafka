@@ -1,12 +1,12 @@
 package kafka.controller;
 
+import java.util.concurrent.BlockingQueue;
+
 import kafka.api.RequestOrResponse;
 import kafka.cluster.Broker;
 import kafka.network.BlockingChannel;
 import kafka.utils.Callable1;
 import kafka.utils.Tuple2;
-
-import java.util.concurrent.BlockingQueue;
 
 public class ControllerBrokerStateInfo {
     public BlockingChannel channel;

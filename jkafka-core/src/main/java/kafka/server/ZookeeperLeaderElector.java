@@ -1,19 +1,23 @@
 package kafka.server;
 
+import static kafka.utils.ZkUtils.deletePath;
+import static kafka.utils.ZkUtils.makeSurePersistentPathExists;
+import static kafka.utils.ZkUtils.readDataMaybeNull;
+
+import org.I0Itec.zkclient.IZkDataListener;
+import org.I0Itec.zkclient.exception.ZkNodeExistsException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.alibaba.fastjson.JSON;
 import com.google.common.collect.ImmutableMap;
+
 import kafka.controller.ControllerContext;
 import kafka.controller.KafkaControllers;
 import kafka.utils.Callable0;
 import kafka.utils.Function2;
 import kafka.utils.SystemTime;
 import kafka.utils.ZkUtils;
-import org.I0Itec.zkclient.IZkDataListener;
-import org.I0Itec.zkclient.exception.ZkNodeExistsException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import static kafka.utils.ZkUtils.*;
 
 /**
  * This class handles zookeeper based leader election based on an ephemeral path. The election module does not handle

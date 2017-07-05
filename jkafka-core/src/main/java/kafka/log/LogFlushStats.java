@@ -1,9 +1,9 @@
 package kafka.log;
 
+import java.util.concurrent.TimeUnit;
+
 import kafka.metrics.KafkaMetricsGroup;
 import kafka.metrics.KafkaTimer;
-
-import java.util.concurrent.TimeUnit;
 
 public class LogFlushStats extends KafkaMetricsGroup {
     public static final LogFlushStats instance = new LogFlushStats();

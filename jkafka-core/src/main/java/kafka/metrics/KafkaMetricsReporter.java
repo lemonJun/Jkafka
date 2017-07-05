@@ -1,10 +1,10 @@
 package kafka.metrics;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import kafka.utils.Callable1;
 import kafka.utils.Utils;
 import kafka.utils.VerifiableProperties;
-
-import java.util.concurrent.atomic.AtomicBoolean;
 
 public abstract class KafkaMetricsReporter {
     public abstract void init(VerifiableProperties props);

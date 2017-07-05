@@ -1,9 +1,9 @@
 package kafka.api;
 
+import java.nio.ByteBuffer;
+
 import kafka.network.Request;
 import kafka.network.RequestChannel;
-
-import java.nio.ByteBuffer;
 
 public abstract class RequestOrResponse {
     public Short requestId;

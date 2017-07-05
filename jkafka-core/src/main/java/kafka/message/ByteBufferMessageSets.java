@@ -1,8 +1,5 @@
 package kafka.message;
 
-import kafka.common.KafkaException;
-import kafka.utils.Utils;
-
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -10,6 +7,9 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
+
+import kafka.common.KafkaException;
+import kafka.utils.Utils;
 
 public class ByteBufferMessageSets {
 

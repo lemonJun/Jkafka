@@ -1,12 +1,6 @@
 package kafka.log;
 
-import com.google.common.base.Throwables;
-import kafka.common.InvalidOffsetException;
-import kafka.utils.Function0;
-import kafka.utils.Os;
-import kafka.utils.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import static com.google.common.base.Preconditions.checkState;
 
 import java.io.Closeable;
 import java.io.File;
@@ -18,7 +12,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-import static com.google.common.base.Preconditions.checkState;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.common.base.Throwables;
+
+import kafka.common.InvalidOffsetException;
+import kafka.utils.Function0;
+import kafka.utils.Os;
+import kafka.utils.Utils;
 
 /**
  * An index that maps offsets to physical file locations for a particular log segment. This index may be sparse:

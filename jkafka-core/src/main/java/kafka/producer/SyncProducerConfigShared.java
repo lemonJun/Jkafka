@@ -1,59 +1,37 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- * 
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package kafka.producer;
 
-import java.util.Properties;
+import kafka.utils.Range;
+import kafka.utils.VerifiableProperties;
 
-/**
- * Config for sync producer
- * 
- * @author adyliu (imxylz@gmail.com)
- * @since 1.0
- */
-public interface SyncProducerConfigShared {
+public abstract class SyncProducerConfigShared {
+    public VerifiableProperties props;
 
-    Properties getProperties();
+    protected SyncProducerConfigShared(VerifiableProperties props) {
+        this.props = props;
+        init();
+    }
 
-    /**
-     * buffer size of producer
-     * @return buffer size
+    private void init() {
+        sendBufferBytes = props.getInt("send.buffer.bytes", 100 * 1024);
+        clientId = props.getString("client.id", SyncProducerConfig.DefaultClientId);
+        requestRequiredAcks = props.getShort("request.required.acks", SyncProducerConfig.DefaultRequiredAcks);
+        requestTimeoutMs = props.getIntInRange("request.timeout.ms", SyncProducerConfig.DefaultAckTimeoutMs, Range.make(1, Integer.MAX_VALUE));
+    }
+
+    public int sendBufferBytes;
+
+    /* the client application sending the producer requests */
+    public String clientId;
+
+    /*
+     * The required acks of the producer requests - negative value means ack
+     * after the replicas in ISR have caught up to the leader's offset
+     * corresponding to this produce request.
      */
-    int getBufferSize();
+    public short requestRequiredAcks;
 
-    /**
-     * timeout of socket connection
-     * @return connection timeout
+    /*
+     * The ack timeout of the producer requests. Value must be non-negative and non-zero
      */
-    int getConnectTimeoutMs();
-
-    /**
-     * timeout of socket data
-     * @return timeout of socket
-     */
-    int getSocketTimeoutMs();
-
-    //int getMaxMessageSize();
-
-    /**
-     * default serializer
-     * 
-     * @since 1.1
-     * @return serializer class
-     */
-    String getSerializerClass();
+    public int requestTimeoutMs;
 }

@@ -1,18 +1,18 @@
 package kafka.api;
 
-import com.google.common.collect.Sets;
-import kafka.common.ErrorMapping;
-import kafka.common.TopicAndPartition;
-import kafka.utils.Callable1;
-import kafka.utils.Function1;
-import kafka.utils.Function2;
-import kafka.utils.Utils;
+import static kafka.api.ApiUtils.readShortString;
+import static kafka.api.ApiUtils.writeShortString;
 
 import java.nio.ByteBuffer;
 import java.util.Set;
 
-import static kafka.api.ApiUtils.readShortString;
-import static kafka.api.ApiUtils.writeShortString;
+import com.google.common.collect.Sets;
+
+import kafka.common.ErrorMapping;
+import kafka.common.TopicAndPartition;
+import kafka.utils.Callable1;
+import kafka.utils.Function2;
+import kafka.utils.Utils;
 
 public class ControlledShutdownResponse extends RequestOrResponse {
 

@@ -1,8 +1,6 @@
 package kafka.log;
 
-import kafka.common.KafkaException;
-import kafka.utils.NonThreadSafe;
-import kafka.utils.Utils;
+import static com.google.common.base.Preconditions.checkState;
 
 import java.nio.ByteBuffer;
 import java.security.DigestException;
@@ -10,7 +8,9 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 
-import static com.google.common.base.Preconditions.checkState;
+import kafka.common.KafkaException;
+import kafka.utils.NonThreadSafe;
+import kafka.utils.Utils;
 
 @NonThreadSafe
 public class SkimpyOffsetMap extends OffsetMap {

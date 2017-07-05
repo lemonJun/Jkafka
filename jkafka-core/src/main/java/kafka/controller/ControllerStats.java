@@ -1,10 +1,11 @@
 package kafka.controller;
 
+import java.util.concurrent.TimeUnit;
+
 import com.yammer.metrics.core.Meter;
+
 import kafka.metrics.KafkaMetricsGroup;
 import kafka.metrics.KafkaTimer;
-
-import java.util.concurrent.TimeUnit;
 
 public class ControllerStats extends KafkaMetricsGroup {
     public static ControllerStats instance = new ControllerStats();

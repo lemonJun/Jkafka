@@ -1,17 +1,16 @@
 package kafka.controller;
 
+import java.util.Collection;
+import java.util.List;
+
 import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
+
 import kafka.api.LeaderAndIsr;
 import kafka.common.StateChangeFailedException;
 import kafka.common.TopicAndPartition;
 import kafka.utils.Tuple2;
 import kafka.utils.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.Collection;
-import java.util.List;
 
 /**
  * Picks one of the alive in-sync reassigned replicas as the new leader.

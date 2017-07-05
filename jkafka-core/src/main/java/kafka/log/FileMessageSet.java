@@ -1,13 +1,5 @@
 package kafka.log;
 
-import kafka.common.KafkaException;
-import kafka.message.*;
-import kafka.utils.IteratorTemplate;
-import kafka.utils.NonThreadSafe;
-import kafka.utils.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
@@ -16,6 +8,21 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.GatheringByteChannel;
 import java.util.Iterator;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import kafka.common.KafkaException;
+import kafka.message.ByteBufferMessageSet;
+import kafka.message.InvalidMessageException;
+import kafka.message.Message;
+import kafka.message.MessageAndOffset;
+import kafka.message.MessageSet;
+import kafka.message.MessageSets;
+import kafka.message.Messages;
+import kafka.utils.IteratorTemplate;
+import kafka.utils.NonThreadSafe;
+import kafka.utils.Utils;
 
 @NonThreadSafe
 public class FileMessageSet extends MessageSet implements Closeable {

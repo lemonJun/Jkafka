@@ -1,14 +1,19 @@
 package kafka.api;
 
+import java.nio.ByteBuffer;
+import java.util.Map;
+
 import com.google.common.collect.Maps;
 import com.google.common.collect.Table;
+
 import kafka.common.ErrorMapping;
 import kafka.common.TopicAndPartition;
 import kafka.message.ByteBufferMessageSet;
-import kafka.utils.*;
-
-import java.nio.ByteBuffer;
-import java.util.Map;
+import kafka.utils.Function1;
+import kafka.utils.Function2;
+import kafka.utils.Function3;
+import kafka.utils.Tuple2;
+import kafka.utils.Utils;
 
 public class FetchResponse {
     public static final int headerSize = 4 + /* correlationId */

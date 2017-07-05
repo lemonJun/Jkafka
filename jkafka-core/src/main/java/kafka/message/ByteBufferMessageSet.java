@@ -1,15 +1,16 @@
 package kafka.message;
 
-import com.google.common.collect.Lists;
-import kafka.common.KafkaException;
-import kafka.utils.IteratorTemplate;
-
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.GatheringByteChannel;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
+
+import com.google.common.collect.Lists;
+
+import kafka.common.KafkaException;
+import kafka.utils.IteratorTemplate;
 
 /**
  * A sequence of messages stored in a byte buffer

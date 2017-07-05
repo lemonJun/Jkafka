@@ -1,12 +1,13 @@
 package kafka.api;
 
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import com.google.common.collect.Maps;
+
 import kafka.common.TopicAndPartition;
 import kafka.consumer.ConsumerConfigs;
 import kafka.utils.NonThreadSafe;
-
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 
 @NonThreadSafe
 public class FetchRequestBuilder {

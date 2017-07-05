@@ -1,41 +1,20 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- * 
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package kafka.network;
 
+import kafka.common.KafkaException;
+
 /**
- * transmission interface
- * @author adyliu (imxylz@gmail.com)
- * @since 1.0
+ * Represents a stateful transfer of data to or from the network
  */
-public interface Transmission {
-    /**
-     * expect task has not been finished othewise throwing an exception
-     */
-    void expectIncomplete();
+public abstract class Transmission {
+    public abstract boolean complete();
 
-    /**
-     * expect task has been finished othewise throwing an exception
-     */
-    void expectComplete();
+    protected void expectIncomplete() {
+        if (complete())
+            throw new KafkaException("This operation cannot be completed on a complete request.");
+    }
 
-    /**
-     * check task whether it has been finished
-     * @return true while finished or false
-     */
-    boolean complete();
+    protected void expectComplete() {
+        if (!complete())
+            throw new KafkaException("This operation cannot be completed on an incomplete request.");
+    }
 }

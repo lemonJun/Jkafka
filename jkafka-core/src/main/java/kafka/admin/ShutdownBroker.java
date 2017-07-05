@@ -1,6 +1,19 @@
 package kafka.admin;
 
+import java.util.Set;
+
+import javax.management.MBeanServerConnection;
+import javax.management.ObjectName;
+import javax.management.remote.JMXConnector;
+import javax.management.remote.JMXConnectorFactory;
+import javax.management.remote.JMXServiceURL;
+
+import org.I0Itec.zkclient.ZkClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.alibaba.fastjson.JSONObject;
+
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
@@ -11,16 +24,6 @@ import kafka.utils.CommandLineUtils;
 import kafka.utils.Json;
 import kafka.utils.ZKStringSerializer;
 import kafka.utils.ZkUtils;
-import org.I0Itec.zkclient.ZkClient;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import javax.management.MBeanServerConnection;
-import javax.management.ObjectName;
-import javax.management.remote.JMXConnector;
-import javax.management.remote.JMXConnectorFactory;
-import javax.management.remote.JMXServiceURL;
-import java.util.Set;
 
 public class ShutdownBroker {
     static class ShutdownParams {

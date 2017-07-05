@@ -1,115 +1,88 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- * 
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package kafka.consumer;
 
-import static java.lang.String.format;
-
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import kafka.cluster.Partition;
-import kafka.common.ErrorMapping;
+import com.google.common.collect.Lists;
+
 import kafka.message.ByteBufferMessageSet;
+import kafka.utils.Utils;
 
-/**
- * @author adyliu (imxylz@gmail.com)
- * @since 1.0
- */
 public class PartitionTopicInfo {
+    public static final long InvalidOffset = -1L;
 
-    private static final Logger logger = LoggerFactory.getLogger(PartitionTopicInfo.class);
+    public static boolean isOffsetInvalid(long offset) {
+        return offset < 0L;
+    }
 
-    public final String topic;
+    public String topic;
+    public int partitionId;
+    private BlockingQueue<FetchedDataChunk> chunkQueue;
+    private AtomicLong consumedOffset;
+    private AtomicLong fetchedOffset;
+    private AtomicInteger fetchSize;
+    private String clientId;
 
-    public final int brokerId;
-
-    private final BlockingQueue<FetchedDataChunk> chunkQueue;
-
-    private final AtomicLong consumedOffset;
-
-    private final AtomicLong fetchedOffset;
-
-    private final AtomicLong consumedOffsetChanged = new AtomicLong(0);
-
-    final Partition partition;
-
-    public PartitionTopicInfo(String topic, //
-                    Partition partition, //
-                    BlockingQueue<FetchedDataChunk> chunkQueue, //
-                    AtomicLong consumedOffset, //
-                    AtomicLong fetchedOffset) {
-        super();
+    public PartitionTopicInfo(String topic, int partitionId, BlockingQueue<FetchedDataChunk> chunkQueue, AtomicLong consumedOffset, AtomicLong fetchedOffset, AtomicInteger fetchSize, String clientId) {
         this.topic = topic;
-        this.partition = partition;
-        this.brokerId = partition.brokerId;
+        this.partitionId = partitionId;
         this.chunkQueue = chunkQueue;
         this.consumedOffset = consumedOffset;
         this.fetchedOffset = fetchedOffset;
+        this.fetchSize = fetchSize;
+        this.clientId = clientId;
+
+        logger.debug("initial consumer offset of {} is {}", this, consumedOffset.get());
+        logger.debug("initial fetch offset of {} is {}", this, fetchedOffset.get());
+        consumerTopicStats = ConsumerTopicStatsRegistry.getConsumerTopicStat(clientId);
     }
 
-    public long getConsumedOffset() {
+    Logger logger = LoggerFactory.getLogger(PartitionTopicInfo.class);
+
+    private ConsumerTopicStatsRegistry.ConsumerTopicStats consumerTopicStats;
+
+    public long getConsumeOffset() {
         return consumedOffset.get();
     }
 
-    public AtomicLong getConsumedOffsetChanged() {
-        return consumedOffsetChanged;
-    }
-
-    public boolean resetComsumedOffsetChanged(long lastChanged) {
-        return consumedOffsetChanged.compareAndSet(lastChanged, 0);
-    }
-
-    public long getFetchedOffset() {
+    public long getFetchOffset() {
         return fetchedOffset.get();
     }
 
     public void resetConsumeOffset(long newConsumeOffset) {
         consumedOffset.set(newConsumeOffset);
-        consumedOffsetChanged.incrementAndGet();
+        logger.debug("reset consume offset of {} to {}", this, newConsumeOffset);
     }
 
     public void resetFetchOffset(long newFetchOffset) {
         fetchedOffset.set(newFetchOffset);
+        logger.debug("reset fetch offset of ({}) to {}", this, newFetchOffset);
     }
 
-    public long enqueue(ByteBufferMessageSet messages, long fetchOffset) throws InterruptedException {
-        long size = messages.getValidBytes();
+    /**
+     * Enqueue a message set for processing.
+     */
+    public void enqueue(ByteBufferMessageSet messages) {
+        int size = messages.validBytes();
         if (size > 0) {
-            final long oldOffset = fetchedOffset.get();
-            chunkQueue.put(new FetchedDataChunk(messages, this, fetchOffset));
-            long newOffset = fetchedOffset.addAndGet(size);
-            if (logger.isDebugEnabled()) {
-                logger.debug(format("updated fetchset (origin+size=newOffset) => %d + %d = %d", oldOffset, size, newOffset));
-            }
+            long next = Utils.last(Lists.newArrayList(messages.shallowIterator())).nextOffset();
+            logger.trace("Updating fetch offset = {} to {}", fetchedOffset.get(), next);
+            Utils.put(chunkQueue, new FetchedDataChunk(messages, this, fetchedOffset.get()));
+            fetchedOffset.set(next);
+            logger.debug("updated fetch offset of ({}) to {}", this, next);
+            consumerTopicStats.getConsumerTopicStats(topic).byteRate.mark(size);
+            consumerTopicStats.getConsumerAllTopicStats().byteRate.mark(size);
+        } else if (messages.sizeInBytes() > 0) {
+            Utils.put(chunkQueue, new FetchedDataChunk(messages, this, fetchedOffset.get()));
         }
-        return size;
     }
 
     @Override
     public String toString() {
-        return topic + "-" + partition + ", fetched/consumed offset: " + fetchedOffset.get() + "/" + consumedOffset.get();
-    }
-
-    public void enqueueError(Exception e, long fetchOffset) throws InterruptedException {
-        ByteBufferMessageSet messages = new ByteBufferMessageSet(ErrorMapping.EMPTY_BUFFER, 0, ErrorMapping.valueOf(e));
-        chunkQueue.put(new FetchedDataChunk(messages, this, fetchOffset));
+        return topic + ":" + partitionId + ": fetched offset = " + fetchedOffset.get() + ": consumed offset = " + consumedOffset.get();
     }
 }

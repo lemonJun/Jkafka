@@ -2,6 +2,7 @@ package kafka.metrics;
 
 import com.yammer.metrics.core.Timer;
 import com.yammer.metrics.core.TimerContext;
+
 import kafka.utils.Function0;
 
 public class KafkaTimer {

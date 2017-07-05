@@ -14,11 +14,11 @@ public class OffsetMetadataAndError {
     public short error;
 
     public OffsetMetadataAndError(long offset) {
-        this(offset, NoMetadata, ErrorMapping.NoError.code);
+        this(offset, NoMetadata, ErrorMapping.NoError);
     }
 
     public OffsetMetadataAndError(long offset, String metadata) {
-        this(offset, metadata, ErrorMapping.NoError.code);
+        this(offset, metadata, ErrorMapping.NoError);
     }
 
     public OffsetMetadataAndError(long offset, String metadata, short error) {

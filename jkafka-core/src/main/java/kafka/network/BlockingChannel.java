@@ -2,35 +2,31 @@ package kafka.network;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.channels.*;
-import java.util.concurrent.locks.ReentrantLock;
+import java.nio.channels.Channels;
+import java.nio.channels.GatheringByteChannel;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.channels.SocketChannel;
 
-import kafka.common.ErrorMapping;
-import kafka.common.annotations.NotThreadSafe;
-import kafka.utils.Closer;
-import kafka.utils.KV;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import kafka.api.RequestOrResponse;
+import kafka.common.KafkaException;
+import kafka.utils.NonThreadSafe;
+import kafka.utils.Utils;
 
 /**
  * A simple blocking channel with timeouts correctly enabled.
- *
- * @author adyliu (imxylz@gmail.com)
- * @since 1.3
  */
-@NotThreadSafe
+@NonThreadSafe
 public class BlockingChannel {
+    public static final int UseDefaultBufferSize = -1;
 
-    public static final int DEFAULT_BUFFER_SIZE = -1;
-    private final String host;
-    private final int port;
-    private final int readBufferSize;
-    private final int writeBufferSize;
-    private final int readTimeoutMs;
-
-    private boolean connected = false;
-    private SocketChannel channel;
-    private ReadableByteChannel readChannel;
-    private GatheringByteChannel writeChannel;
-    private final ReentrantLock lock = new ReentrantLock();
+    public String host;
+    public int port;
+    public int readBufferSize;
+    public int writeBufferSize;
+    public int readTimeoutMs;
 
     public BlockingChannel(String host, int port, int readBufferSize, int writeBufferSize, int readTimeoutMs) {
         this.host = host;
@@ -40,17 +36,25 @@ public class BlockingChannel {
         this.readTimeoutMs = readTimeoutMs;
     }
 
-    public void connect() throws IOException {
-        lock.lock();
-        try {
-            if (!connected) {
+    private boolean connected = false;
+    private SocketChannel channel = null;
+    private ReadableByteChannel readChannel = null;
+    private GatheringByteChannel writeChannel = null;
+    private Object lock = new Object();
+
+    Logger logger = LoggerFactory.getLogger(BlockingChannel.class);
+
+    public void connect() {
+        synchronized (lock) {
+            if (connected)
+                return;
+
+            try {
                 channel = SocketChannel.open();
-                if (readBufferSize > 0) {
+                if (readBufferSize > 0)
                     channel.socket().setReceiveBufferSize(readBufferSize);
-                }
-                if (writeBufferSize > 0) {
+                if (writeBufferSize > 0)
                     channel.socket().setSendBufferSize(writeBufferSize);
-                }
                 channel.configureBlocking(true);
                 channel.socket().setSoTimeout(readTimeoutMs);
                 channel.socket().setKeepAlive(true);
@@ -60,27 +64,28 @@ public class BlockingChannel {
                 writeChannel = channel;
                 readChannel = Channels.newChannel(channel.socket().getInputStream());
                 connected = true;
+                // settings may not match what we requested above
+                String msg = "Created socket with SO_TIMEOUT = {} (requested {}), SO_RCVBUF = {} (requested {}), SO_SNDBUF = {} (requested {}).";
+                logger.debug(msg, channel.socket().getSoTimeout(), readTimeoutMs, channel.socket().getReceiveBufferSize(), readBufferSize, channel.socket().getSendBufferSize(), writeBufferSize);
+            } catch (IOException e) {
+                throw new KafkaException(e);
             }
-        } finally {
-            lock.unlock();
         }
     }
 
     public void disconnect() {
-        lock.lock();
-        try {
+        synchronized (lock) {
             if (connected || channel != null) {
-                Closer.closeQuietly(channel);
-                Closer.closeQuietly(channel.socket());
-                Closer.closeQuietly(readChannel);
+                // closing the main socket channel *should* close the read channel
+                // but let's do it to be sure.
+                Utils.closeQuietly(channel);
+                Utils.closeQuietly(channel.socket());
+                Utils.closeQuietly(readChannel);
                 channel = null;
                 readChannel = null;
                 writeChannel = null;
                 connected = false;
             }
-
-        } finally {
-            lock.unlock();
         }
     }
 
@@ -88,16 +93,21 @@ public class BlockingChannel {
         return connected;
     }
 
-    public int send(Request request) throws IOException {
-        if (!isConnected()) {
-            throw new ClosedChannelException();
-        }
-        return new BoundedByteBufferSend(request).writeCompletely(writeChannel);
+    public int send(RequestOrResponse request) {
+        if (!connected)
+            throw new KafkaException("ClosedChannelException");
+
+        BoundedByteBufferSend send = new BoundedByteBufferSend(request);
+        return send.writeCompletely(writeChannel);
     }
 
-    public KV<Receive, ErrorMapping> receive() throws IOException {
+    public Receive receive() {
+        if (!connected)
+            throw new KafkaException("ClosedChannelException");
+
         BoundedByteBufferReceive response = new BoundedByteBufferReceive();
         response.readCompletely(readChannel);
-        return new KV<Receive, ErrorMapping>(response, ErrorMapping.valueOf(response.buffer().getShort()));
+
+        return response;
     }
 }

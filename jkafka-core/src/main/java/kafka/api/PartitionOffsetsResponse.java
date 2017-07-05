@@ -1,8 +1,8 @@
 package kafka.api;
 
-import kafka.common.ErrorMapping;
-
 import java.util.List;
+
+import kafka.common.ErrorMapping;
 
 public class PartitionOffsetsResponse {
     public short error;

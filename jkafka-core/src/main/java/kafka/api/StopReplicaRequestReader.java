@@ -1,14 +1,14 @@
 package kafka.api;
 
-import kafka.network.InvalidRequestException;
-import kafka.utils.Function1;
-import kafka.utils.Tuple2;
-import kafka.utils.Utils;
+import static kafka.api.ApiUtils.readShortString;
 
 import java.nio.ByteBuffer;
 import java.util.Set;
 
-import static kafka.api.ApiUtils.readShortString;
+import kafka.network.InvalidRequestException;
+import kafka.utils.Function1;
+import kafka.utils.Tuple2;
+import kafka.utils.Utils;
 
 public class StopReplicaRequestReader implements RequestReader {
     public static final RequestReader instance = new StopReplicaRequestReader();

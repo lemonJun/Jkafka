@@ -1,19 +1,20 @@
 package kafka.api;
 
+import static kafka.api.ApiUtils.readIntInRange;
+import static kafka.api.ApiUtils.readShortInRange;
+
+import java.nio.ByteBuffer;
+import java.util.List;
+import java.util.Map;
+
 import com.google.common.collect.Lists;
+
 import kafka.cluster.Broker;
 import kafka.common.ErrorMapping;
 import kafka.utils.Callable1;
 import kafka.utils.Function1;
 import kafka.utils.Range;
 import kafka.utils.Utils;
-
-import java.nio.ByteBuffer;
-import java.util.List;
-import java.util.Map;
-
-import static kafka.api.ApiUtils.readIntInRange;
-import static kafka.api.ApiUtils.readShortInRange;
 
 public class PartitionMetadata {
     public static PartitionMetadata readFrom(final ByteBuffer buffer, final Map<Integer, Broker> brokers) {

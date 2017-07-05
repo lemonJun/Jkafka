@@ -1,15 +1,17 @@
 package kafka.admin;
 
+import java.io.IOException;
+
+import org.I0Itec.zkclient.ZkClient;
+
 import com.google.common.collect.Lists;
+
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import kafka.utils.Utils;
 import kafka.utils.ZKStringSerializer;
 import kafka.utils.ZkUtils;
-import org.I0Itec.zkclient.ZkClient;
-
-import java.io.IOException;
 
 public class DeleteTopicCommand {
     public static void main(String[] args) throws IOException {

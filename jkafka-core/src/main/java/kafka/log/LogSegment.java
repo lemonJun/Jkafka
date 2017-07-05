@@ -1,13 +1,24 @@
 package kafka.log;
 
-import kafka.common.KafkaStorageException;
-import kafka.message.*;
-import kafka.utils.*;
+import java.io.File;
+import java.util.Iterator;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.util.Iterator;
+import kafka.common.KafkaStorageException;
+import kafka.message.ByteBufferMessageSet;
+import kafka.message.ByteBufferMessageSets;
+import kafka.message.InvalidMessageException;
+import kafka.message.MessageAndOffset;
+import kafka.message.MessageSet;
+import kafka.message.MessageSets;
+import kafka.message.NoCompressionCodec;
+import kafka.utils.Function0;
+import kafka.utils.NonThreadSafe;
+import kafka.utils.ThreadSafe;
+import kafka.utils.Time;
+import kafka.utils.Utils;
 
 @NonThreadSafe
 public class LogSegment {

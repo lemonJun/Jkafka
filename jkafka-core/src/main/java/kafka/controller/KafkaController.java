@@ -1,16 +1,16 @@
 package kafka.controller;
 
-import com.google.common.base.Predicate;
-import com.google.common.collect.*;
-import com.yammer.metrics.core.Gauge;
-import kafka.admin.PreferredReplicaLeaderElectionCommand;
-import kafka.api.LeaderAndIsr;
-import kafka.api.RequestOrResponse;
-import kafka.common.*;
-import kafka.metrics.KafkaMetricsGroup;
-import kafka.server.KafkaConfig;
-import kafka.server.ZookeeperLeaderElector;
-import kafka.utils.*;
+import static kafka.utils.ZkUtils.getAllReplicasOnBroker;
+import static kafka.utils.ZkUtils.getLeaderAndIsrForPartition;
+import static kafka.utils.ZkUtils.getPartitionsAssignedToBroker;
+
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+
 import org.I0Itec.zkclient.IZkDataListener;
 import org.I0Itec.zkclient.IZkStateListener;
 import org.I0Itec.zkclient.ZkClient;
@@ -21,10 +21,38 @@ import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
-import java.util.concurrent.TimeUnit;
+import com.google.common.base.Predicate;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.Sets;
+import com.google.common.collect.Table;
+import com.yammer.metrics.core.Gauge;
 
-import static kafka.utils.ZkUtils.*;
+import kafka.admin.PreferredReplicaLeaderElectionCommand;
+import kafka.api.LeaderAndIsr;
+import kafka.api.RequestOrResponse;
+import kafka.common.BrokerNotAvailableException;
+import kafka.common.ControllerMovedException;
+import kafka.common.KafkaException;
+import kafka.common.StateChangeFailedException;
+import kafka.common.TopicAndPartition;
+import kafka.metrics.KafkaMetricsGroup;
+import kafka.server.KafkaConfig;
+import kafka.server.ZookeeperLeaderElector;
+import kafka.utils.Callable0;
+import kafka.utils.Callable1;
+import kafka.utils.Callable2;
+import kafka.utils.Callable3;
+import kafka.utils.Function1;
+import kafka.utils.Function2;
+import kafka.utils.Function3;
+import kafka.utils.Json;
+import kafka.utils.KafkaScheduler;
+import kafka.utils.Predicate2;
+import kafka.utils.Tuple2;
+import kafka.utils.Utils;
+import kafka.utils.ZkUtils;
 
 public class KafkaController extends KafkaMetricsGroup implements KafkaControllerMBean {
     public KafkaConfig config;
@@ -1008,7 +1036,6 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
             }
         }
 
-        @Override
         public void handleSessionEstablishmentError(Throwable throwable) throws Exception {
 
         }

@@ -1,230 +1,213 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package kafka.network;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import kafka.api.RequestKeys;
-import kafka.mx.SocketServerStats;
-import kafka.utils.Closer;
-
-import java.io.EOFException;
-import java.io.IOException;
-import java.net.Socket;
+import java.net.SocketAddress;
+import java.nio.channels.CancelledKeyException;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
 import java.util.Iterator;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
+import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
-import static java.lang.String.format;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import kafka.common.KafkaException;
+import kafka.utils.SystemTime;
+import kafka.utils.Time;
+import kafka.utils.Utils;
 
 /**
- * Thread that processes all requests from a single connection. There are N
- * of these running in parallel each of which has its own selectors
- *
- * @author adyliu (imxylz@gmail.com)
- * @since 1.0
+ * Thread that processes all requests from a single connection. There are N of these running in parallel
+ * each of which has its own selectors
  */
 public class Processor extends AbstractServerThread {
+    public int id;
+    public Time time;
+    public int maxRequestSize;
+    public RequestChannel requestChannel;
 
-    private final BlockingQueue<SocketChannel> newConnections;
-
-    private final Logger requestLogger = LoggerFactory.getLogger("jafka.request.logger");
-
-    private RequestHandlerFactory requesthandlerFactory;
-
-    private SocketServerStats stats;
-
-    private int maxRequestSize;
-
-    /**
-     * creaet a new thread processor
-     *
-     * @param requesthandlerFactory request handler factory
-     * @param stats                 jmx state statics
-     * @param maxRequestSize        max request package size
-     * @param maxCacheConnections   max cache connections for self-protected
-     */
-    public Processor(RequestHandlerFactory requesthandlerFactory, //
-                    SocketServerStats stats, int maxRequestSize, //
-                    int maxCacheConnections) {
-        this.requesthandlerFactory = requesthandlerFactory;
-        this.stats = stats;
+    public Processor(int id, Time time, int maxRequestSize, RequestChannel requestChannel) {
+        this.id = id;
+        this.time = time;
         this.maxRequestSize = maxRequestSize;
-        this.newConnections = new ArrayBlockingQueue<SocketChannel>(maxCacheConnections);
+        this.requestChannel = requestChannel;
     }
 
+    private ConcurrentLinkedQueue<SocketChannel> newConnections = new ConcurrentLinkedQueue<SocketChannel>();
+
+    Logger logger = LoggerFactory.getLogger(Processor.class);
+
+    @Override
     public void run() {
         startupComplete();
         while (isRunning()) {
-            try {
-                // setup any new connections that have been queued up
-                configureNewConnections();
-
-                final Selector selector = getSelector();
-                int ready = selector.select(500);
-                if (ready <= 0)
-                    continue;
-                Iterator<SelectionKey> iter = selector.selectedKeys().iterator();
+            // setup any new connections that have been queued up
+            configureNewConnections();
+            // register any new responses for writing
+            processNewResponses();
+            long startSelectTime = SystemTime.instance.milliseconds();
+            int ready = Utils.select(selector, 300);
+            logger.trace("Processor id " + id + " selection time = " + (SystemTime.instance.milliseconds() - startSelectTime) + " ms");
+            if (ready > 0) {
+                Set<SelectionKey> keys = selector.selectedKeys();
+                Iterator<SelectionKey> iter = keys.iterator();
                 while (iter.hasNext() && isRunning()) {
                     SelectionKey key = null;
                     try {
                         key = iter.next();
                         iter.remove();
-                        if (key.isReadable()) {
+                        if (key.isReadable())
                             read(key);
-                        } else if (key.isWritable()) {
+                        else if (key.isWritable())
                             write(key);
-                        } else if (!key.isValid()) {
+                        else if (!key.isValid())
                             close(key);
-                        } else {
+                        else
                             throw new IllegalStateException("Unrecognized key state for processor thread.");
-                        }
-                    } catch (EOFException eofe) {
-                        Socket socket = channelFor(key).socket();
-                        logger.debug(format("connection closed by %s:%d.", socket.getInetAddress(), socket.getPort()));
+
+                    } catch (InvalidRequestException e) {
+                        logger.info("Closing socket connection to {} due to invalid request: {}", channelFor(key).socket().getInetAddress(), e.getMessage());
                         close(key);
-                    } catch (InvalidRequestException ire) {
-                        Socket socket = channelFor(key).socket();
-                        logger.info(format("Closing socket connection to %s:%d due to invalid request: %s", socket.getInetAddress(), socket.getPort(), ire.getMessage()));
-                        close(key);
-                    } catch (Throwable t) {
-                        Socket socket = channelFor(key).socket();
-                        final String msg = "Closing socket for %s:%d becaulse of error %s";
-                        if (logger.isDebugEnabled()) {
-                            logger.error(format(msg, socket.getInetAddress(), socket.getPort(), t.getMessage()), t);
-                        } else {
-                            logger.info(format(msg, socket.getInetAddress(), socket.getPort(), t.getMessage()));
-                        }
+                    } catch (Throwable e) {
+                        logger.error("Closing socket for {} because of error", channelFor(key).socket().getInetAddress(), e);
                         close(key);
                     }
                 }
-            } catch (IOException e) {
-                logger.error(e.getMessage(), e);
             }
-
         }
-        //
-        logger.debug("Closing selector while shutting down");
-        closeSelector();
+
+        logger.debug("Closing selector.");
+
+        Utils.closeQuietly(selector);
         shutdownComplete();
+    }
+
+    private void processNewResponses() {
+        Response curr = requestChannel.receiveResponse(id);
+        while (curr != null) {
+            SelectionKey key = (SelectionKey) curr.request.requestKey;
+            try {
+                switch (curr.responseAction) {
+                    case NoOpAction:
+                        // There is no response to send to the client, we need to read more pipelined requests
+                        // that are sitting in the server's socket buffer
+                        curr.request.updateRequestMetrics();
+                        logger.trace("Socket server received empty response to send, registering for read: {}", curr);
+                        key.interestOps(SelectionKey.OP_READ);
+                        key.attach(null);
+
+                        break;
+                    case SendAction:
+                        logger.trace("Socket server received response to send, registering for write: {}", curr);
+                        key.interestOps(SelectionKey.OP_WRITE);
+                        key.attach(curr);
+                        break;
+
+                    case CloseConnectionAction:
+                        curr.request.updateRequestMetrics();
+                        logger.trace("Closing socket connection actively according to the response code.");
+                        close(key);
+                        break;
+
+                    default:
+                        throw new KafkaException("No mapping found for response code ");
+                }
+            } catch (CancelledKeyException e) {
+                logger.debug("Ignoring response for closed socket.");
+                close(key);
+            } finally {
+                curr = requestChannel.receiveResponse(id);
+            }
+        }
+    }
+
+    private void close(SelectionKey key) {
+        SocketChannel channel = (SocketChannel) key.channel();
+        logger.debug("Closing connection from {}", channel.socket().getRemoteSocketAddress());
+        Utils.closeQuietly(channel.socket());
+        Utils.closeQuietly(channel);
+        key.attach(null);
+        key.cancel();
+    }
+
+    /**
+     * Queue up a new connection for reading
+     */
+    public Selector accept(SocketChannel socketChannel) {
+        newConnections.add(socketChannel);
+        return wakeup();
+    }
+
+    /**
+     * Register any new connections that have been queued up
+     */
+    private void configureNewConnections() {
+        try {
+            while (newConnections.size() > 0) {
+                SocketChannel channel = newConnections.poll();
+                logger.debug("Processor {} listening to new connection from {}", id, channel.socket().getRemoteSocketAddress());
+                channel.register(selector, SelectionKey.OP_READ);
+            }
+        } catch (ClosedChannelException e) {
+            throw new KafkaException(e);
+        }
+    }
+
+    /*
+     * Process reads from ready sockets
+     */
+    public void read(SelectionKey key) {
+        SocketChannel socketChannel = channelFor(key);
+        Receive receive = (Receive) key.attachment();
+        if (key.attachment() == null) {
+            receive = new BoundedByteBufferReceive(maxRequestSize);
+            key.attach(receive);
+        }
+        int read = receive.readFrom(socketChannel);
+        SocketAddress address = socketChannel.socket().getRemoteSocketAddress();
+        logger.trace("{} bytes read from {}", read, address);
+        if (read < 0) {
+            close(key);
+        } else if (receive.complete()) {
+            Request req = new Request(/*processor =*/ id, /* requestKey =*/ key, /*buffer = */receive.buffer(), /*startTimeMs =*/ time.milliseconds(), /*remoteAddress = */address);
+            requestChannel.sendRequest(req);
+            key.attach(null);
+            // explicitly reset interest ops to not READ, no need to wake up the selector just yet
+            key.interestOps(key.interestOps() & (~SelectionKey.OP_READ));
+        } else {
+            // more reading to be done
+            logger.trace("Did not finish reading, registering for read again on connection {}", socketChannel.socket().getRemoteSocketAddress());
+            key.interestOps(SelectionKey.OP_READ);
+            wakeup();
+        }
+    }
+
+    /*
+     * Process writes to ready sockets
+     */
+    public void write(SelectionKey key) {
+        SocketChannel socketChannel = channelFor(key);
+        Response response = (Response) key.attachment();
+        Send responseSend = response.responseSend;
+        if (responseSend == null)
+            throw new IllegalStateException("Registered for write interest but no response attached to key.");
+        int written = responseSend.writeTo(socketChannel);
+        logger.trace("{} bytes written to {} using key {}", written, socketChannel.socket().getRemoteSocketAddress(), key);
+        if (responseSend.complete()) {
+            response.request.updateRequestMetrics();
+            key.attach(null);
+            logger.trace("Finished writing, registering for read on connection {}", socketChannel.socket().getRemoteSocketAddress());
+            key.interestOps(SelectionKey.OP_READ);
+        } else {
+            logger.trace("Did not finish writing, registering for write again on connection {}", socketChannel.socket().getRemoteSocketAddress());
+            key.interestOps(SelectionKey.OP_WRITE);
+            wakeup();
+        }
     }
 
     private SocketChannel channelFor(SelectionKey key) {
         return (SocketChannel) key.channel();
     }
-
-    private void close(SelectionKey key) {
-        SocketChannel channel = (SocketChannel) key.channel();
-        if (logger.isDebugEnabled()) {
-            logger.debug("Closing connection from " + channel.socket().getRemoteSocketAddress());
-        }
-        Closer.closeQuietly(channel.socket());
-        Closer.closeQuietly(channel);
-        key.attach(null);
-        key.cancel();
-    }
-
-    private void write(SelectionKey key) throws IOException {
-        Send response = (Send) key.attachment();
-        SocketChannel socketChannel = channelFor(key);
-        int written = response.writeTo(socketChannel);
-        stats.recordBytesWritten(written);
-        if (response.complete()) {
-            key.attach(null);
-            key.interestOps(SelectionKey.OP_READ);
-        } else {
-            key.interestOps(SelectionKey.OP_WRITE);
-            getSelector().wakeup();
-        }
-    }
-
-    private void read(SelectionKey key) throws IOException {
-        SocketChannel socketChannel = channelFor(key);
-        Receive request = null;
-        if (key.attachment() == null) {
-            request = new BoundedByteBufferReceive(maxRequestSize);
-            key.attach(request);
-        } else {
-            request = (Receive) key.attachment();
-        }
-        int read = request.readFrom(socketChannel);
-        stats.recordBytesRead(read);
-        if (read < 0) {
-            close(key);
-        } else if (request.complete()) {
-            Send maybeResponse = handle(key, request);
-            key.attach(null);
-            // if there is a response, send it, otherwise do nothing
-            if (maybeResponse != null) {
-                key.attach(maybeResponse);
-                key.interestOps(SelectionKey.OP_WRITE);
-            }
-        } else {
-            // more reading to be done
-            key.interestOps(SelectionKey.OP_READ);
-            getSelector().wakeup();
-            if (logger.isTraceEnabled()) {
-                logger.trace("reading request not been done. " + request);
-            }
-        }
-    }
-
-    /**
-     * Handle a completed request producing an optional response
-     */
-    private Send handle(SelectionKey key, Receive request) {
-        final short requestTypeId = request.buffer().getShort();
-        final RequestKeys requestType = RequestKeys.valueOf(requestTypeId);
-        if (requestLogger.isTraceEnabled()) {
-            if (requestType == null) {
-                throw new InvalidRequestException("No mapping found for handler id " + requestTypeId);
-            }
-            String logFormat = "Handling %s request from %s";
-            requestLogger.trace(format(logFormat, requestType, channelFor(key).socket().getRemoteSocketAddress()));
-        }
-        RequestHandler handlerMapping = requesthandlerFactory.mapping(requestType, request);
-        if (handlerMapping == null) {
-            throw new InvalidRequestException("No handler found for request");
-        }
-        long start = System.nanoTime();
-        Send maybeSend = handlerMapping.handler(requestType, request);
-        stats.recordRequest(requestType, System.nanoTime() - start);
-        return maybeSend;
-    }
-
-    private void configureNewConnections() throws ClosedChannelException {
-        while (newConnections.size() > 0) {
-            SocketChannel channel = newConnections.poll();
-            if (logger.isDebugEnabled()) {
-                logger.debug("Listening to new connection from " + channel.socket().getRemoteSocketAddress());
-            }
-            channel.register(getSelector(), SelectionKey.OP_READ);
-        }
-    }
-
-    public void accept(SocketChannel socketChannel) {
-        newConnections.add(socketChannel);
-        getSelector().wakeup();
-    }
-
 }

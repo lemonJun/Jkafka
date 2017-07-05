@@ -1,10 +1,12 @@
 package kafka.controller;
 
-import com.alibaba.fastjson.JSONObject;
-import kafka.common.KafkaException;
-import kafka.utils.Json;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.alibaba.fastjson.JSONObject;
+
+import kafka.common.KafkaException;
+import kafka.utils.Json;
 
 public abstract class KafkaControllers {
     public static final String MBeanName = "kafka.controller:type=KafkaController,name=ControllerOps";

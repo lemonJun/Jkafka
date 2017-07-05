@@ -1,14 +1,6 @@
 package kafka.log;
 
-import com.google.common.collect.Lists;
-import kafka.common.OptimisticLockFailureException;
-import kafka.message.*;
-import kafka.utils.Function1;
-import kafka.utils.Throttler;
-import kafka.utils.Time;
-import kafka.utils.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import static com.google.common.base.Preconditions.checkState;
 
 import java.io.File;
 import java.nio.ByteBuffer;
@@ -16,7 +8,21 @@ import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 
-import static com.google.common.base.Preconditions.checkState;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.common.collect.Lists;
+
+import kafka.common.OptimisticLockFailureException;
+import kafka.message.ByteBufferMessageSet;
+import kafka.message.ByteBufferMessageSets;
+import kafka.message.Message;
+import kafka.message.MessageAndOffset;
+import kafka.message.MessageSets;
+import kafka.utils.Function1;
+import kafka.utils.Throttler;
+import kafka.utils.Time;
+import kafka.utils.Utils;
 
 public class Cleaner {
     public int id;

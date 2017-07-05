@@ -1,11 +1,12 @@
 package kafka.utils;
 
-import kafka.common.KafkaException;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicBoolean;
+import kafka.common.KafkaException;
 
 public abstract class ShutdownableThread extends Thread {
     public String name;

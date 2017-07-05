@@ -1,13 +1,19 @@
 package kafka.server;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.Map;
+
 import com.google.common.collect.Maps;
+
 import kafka.common.KafkaException;
 import kafka.common.TopicAndPartition;
 import kafka.utils.Callable2;
 import kafka.utils.Utils;
-
-import java.io.*;
-import java.util.Map;
 
 /**
  * This class saves out a map of topic/partition=>offsets to a file

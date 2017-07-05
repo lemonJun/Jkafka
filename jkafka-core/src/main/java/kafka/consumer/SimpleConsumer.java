@@ -1,77 +1,204 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- * 
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package kafka.consumer;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Map;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.common.collect.Maps;
 
 import kafka.api.FetchRequest;
-import kafka.api.MultiFetchRequest;
-import kafka.api.MultiFetchResponse;
+import kafka.api.FetchResponse;
+import kafka.api.OffsetCommitRequest;
+import kafka.api.OffsetCommitResponse;
+import kafka.api.OffsetFetchRequest;
+import kafka.api.OffsetFetchResponse;
 import kafka.api.OffsetRequest;
+import kafka.api.OffsetResponse;
+import kafka.api.PartitionOffsetRequestInfo;
+import kafka.api.PartitionOffsetsResponse;
+import kafka.api.RequestOrResponse;
+import kafka.api.TopicMetadataRequest;
+import kafka.api.TopicMetadataResponse;
 import kafka.common.ErrorMapping;
-import kafka.common.annotations.ClientSide;
-import kafka.common.annotations.ThreadSafe;
-import kafka.message.ByteBufferMessageSet;
+import kafka.common.TopicAndPartition;
+import kafka.metrics.KafkaTimer;
+import kafka.network.BlockingChannel;
 import kafka.network.Receive;
-import kafka.utils.KV;
+import kafka.utils.Function0;
+import kafka.utils.ThreadSafe;
+import kafka.utils.Utils;
 
 /**
- * Simple message consumer
- * 
- * @author adyliu (imxylz@gmail.com)
- * @since 1.0
+ * A consumer of kafka messages
  */
 @ThreadSafe
-@ClientSide
-public class SimpleConsumer extends SimpleOperation implements IConsumer {
+public class SimpleConsumer {
+    public String host;
+    public int port, soTimeout, bufferSize;
+    public String clientId;
 
-    public SimpleConsumer(String host, int port) {
-        super(host, port);
+    public SimpleConsumer(String host, int port, int soTimeout, int bufferSize, String clientId) {
+        this.host = host;
+        this.port = port;
+        this.soTimeout = soTimeout;
+        this.bufferSize = bufferSize;
+        this.clientId = clientId;
+
+        init();
     }
 
-    public SimpleConsumer(String host, int port, int soTimeout, int bufferSize) {
-        super(host, port, soTimeout, bufferSize);
+    private void init() {
+        ConsumerConfigs.validateClientId(clientId);
+        blockingChannel = new BlockingChannel(host, port, bufferSize, BlockingChannel.UseDefaultBufferSize, soTimeout);
+        brokerInfo = "host_%s-port_%s".format(host, port);
+        fetchRequestAndResponseStats = FetchRequestAndResponseStatsRegistry.getFetchRequestAndResponseStats(clientId);
     }
 
-    public ByteBufferMessageSet fetch(FetchRequest request) throws IOException {
-        KV<Receive, ErrorMapping> response = send(request);
-        return new ByteBufferMessageSet(response.k.buffer(), request.offset, response.v);
+    private Object lock = new Object();
+    private BlockingChannel blockingChannel;
+    public String brokerInfo;
+    private FetchRequestAndResponseStatsRegistry.FetchRequestAndResponseStats fetchRequestAndResponseStats;
+    private boolean isClosed = false;
+    Logger logger = LoggerFactory.getLogger(SimpleConsumer.class);
+
+    private BlockingChannel connect() {
+        close();
+        blockingChannel.connect();
+        return blockingChannel;
     }
 
-    public long[] getOffsetsBefore(String topic, int partition, long time, int maxNumOffsets) throws IOException {
-        KV<Receive, ErrorMapping> response = send(new OffsetRequest(topic, partition, time, maxNumOffsets));
-        return OffsetRequest.deserializeOffsetArray(response.k.buffer());
-    }
-
-    public MultiFetchResponse multifetch(List<FetchRequest> fetches) throws IOException {
-        KV<Receive, ErrorMapping> response = send(new MultiFetchRequest(fetches));
-        List<Long> offsets = new ArrayList<Long>();
-        for (FetchRequest fetch : fetches) {
-            offsets.add(fetch.offset);
+    private void disconnect() {
+        if (blockingChannel.isConnected()) {
+            logger.debug("Disconnecting from {}:{}", host, port);
+            blockingChannel.disconnect();
         }
-        return new MultiFetchResponse(response.k.buffer(), fetches.size(), offsets);
     }
 
-    @Override
-    public long getLatestOffset(String topic, int partition) throws IOException {
-        long[] result = getOffsetsBefore(topic, partition, -1, 1);
-        return result.length == 0 ? -1 : result[0];
+    private void reconnect() {
+        disconnect();
+        connect();
+    }
+
+    public void close() {
+        synchronized (lock) {
+            disconnect();
+            isClosed = true;
+        }
+    }
+
+    private Receive sendRequest(RequestOrResponse request) {
+        synchronized (lock) {
+            getOrMakeConnection();
+            Receive response = null;
+            try {
+                blockingChannel.send(request);
+                response = blockingChannel.receive();
+            } catch (RuntimeException e) {
+                logger.info("Reconnect due to socket error: {}", e.getMessage());
+                // retry once
+                try {
+                    reconnect();
+                    blockingChannel.send(request);
+                    response = blockingChannel.receive();
+                } catch (RuntimeException ioe) {
+                    disconnect();
+                    throw ioe;
+                }
+            }
+            return response;
+        }
+    }
+
+    public TopicMetadataResponse send(TopicMetadataRequest request) {
+        Receive response = sendRequest(request);
+        return TopicMetadataResponse.readFrom(response.buffer());
+    }
+
+    /**
+     * Fetch a set of messages from a topic.
+     *
+     * @param request specifies the topic name, topic partition, starting byte offset, maximum bytes to be fetched.
+     * @return a set of fetched messages
+     */
+    public FetchResponse fetch(final FetchRequest request) {
+        final Receive[] response = { null };
+        final KafkaTimer specificTimer = fetchRequestAndResponseStats.getFetchRequestAndResponseStats(brokerInfo).requestTimer;
+        KafkaTimer aggregateTimer = fetchRequestAndResponseStats.getFetchRequestAndResponseAllBrokersStats().requestTimer;
+        aggregateTimer.time(new Function0<Object>() {
+            @Override
+            public Object apply() {
+                specificTimer.time(new Function0<Object>() {
+                    @Override
+                    public Object apply() {
+                        response[0] = sendRequest(request);
+                        return null;
+                    }
+                });
+
+                return null;
+            }
+        });
+
+        FetchResponse fetchResponse = FetchResponse.readFrom(response[0].buffer());
+        int fetchedSize = fetchResponse.sizeInBytes();
+        fetchRequestAndResponseStats.getFetchRequestAndResponseStats(brokerInfo).requestSizeHist.update(fetchedSize);
+        fetchRequestAndResponseStats.getFetchRequestAndResponseAllBrokersStats().requestSizeHist.update(fetchedSize);
+        return fetchResponse;
+    }
+
+    /**
+     * Get a list of valid offsets (up to maxSize) before the given time.
+     *
+     * @param request a [[kafka.api.OffsetRequest]] object.
+     * @return a [[kafka.api.OffsetResponse]] object.
+     */
+    public OffsetResponse getOffsetsBefore(OffsetRequest request) {
+        return OffsetResponse.readFrom(sendRequest(request).buffer());
+    }
+
+    /**
+     * Commit offsets for a topic
+     *
+     * @param request a [[kafka.api.OffsetCommitRequest]] object.
+     * @return a [[kafka.api.OffsetCommitResponse]] object.
+     */
+    public OffsetCommitResponse commitOffsets(OffsetCommitRequest request) {
+        return OffsetCommitResponse.readFrom(sendRequest(request).buffer());
+    }
+
+    /**
+     * Fetch offsets for a topic
+     *
+     * @param request a [[kafka.api.OffsetFetchRequest]] object.
+     * @return a [[kafka.api.OffsetFetchResponse]] object.
+     */
+    public OffsetFetchResponse fetchOffsets(OffsetFetchRequest request) {
+        return OffsetFetchResponse.readFrom(sendRequest(request).buffer());
+    }
+
+    private void getOrMakeConnection() {
+        if (!isClosed && !blockingChannel.isConnected()) {
+            connect();
+        }
+    }
+
+    /**
+     * Get the earliest or latest offset of a given topic, partition.
+     *
+     * @param topicAndPartition Topic and partition of which the offset is needed.
+     * @param earliestOrLatest  A value to indicate earliest or latest offset.
+     * @param consumerId        Id of the consumer which could be a consumer client, SimpleConsumerShell or a follower broker.
+     * @return Requested offset.
+     */
+    public long earliestOrLatestOffset(final TopicAndPartition topicAndPartition, final long earliestOrLatest, int consumerId) {
+        Map<TopicAndPartition, PartitionOffsetRequestInfo> requestInfo = Maps.newHashMap();
+        requestInfo.put(topicAndPartition, new PartitionOffsetRequestInfo(earliestOrLatest, 1));
+        OffsetRequest request = new OffsetRequest(requestInfo, /*clientId = */clientId, /*replicaId = */consumerId);
+        PartitionOffsetsResponse partitionErrorAndOffset = getOffsetsBefore(request).partitionErrorAndOffsets.get(topicAndPartition);
+        if (partitionErrorAndOffset.error == ErrorMapping.NoError) {
+            return Utils.head(partitionErrorAndOffset.offsets);
+        }
+        throw ErrorMapping.exceptionFor(partitionErrorAndOffset.error);
     }
 }

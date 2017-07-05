@@ -1,6 +1,13 @@
 package kafka.controller;
 
+import java.util.HashMap;
+import java.util.concurrent.LinkedBlockingQueue;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.google.common.collect.Maps;
+
 import kafka.api.RequestOrResponse;
 import kafka.cluster.Broker;
 import kafka.network.BlockingChannel;
@@ -9,11 +16,6 @@ import kafka.utils.Callable1;
 import kafka.utils.Callable2;
 import kafka.utils.Tuple2;
 import kafka.utils.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.HashMap;
-import java.util.concurrent.LinkedBlockingQueue;
 
 public class ControllerChannelManager {
     private ControllerContext controllerContext;

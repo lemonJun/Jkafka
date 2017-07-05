@@ -1,16 +1,18 @@
 package kafka.controller;
 
+import java.util.List;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.google.common.collect.Lists;
+
 import kafka.api.LeaderAndIsr;
 import kafka.common.LeaderElectionNotNeededException;
 import kafka.common.StateChangeFailedException;
 import kafka.common.TopicAndPartition;
 import kafka.utils.Tuple2;
 import kafka.utils.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.List;
 
 /**
  * Picks the preferred replica as the new leader if -

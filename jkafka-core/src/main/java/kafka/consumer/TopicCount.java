@@ -1,10 +1,10 @@
 package kafka.consumer;
 
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
-
 import java.util.Map;
 import java.util.Set;
+
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 
 public abstract class TopicCount {
     public abstract Map<String, Set<String>> getConsumerThreadIdsPerTopic();

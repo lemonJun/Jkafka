@@ -1,7 +1,5 @@
 package kafka.common;
 
-import kafka.common.KafkaException;
-
 /**
  * This exception is thrown when new leader election is not necessary.
  */

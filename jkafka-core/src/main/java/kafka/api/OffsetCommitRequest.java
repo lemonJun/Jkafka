@@ -1,6 +1,12 @@
 package kafka.api;
 
+import static kafka.api.ApiUtils.writeShortString;
+
+import java.nio.ByteBuffer;
+import java.util.Map;
+
 import com.google.common.collect.Table;
+
 import kafka.common.ErrorMapping;
 import kafka.common.OffsetMetadataAndError;
 import kafka.common.TopicAndPartition;
@@ -12,11 +18,6 @@ import kafka.utils.Callable2;
 import kafka.utils.Function2;
 import kafka.utils.Tuple2;
 import kafka.utils.Utils;
-
-import java.nio.ByteBuffer;
-import java.util.Map;
-
-import static kafka.api.ApiUtils.writeShortString;
 
 public class OffsetCommitRequest extends RequestOrResponse {
     public String groupId;

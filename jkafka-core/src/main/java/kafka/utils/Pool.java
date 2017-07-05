@@ -1,77 +1,85 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- * 
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package kafka.utils;
 
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * @author adyliu (imxylz@gmail.com)
- * @since 1.0
- */
-public class Pool<K extends Comparable<K>, V> implements Map<K, V> {
+import com.google.common.base.Function;
+import com.google.common.collect.Maps;
 
-    private final ConcurrentMap<K, V> pool = new ConcurrentSkipListMap<K, V>();
+import kafka.common.KafkaException;
 
-    public int size() {
-        return pool.size();
+public class Pool<K, V> implements Iterable<Map.Entry<K, V>> {
+    public Function<K, V> valueFactory;
+
+    public Pool() {
     }
 
-    public boolean isEmpty() {
-        return pool.isEmpty();
+    public Pool(Function<K, V> valueFactory) {
+        this.valueFactory = valueFactory;
     }
 
-    public boolean containsKey(Object key) {
-        return pool.containsKey(key);
+    private ConcurrentHashMap<K, V> pool = new ConcurrentHashMap<K, V>();
+    private Object createLock = new Object();
+
+    public Pool(Map<K, V> m) {
+        this();
+
+        for (Map.Entry<K, V> entry : m.entrySet()) {
+            pool.put(entry.getKey(), entry.getValue());
+        }
     }
 
-    public boolean containsValue(Object value) {
-        return pool.containsValue(value);
+    public V put(K k, V v) {
+        return pool.put(k, v);
     }
 
-    public V get(Object key) {
+    public void putIfNotExists(K k, V v) {
+        pool.putIfAbsent(k, v);
+    }
+
+    /**
+     * Gets the value associated with the given key. If there is no associated
+     * value, then create the value using the pool's value factory and return the
+     * value associated with the key. The user should declare the factory method
+     * as lazy if its side-effects need to be avoided.
+     *
+     * @param key The key to lookup.
+     * @return The final value associated with the key. This may be different from
+     *         the value created by the factory if another thread successfully
+     *         put a value.
+     */
+    public V getAndMaybePut(K key) {
+        if (valueFactory == null)
+            throw new KafkaException("Empty value factory in pool.");
+
+        V curr = pool.get(key);
+        if (curr != null)
+            return curr;
+
+        synchronized (createLock) {
+            curr = pool.get(key);
+            if (curr == null)
+                pool.put(key, valueFactory.apply(key));
+            return pool.get(key);
+        }
+    }
+
+    public boolean contains(K id) {
+        return pool.containsKey(id);
+    }
+
+    public V get(K key) {
         return pool.get(key);
     }
 
-    public V put(K key, V value) {
-        return pool.put(key, value);
-    }
-
-    public V putIfNotExists(K key, V value) {
-        return pool.putIfAbsent(key, value);
-    }
-
-    public V remove(Object key) {
+    public V remove(K key) {
         return pool.remove(key);
     }
 
-    public void putAll(Map<? extends K, ? extends V> m) {
-        pool.putAll(m);
-    }
-
-    public void clear() {
-        pool.clear();
-    }
-
-    public Set<K> keySet() {
+    public Set<K> keys() {
         return pool.keySet();
     }
 
@@ -79,13 +87,35 @@ public class Pool<K extends Comparable<K>, V> implements Map<K, V> {
         return pool.values();
     }
 
-    public Set<java.util.Map.Entry<K, V>> entrySet() {
-        return pool.entrySet();
+    public void clear() {
+        pool.clear();
+    }
+
+    public int size() {
+        return pool.size();
     }
 
     @Override
-    public String toString() {
-        return pool.toString();
+    public Iterator<Map.Entry<K, V>> iterator() {
+        final Iterator<Map.Entry<K, V>> iterator = pool.entrySet().iterator();
+        return new Iterator<Map.Entry<K, V>>() {
+            @Override
+            public boolean hasNext() {
+                return iterator.hasNext();
+            }
+
+            @Override
+            public Map.Entry<K, V> next() {
+                return iterator.next();
+            }
+
+            @Override
+            public void remove() {
+            }
+        };
     }
 
+    public Map<K, V> toMap() {
+        return Maps.newHashMap(pool);
+    }
 }

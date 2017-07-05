@@ -1,14 +1,22 @@
 package kafka.api;
 
-import kafka.cluster.Broker;
-import kafka.common.ErrorMapping;
-import kafka.utils.*;
+import static kafka.api.ApiUtils.readIntInRange;
+import static kafka.api.ApiUtils.readShortInRange;
+import static kafka.api.ApiUtils.readShortString;
+import static kafka.api.ApiUtils.shortStringLength;
+import static kafka.api.ApiUtils.writeShortString;
 
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
 
-import static kafka.api.ApiUtils.*;
+import kafka.cluster.Broker;
+import kafka.common.ErrorMapping;
+import kafka.utils.Callable1;
+import kafka.utils.Function1;
+import kafka.utils.Function2;
+import kafka.utils.Range;
+import kafka.utils.Utils;
 
 public class TopicMetadata {
     public static final int NoLeaderNodeId = -1;

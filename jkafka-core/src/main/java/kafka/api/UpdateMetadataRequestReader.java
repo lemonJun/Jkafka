@@ -1,5 +1,11 @@
 package kafka.api;
 
+import static kafka.api.ApiUtils.readShortString;
+
+import java.nio.ByteBuffer;
+import java.util.Map;
+import java.util.Set;
+
 import kafka.cluster.Broker;
 import kafka.cluster.Brokers;
 import kafka.common.TopicAndPartition;
@@ -7,12 +13,6 @@ import kafka.utils.Function0;
 import kafka.utils.Function1;
 import kafka.utils.Tuple2;
 import kafka.utils.Utils;
-
-import java.nio.ByteBuffer;
-import java.util.Map;
-import java.util.Set;
-
-import static kafka.api.ApiUtils.readShortString;
 
 public class UpdateMetadataRequestReader implements RequestReader {
     public static final RequestReader instance = new UpdateMetadataRequestReader();

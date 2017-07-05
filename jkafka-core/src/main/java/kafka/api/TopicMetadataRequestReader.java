@@ -1,14 +1,14 @@
 package kafka.api;
 
-import kafka.utils.Function1;
-import kafka.utils.Range;
-import kafka.utils.Utils;
+import static kafka.api.ApiUtils.readIntInRange;
+import static kafka.api.ApiUtils.readShortString;
 
 import java.nio.ByteBuffer;
 import java.util.List;
 
-import static kafka.api.ApiUtils.readIntInRange;
-import static kafka.api.ApiUtils.readShortString;
+import kafka.utils.Function1;
+import kafka.utils.Range;
+import kafka.utils.Utils;
 
 public class TopicMetadataRequestReader implements RequestReader {
     public static final RequestReader instance = new TopicMetadataRequestReader();

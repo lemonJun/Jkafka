@@ -1,18 +1,34 @@
 package kafka.controller;
 
-import com.google.common.base.Predicate;
-import com.google.common.collect.*;
-import kafka.api.*;
-import kafka.cluster.Broker;
-import kafka.common.TopicAndPartition;
-import kafka.utils.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.common.base.Predicate;
+import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.Sets;
+import com.google.common.collect.Table;
+
+import kafka.api.LeaderAndIsrRequest;
+import kafka.api.PartitionStateInfo;
+import kafka.api.RequestOrResponse;
+import kafka.api.StopReplicaRequest;
+import kafka.api.UpdateMetadataRequest;
+import kafka.cluster.Broker;
+import kafka.common.TopicAndPartition;
+import kafka.utils.Callable1;
+import kafka.utils.Callable2;
+import kafka.utils.Callable3;
+import kafka.utils.Function1;
+import kafka.utils.Tuple2;
+import kafka.utils.Utils;
 
 public class ControllerBrokerRequestBatch {
     public ControllerContext controllerContext;

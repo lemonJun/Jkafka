@@ -1,14 +1,15 @@
 package kafka.api;
 
-import com.google.common.collect.Maps;
-import kafka.utils.Function2;
-import kafka.utils.Utils;
+import static kafka.api.ApiUtils.readShortString;
+import static kafka.api.ApiUtils.shortStringLength;
 
 import java.nio.ByteBuffer;
 import java.util.Map;
 
-import static kafka.api.ApiUtils.readShortString;
-import static kafka.api.ApiUtils.shortStringLength;
+import com.google.common.collect.Maps;
+
+import kafka.utils.Function2;
+import kafka.utils.Utils;
 
 public class TopicData {
     public static TopicData readFrom(ByteBuffer buffer) {

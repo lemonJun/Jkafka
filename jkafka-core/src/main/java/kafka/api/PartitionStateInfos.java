@@ -1,12 +1,12 @@
 package kafka.api;
 
-import kafka.controller.LeaderIsrAndControllerEpoch;
-import kafka.utils.Function1;
-import kafka.utils.Utils;
-
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Set;
+
+import kafka.controller.LeaderIsrAndControllerEpoch;
+import kafka.utils.Function1;
+import kafka.utils.Utils;
 
 public class PartitionStateInfos {
     public static PartitionStateInfo readFrom(final ByteBuffer buffer) {

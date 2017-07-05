@@ -1,70 +1,52 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- * 
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package kafka.producer.async;
 
-import static kafka.utils.Utils.getInt;
-import static kafka.utils.Utils.getProps;
-import static kafka.utils.Utils.getString;
-
-import java.util.Properties;
-
 import kafka.producer.SyncProducerConfig;
+import kafka.utils.VerifiableProperties;
 
-/**
- * @author adyliu (imxylz@gmail.com)
- * @since 1.0
- */
-public class AsyncProducerConfig extends SyncProducerConfig implements AsyncProducerConfigShared {
+public abstract class AsyncProducerConfig extends SyncProducerConfig {
+    protected AsyncProducerConfig(VerifiableProperties props) {
+        super(props);
 
-    public AsyncProducerConfig(Properties properties) {
-        super(properties);
+        init();
     }
 
-    public int getQueueTime() {
-        return getInt(props, "queue.time", 5000);
+    private void init() {
+        queueBufferingMaxMs = props.getInt("queue.buffering.max.ms", 5000);
+        queueBufferingMaxMessages = props.getInt("queue.buffering.max.messages", 10000);
+        queueEnqueueTimeoutMs = props.getInt("queue.enqueue.timeout.ms", -1);
+        batchNumMessages = props.getInt("batch.num.messages", 200);
+        serializerClass = props.getString("serializer.class", "kafka.serializer.DefaultEncoder");
+        keySerializerClass = props.getString("key.serializer.class", serializerClass);
     }
 
-    public int getQueueSize() {
-        return getInt(props, "queue.size", 10000);
-    }
+    /* maximum time, in milliseconds, for buffering data on the producer queue */
+    public int queueBufferingMaxMs;
 
-    public int getEnqueueTimeoutMs() {
-        return getInt(props, "queue.enqueueTimeout.ms", 0);
-    }
+    /**
+     * the maximum size of the blocking queue for buffering on the producer
+     */
+    public int queueBufferingMaxMessages;
 
-    public int getBatchSize() {
-        return getInt(props, "batch.size", 200);
-    }
+    /**
+     * Timeout for event enqueue:
+     * 0: events will be enqueued immediately or dropped if the queue is full
+     * -ve: enqueue will block indefinitely if the queue is full
+     * +ve: enqueue will block up to this many milliseconds if the queue is full
+     */
+    public int queueEnqueueTimeoutMs;
 
-    public String getCbkHandler() {
-        return getString(props, "callback.handler", null);
-    }
+    /**
+     * the number of messages batched at the producer
+     */
+    public int batchNumMessages;
 
-    public Properties getCbkHandlerProperties() {
-        return getProps(props, "callback.handler.props", null);
-    }
+    /**
+     * the serializer class for values
+     */
+    public String serializerClass;
 
-    public String getEventHandler() {
-        return getString(props, "event.handler", null);
-    }
-
-    public Properties getEventHandlerProperties() {
-        return getProps(props, "event.handler.props", null);
-    }
-
+    /**
+     * the serializer class for keys (defaults to the same as for values)
+     */
+    public String keySerializerClass;
 }

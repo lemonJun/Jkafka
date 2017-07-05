@@ -1,13 +1,17 @@
 package kafka.api;
 
-import kafka.common.ErrorMapping;
-import kafka.utils.*;
+import static kafka.api.ApiUtils.readShortString;
+import static kafka.api.ApiUtils.writeShortString;
 
 import java.nio.ByteBuffer;
 import java.util.Map;
 
-import static kafka.api.ApiUtils.readShortString;
-import static kafka.api.ApiUtils.writeShortString;
+import kafka.common.ErrorMapping;
+import kafka.utils.Callable2;
+import kafka.utils.Function0;
+import kafka.utils.Function3;
+import kafka.utils.Tuple2;
+import kafka.utils.Utils;
 
 public class LeaderAndIsrResponse extends RequestOrResponse {
     public static LeaderAndIsrResponse readFrom(final ByteBuffer buffer) {

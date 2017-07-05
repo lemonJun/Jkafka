@@ -1,10 +1,11 @@
 package kafka.controller;
 
+import java.util.List;
+
 import kafka.api.LeaderAndIsr;
+import kafka.common.NoReplicaOnlineException;
 import kafka.common.TopicAndPartition;
 import kafka.utils.Tuple2;
-
-import java.util.List;
 
 public interface PartitionLeaderSelector {
     /**

@@ -1,120 +1,157 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- * 
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package kafka.api;
 
-import java.nio.ByteBuffer;
+import static kafka.api.ApiUtils.shortStringLength;
+import static kafka.api.ApiUtils.writeShortString;
 
-import kafka.common.annotations.ClientSide;
-import kafka.common.annotations.ServerSide;
+import java.nio.ByteBuffer;
+import java.util.Map;
+
+import com.google.common.collect.Table;
+
+import kafka.common.ErrorMapping;
+import kafka.common.TopicAndPartition;
 import kafka.message.ByteBufferMessageSet;
+import kafka.network.BoundedByteBufferSend;
 import kafka.network.Request;
+import kafka.network.RequestChannel;
+import kafka.network.Response;
+import kafka.utils.Callable2;
+import kafka.utils.Function2;
+import kafka.utils.Function3;
+import kafka.utils.Tuple2;
 import kafka.utils.Utils;
 
-/**
- * message producer request
- * <p>
- * request format:
- * 
- * <pre>
- * topic + partition + messageSize + message
- * =====================================
- *     topic: size(2bytes) + data(utf-8 bytes)
- *     partition: int(4bytes)
- *     messageSize: int(4bytes)
- *     message: bytes
- * </pre>
- * 
- * @author adyliu (imxylz@gmail.com)
- * @since 1.0
- */
-@ClientSide
-@ServerSide
-public class ProducerRequest implements Request {
+public class ProducerRequest extends RequestOrResponse {
+    public short versionId;
+    public String clientId;
+    public short requiredAcks;
+    public int ackTimeoutMs;
+    public Map<TopicAndPartition, ByteBufferMessageSet> data;
 
-    public static final int RandomPartition = -1;
+    public ProducerRequest(short versionId, int correlationId, String clientId, short requiredAcks, int ackTimeoutMs, Map<TopicAndPartition, ByteBufferMessageSet> data) {
+        super(RequestKeys.ProduceKey, correlationId);
 
-    /**
-     * read a producer request from buffer
-     * 
-     * @param buffer data buffer
-     * @return parsed producer request
-     */
-    public static ProducerRequest readFrom(ByteBuffer buffer) {
-        String topic = Utils.readShortString(buffer);
-        int partition = buffer.getInt();
-        int messageSetSize = buffer.getInt();
-        ByteBuffer messageSetBuffer = buffer.slice();
-        messageSetBuffer.limit(messageSetSize);
-        buffer.position(buffer.position() + messageSetSize);
-        return new ProducerRequest(topic, partition, new ByteBufferMessageSet(messageSetBuffer));
+        this.versionId = versionId;
+        this.clientId = clientId;
+        this.requiredAcks = requiredAcks;
+        this.ackTimeoutMs = ackTimeoutMs;
+        this.data = data;
+
+        dataGroupedByTopic = Utils.groupBy(data, new Function2<TopicAndPartition, ByteBufferMessageSet, String>() {
+            @Override
+            public String apply(TopicAndPartition topicAndPartition, ByteBufferMessageSet messageSet) {
+                return topicAndPartition.topic;
+            }
+        });
+
+        topicPartitionMessageSizeMap = Utils.map(data, new Function2<TopicAndPartition, ByteBufferMessageSet, Tuple2<TopicAndPartition, Integer>>() {
+            @Override
+            public Tuple2<TopicAndPartition, Integer> apply(TopicAndPartition arg1, ByteBufferMessageSet arg2) {
+                return Tuple2.make(arg1, arg2.sizeInBytes());
+            }
+        });
     }
 
     /**
-     * request messages
+     * Partitions the data into a map of maps (one for each topic).
      */
-    public final ByteBufferMessageSet messages;
+    private Table<String, TopicAndPartition, ByteBufferMessageSet> dataGroupedByTopic;
+    public Map<TopicAndPartition, Integer> topicPartitionMessageSizeMap;
 
-    /**
-     * topic partition
-     */
-    public final int partition;
-
-    /**
-     * topic name
-     */
-    public final String topic;
-
-    public ProducerRequest(String topic, int partition, ByteBufferMessageSet messages) {
-        this.topic = topic;
-        this.partition = partition;
-        this.messages = messages;
+    public ProducerRequest(int correlationId, String clientId, Short requiredAcks, int ackTimeoutMs, Map<TopicAndPartition, ByteBufferMessageSet> data) {
+        this(ProducerRequestReader.CurrentVersion, correlationId, clientId, requiredAcks, ackTimeoutMs, data);
     }
 
-    public RequestKeys getRequestKey() {
-        return RequestKeys.PRODUCE;
+    public void writeTo(final ByteBuffer buffer) {
+        buffer.putShort(versionId);
+        buffer.putInt(correlationId);
+        writeShortString(buffer, clientId);
+        buffer.putShort(requiredAcks);
+        buffer.putInt(ackTimeoutMs);
+
+        //save the topic structure
+        buffer.putInt(dataGroupedByTopic.size()); //the number of topics
+
+        Utils.foreach(dataGroupedByTopic, new Callable2<String, Map<TopicAndPartition, ByteBufferMessageSet>>() {
+            @Override
+            public void apply(String topic, Map<TopicAndPartition, ByteBufferMessageSet> topicAndPartitionData) {
+                writeShortString(buffer, topic); //write the topic
+                buffer.putInt(topicAndPartitionData.size()); //the number of partitions
+
+                Utils.foreach(topicAndPartitionData, new Callable2<TopicAndPartition, ByteBufferMessageSet>() {
+                    @Override
+                    public void apply(TopicAndPartition arg1, ByteBufferMessageSet partitionMessageData) {
+                        int partition = arg1.partition;
+                        ByteBuffer bytes = partitionMessageData.buffer;
+                        buffer.putInt(partition);
+                        buffer.putInt(bytes.limit());
+                        buffer.put(bytes);
+                        bytes.rewind();
+                    }
+                });
+            }
+        });
     }
 
-    public int getSizeInBytes() {
-        return (int) (Utils.caculateShortString(topic) + 4 + 4 + messages.getSizeInBytes());
+    public int sizeInBytes() {
+        return 2 + /* versionId */
+                        4 + /* correlationId */
+                        shortStringLength(clientId) + /* client id */
+                        2 + /* requiredAcks */
+                        4 + /* ackTimeoutMs */
+                        4 + /* number of topics */
+                        Utils.foldLeft(dataGroupedByTopic, 0, new Function3<Integer, String, Map<TopicAndPartition, ByteBufferMessageSet>, Integer>() {
+                            @Override
+                            public Integer apply(Integer folded, String topic, Map<TopicAndPartition, ByteBufferMessageSet> currTopic) {
+                                return folded + shortStringLength(topic) + 4 /* the number of partitions */
+                                                + Utils.foldLeft(currTopic, 0, new Function3<Integer, TopicAndPartition, ByteBufferMessageSet, Integer>() {
+                                                    @Override
+                                                    public Integer apply(Integer arg1, TopicAndPartition arg2, ByteBufferMessageSet arg3) {
+                                                        return arg1 + 4 + /* partition id */
+                                                        4 + /* byte-length of serialized messages */
+                                                        arg3.sizeInBytes();
+                                                    }
+                                                });
+                            }
+                        });
+
     }
 
-    public int getTranslatedPartition(PartitionChooser chooser) {
-        if (partition == RandomPartition) {
-            return chooser.choosePartition(topic);
-        }
-        return partition;
+    public int numPartitions() {
+        return data.size();
     }
 
     @Override
     public String toString() {
-        StringBuilder buf = new StringBuilder();
-        buf.append("ProducerRequest(");
-        buf.append(topic).append(',').append(partition).append(',');
-        buf.append(messages.getSizeInBytes()).append(')');
-        return buf.toString();
+        StringBuilder producerRequest = new StringBuilder();
+        producerRequest.append("Name: " + this.getClass().getSimpleName());
+        producerRequest.append("; Version: " + versionId);
+        producerRequest.append("; CorrelationId: " + correlationId);
+        producerRequest.append("; ClientId: " + clientId);
+        producerRequest.append("; RequiredAcks: " + requiredAcks);
+        producerRequest.append("; AckTimeoutMs: " + ackTimeoutMs + " ms");
+        producerRequest.append("; TopicAndPartition: " + topicPartitionMessageSizeMap);
+        return producerRequest.toString();
     }
 
-    public void writeTo(ByteBuffer buffer) {
-        Utils.writeShortString(buffer, topic);
-        buffer.putInt(partition);
-        final ByteBuffer sourceBuffer = messages.serialized();
-        buffer.putInt(sourceBuffer.limit());
-        buffer.put(sourceBuffer);
-        sourceBuffer.rewind();
+    @Override
+    public void handleError(final Throwable e, RequestChannel requestChannel, Request request) {
+        if (((ProducerRequest) request.requestObj).requiredAcks == 0) {
+            requestChannel.closeConnection(request.processor, request);
+        } else {
+            Map<TopicAndPartition, ProducerResponseStatus> producerResponseStatus = Utils.map(data, new Function2<TopicAndPartition, ByteBufferMessageSet, Tuple2<TopicAndPartition, ProducerResponseStatus>>() {
+                @Override
+                public Tuple2<TopicAndPartition, ProducerResponseStatus> apply(TopicAndPartition arg1, ByteBufferMessageSet arg2) {
+                    return Tuple2.make(arg1, new ProducerResponseStatus(ErrorMapping.codeFor(e.getClass()), -1l));
+                }
+            });
+
+            ProducerResponse errorResponse = new ProducerResponse(correlationId, producerResponseStatus);
+            requestChannel.sendResponse(new Response(request, new BoundedByteBufferSend(errorResponse)));
+        }
+    }
+
+    public void emptyData() {
+        data.clear();
     }
 }

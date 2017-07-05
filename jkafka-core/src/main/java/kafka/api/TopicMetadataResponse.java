@@ -1,14 +1,19 @@
 package kafka.api;
 
-import com.google.common.collect.Lists;
-import kafka.cluster.Broker;
-import kafka.cluster.Brokers;
-import kafka.utils.*;
-
 import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+
+import com.google.common.collect.Lists;
+
+import kafka.cluster.Broker;
+import kafka.cluster.Brokers;
+import kafka.utils.Callable1;
+import kafka.utils.Function1;
+import kafka.utils.Function2;
+import kafka.utils.Tuple2;
+import kafka.utils.Utils;
 
 public class TopicMetadataResponse extends RequestOrResponse {
     public static TopicMetadataResponse readFrom(final ByteBuffer buffer) {

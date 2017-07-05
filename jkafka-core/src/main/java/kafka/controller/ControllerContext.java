@@ -1,19 +1,21 @@
 package kafka.controller;
 
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.I0Itec.zkclient.ZkClient;
+
 import com.google.common.base.Predicate;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+
 import kafka.cluster.Broker;
 import kafka.common.TopicAndPartition;
 import kafka.utils.Function1;
 import kafka.utils.Utils;
-import org.I0Itec.zkclient.ZkClient;
-
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class ControllerContext {
     public ZkClient zkClient;

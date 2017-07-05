@@ -1,86 +1,95 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ * 
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.network;
+
+import java.io.Closeable;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import kafka.utils.SystemTime;
-import kafka.utils.Time;
+import kafka.mx.SocketServerStats;
+import kafka.server.Server;
+import kafka.server.ServerConfig;
+import kafka.utils.Closer;
 import kafka.utils.Utils;
 
 /**
- * An NIO socket server. The threading model is
- * 1 Acceptor thread that handles new connections
- * N Processor threads that each have their own selector and read requests from sockets
- * M Handler threads that handle requests and produce responses back to the processor threads for writing.
+ * @author adyliu (imxylz@gmail.com)
+ * @since 1.0
  */
-public class SocketServer {
-    public int brokerId;
-    public String host;
-    public int port;
-    public int numProcessorThreads;
-    public int maxQueuedRequests;
-    public int sendBufferSize;
-    public int recvBufferSize;
-    public int maxRequestSize;
+public class SocketServer implements Closeable {
 
-    public SocketServer(int brokerId, String host, int port, int numProcessorThreads, int maxQueuedRequests, int sendBufferSize, int recvBufferSize) {
-        this(brokerId, host, port, numProcessorThreads, maxQueuedRequests, sendBufferSize, recvBufferSize, Integer.MAX_VALUE);
-    }
+    private final Logger logger = LoggerFactory.getLogger(Server.class);
 
-    public SocketServer(int brokerId, String host, int port, int numProcessorThreads, int maxQueuedRequests, int sendBufferSize, int recvBufferSize, int maxRequestSize) {
-        this.brokerId = brokerId;
-        this.host = host;
-        this.port = port;
-        this.numProcessorThreads = numProcessorThreads;
-        this.maxQueuedRequests = maxQueuedRequests;
-        this.sendBufferSize = sendBufferSize;
-        this.recvBufferSize = recvBufferSize;
-        this.maxRequestSize = maxRequestSize;
+    private final RequestHandlerFactory handlerFactory;
 
-        logger = LoggerFactory.getLogger(SocketServer.class + "[on Broker " + brokerId + "]");
-        processors = new Processor[numProcessorThreads];
-        requestChannel = new RequestChannel(numProcessorThreads, maxQueuedRequests);
-    }
+    private final int maxRequestSize;
 
-    Logger logger;
-    private Time time = SystemTime.instance;
-    private Processor[] processors;
+    //
+    private final Processor[] processors;
 
-    volatile private Acceptor acceptor = null;
-    public RequestChannel requestChannel;
+    private final Acceptor acceptor;
 
-    /**
-     * Start the socket server
-     */
-    public void startup() {
-        for (int i = 0; i < numProcessorThreads; ++i) {
-            processors[i] = new Processor(i, time, maxRequestSize, requestChannel);
-            Utils.newThread(String.format("kafka-processor-%d-%d", port, i), processors[i], false).start();
-        }
-        // register the processor threads for notification of responses
-        requestChannel.addResponseListener(new ResponseListener() {
-            @Override
-            public void onResponse(int id) {
-                processors[id].wakeup();
-            }
-        });
+    private final SocketServerStats stats;
 
-        // start accepting connections
-        this.acceptor = new Acceptor(host, port, processors, sendBufferSize, recvBufferSize);
-        Utils.newThread("kafka-acceptor", acceptor, false).start();
-        acceptor.awaitStartup();
-        logger.info("Started");
+    private final ServerConfig serverConfig;
+
+    public SocketServer(RequestHandlerFactory handlerFactory, //
+                    ServerConfig serverConfig) {
+        super();
+        this.serverConfig = serverConfig;
+        this.handlerFactory = handlerFactory;
+        this.maxRequestSize = serverConfig.getMaxSocketRequestSize();
+        this.processors = new Processor[serverConfig.getNumThreads()];
+        this.stats = new SocketServerStats(1000L * 1000L * 1000L * serverConfig.getMonitoringPeriodSecs());
+        this.acceptor = new Acceptor(serverConfig.getPort(), //
+                        processors, //
+                        serverConfig.getSocketSendBuffer(), //
+                        serverConfig.getSocketReceiveBuffer());
     }
 
     /**
      * Shutdown the socket server
      */
-    public void shutdown() {
-        logger.info("Shutting down");
-        if (acceptor != null)
-            acceptor.shutdown();
-        for (Processor processor : processors)
-            processor.shutdown();
-        logger.info("Shutdown completed");
+    public void close() {
+        Closer.closeQuietly(acceptor);
+        for (Processor processor : processors) {
+            Closer.closeQuietly(processor);
+        }
+    }
+
+    /**
+     * Start the socket server and waiting for finished
+     * 
+     * @throws InterruptedException thread interrupted
+     */
+    public void startup() throws InterruptedException {
+        final int maxCacheConnectionPerThread = serverConfig.getMaxConnections() / processors.length;
+        logger.debug("start {} Processor threads", processors.length);
+        for (int i = 0; i < processors.length; i++) {
+            processors[i] = new Processor(handlerFactory, stats, maxRequestSize, maxCacheConnectionPerThread);
+            Utils.newThread("jafka-processor-" + i, processors[i], false).start();
+        }
+        Utils.newThread("jafka-acceptor", acceptor, false).start();
+        acceptor.awaitStartup();
+    }
+
+    public SocketServerStats getStats() {
+        return stats;
     }
 }

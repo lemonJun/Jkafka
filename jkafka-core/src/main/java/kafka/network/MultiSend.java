@@ -1,54 +1,81 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ * 
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.network;
 
+import java.io.IOException;
 import java.nio.channels.GatheringByteChannel;
+import java.util.Iterator;
 import java.util.List;
-
-import kafka.utils.Utils;
 
 /**
  * A set of composite sends, sent one after another
+ * 
+ * @author adyliu (imxylz@gmail.com)
+ * @since 1.0
  */
-public abstract class MultiSend<S extends Send> extends Send {
-    public final List<S> sends;
+public abstract class MultiSend<S extends Send> extends AbstractSend {
 
-    protected MultiSend(List<S> sends) {
-        this.sends = sends;
-        current = sends;
+    protected int expectedBytesToWrite;
+
+    private int totalWritten = 0;
+
+    private List<S> sends;
+
+    private Iterator<S> iter;
+
+    private S current;
+
+    public MultiSend() {
+
     }
 
-    public int expectedBytesToWrite;
-    private List<S> current;
-    public int totalWritten = 0;
+    public MultiSend(List<S> sends) {
+        setSends(sends);
+    }
 
-    /**
-     * This method continues to write to the socket buffer till an incomplete
-     * write happens. On an incomplete write, it returns to the caller to give it
-     * a chance to schedule other work till the buffered write completes.
-     */
-    public int writeTo(GatheringByteChannel channel) {
-        expectIncomplete();
-        int totalWrittenPerCall = 0;
-        boolean sendComplete = false;
-        do {
-            int written = Utils.head(current).writeTo(channel);
-            totalWritten += written;
-            totalWrittenPerCall += written;
-            sendComplete = Utils.head(current).complete();
-            if (sendComplete)
-                current = Utils.tail(current);
-        } while (!complete() && sendComplete);
-        logger.trace("Bytes written as part of multisend call : {} Total bytes written so far : Expected bytes to write : {}", totalWrittenPerCall, totalWritten, expectedBytesToWrite);
+    protected void setSends(List<S> sends) {
+        this.sends = sends;
+        this.iter = sends.iterator();
+        if (iter.hasNext()) {
+            this.current = iter.next();
+        }
+    }
 
-        return totalWrittenPerCall;
+    public List<S> getSends() {
+        return sends;
     }
 
     public boolean complete() {
-        if (current == null) {
-            if (totalWritten != expectedBytesToWrite)
-                logger.error("mismatch in sending bytes over socket; expected: {} actual: {}", expectedBytesToWrite, totalWritten);
-            return true;
-        } else {
+        if (current != null)
             return false;
+        if (totalWritten != expectedBytesToWrite) {
+            logger.error("mismatch in sending bytes over socket; expected: " + expectedBytesToWrite + " actual: " + totalWritten);
         }
+        return true;
+    }
+
+    public int writeTo(GatheringByteChannel channel) throws IOException {
+        expectIncomplete();
+        int written = current.writeTo(channel);
+        totalWritten += written;
+        if (current.complete()) {//move to next element while current element is finished writting
+            current = iter.hasNext() ? iter.next() : null;
+        }
+        return written;
     }
 }

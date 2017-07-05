@@ -1,227 +1,228 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ * 
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.message;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.GatheringByteChannel;
 import java.util.Iterator;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicLong;
 
-import com.google.common.collect.Lists;
-
-import kafka.common.KafkaException;
+import kafka.common.ErrorMapping;
+import kafka.common.InvalidMessageSizeException;
+import kafka.common.MessageSizeTooLargeException;
 import kafka.utils.IteratorTemplate;
 
 /**
  * A sequence of messages stored in a byte buffer
- * <p/>
+ * 
  * There are two ways to create a ByteBufferMessageSet
- * <p/>
- * Option 1: From a ByteBuffer which already contains the serialized message set. Consumers will use this method.
- * <p/>
- * Option 2: Give it a list of messages along with instructions relating to serialization format. Producers will use this method.
+ * 
+ * Option 1: From a ByteBuffer which already contains the serialized
+ * message set. Consumers will use this method.
+ * 
+ * Option 2: Give it a list of messages along with instructions relating to
+ * serialization format. Producers will use this method.
+ * 
+ * @author adyliu (imxylz@gmail.com)
+ * @since 1.0
  */
 public class ByteBufferMessageSet extends MessageSet {
-    public final ByteBuffer buffer;
+
+    private final ByteBuffer buffer;
+    private final long initialOffset;
+    private final ErrorMapping errorCode;
+    //
+    private long shallowValidByteCount = -1L;
+    //
+    private long validBytes;
 
     public ByteBufferMessageSet(ByteBuffer buffer) {
-        this.buffer = buffer;
+        this(buffer, 0L, ErrorMapping.NoError);
     }
 
-    private int shallowValidByteCount = -1;
+    public ByteBufferMessageSet(ByteBuffer buffer, long initialOffset, ErrorMapping errorCode) {
+        this.buffer = buffer;
+        this.initialOffset = initialOffset;
+        this.errorCode = errorCode;
+        this.validBytes = shallowValidBytes();
+    }
 
     public ByteBufferMessageSet(CompressionCodec compressionCodec, Message... messages) {
-        this(compressionCodec, Lists.newArrayList(messages));
-    }
-
-    public ByteBufferMessageSet(CompressionCodec compressionCodec, List<Message> messages) {
-        this(ByteBufferMessageSets.create(new AtomicLong(0), compressionCodec, messages));
-    }
-
-    public ByteBufferMessageSet(CompressionCodec compressionCodec, AtomicLong offsetCounter, Message... messages) {
-        this(ByteBufferMessageSets.create(offsetCounter, compressionCodec, Lists.newArrayList(messages)));
-    }
-
-    public ByteBufferMessageSet(CompressionCodec compressionCodec, AtomicLong offsetCounter, List<Message> messages) {
-        this(ByteBufferMessageSets.create(offsetCounter, compressionCodec, messages));
+        this(MessageSet.createByteBuffer(compressionCodec, messages), 0L, ErrorMapping.NoError);
     }
 
     public ByteBufferMessageSet(Message... messages) {
-        this(NoCompressionCodec.instance, messages);
+        this(CompressionCodec.NoCompressionCodec, messages);
     }
 
-    public ByteBufferMessageSet(List<Message> messages) {
-        this(NoCompressionCodec.instance, new AtomicLong(0), messages);
+    /** get valid bytes of buffer
+     * <p>
+     * The size of buffer is equal or larger than the size of valid messages.
+     * The last message maybe is not integrate.
+     * </p>
+     * @return the validBytes 
+     */
+    public long getValidBytes() {
+        return validBytes;
     }
 
-    private int shallowValidBytes() {
+    private long shallowValidBytes() {
         if (shallowValidByteCount < 0) {
-            int bytes = 0;
             Iterator<MessageAndOffset> iter = this.internalIterator(true);
             while (iter.hasNext()) {
-                MessageAndOffset messageAndOffset = iter.next();
-                bytes += MessageSets.entrySize(messageAndOffset.message);
+                shallowValidByteCount = iter.next().offset;
             }
-            this.shallowValidByteCount = bytes;
         }
-        return shallowValidByteCount;
+        if (shallowValidByteCount < initialOffset) {
+            return 0;
+        } else {
+            return shallowValidByteCount - initialOffset;
+        }
     }
 
     /**
-     * Write the messages in this set to the given channel
+     * @return the initialOffset
      */
-    public int writeTo(GatheringByteChannel channel, long offset, int size) {
-        // Ignore offset and size from input. We just want to write the whole buffer to the channel.
-        buffer.mark();
-        int written = 0;
-        try {
-            while (written < sizeInBytes())
-                written += channel.write(buffer);
-        } catch (IOException e) {
-            throw new KafkaException(e);
-        }
-        buffer.reset();
-
-        return written;
+    public long getInitialOffset() {
+        return initialOffset;
     }
 
     /**
-     * default iterator that iterates over decompressed messages
+     * @return the buffer
      */
-    @Override
+    public ByteBuffer getBuffer() {
+        return buffer;
+    }
+
+    /**
+     * @return the errorCode
+     */
+    public ErrorMapping getErrorCode() {
+        return errorCode;
+    }
+
+    public ByteBuffer serialized() {
+        return buffer;
+    }
+
     public Iterator<MessageAndOffset> iterator() {
         return internalIterator(false);
     }
 
-    /**
-     * iterator over compressed messages without decompressing
-     */
-    public Iterator<MessageAndOffset> shallowIterator() {
-        return internalIterator(true);
+    public Iterator<MessageAndOffset> internalIterator(boolean isShallow) {
+        return new Iter(isShallow);
     }
 
-    /**
-     * When flag isShallow is set to be true, we do a shallow iteration: just traverse the first level of messages. *
-     */
-    private Iterator<MessageAndOffset> internalIterator() {
-        return internalIterator(false);
-    }
+    class Iter extends IteratorTemplate<MessageAndOffset> {
 
-    private Iterator<MessageAndOffset> internalIterator(final boolean isShallow /*= false*/) {
-        return new IteratorTemplate<MessageAndOffset>() {
-            ByteBuffer topIter = buffer.slice();
-            Iterator<MessageAndOffset> innerIter = null;
+        boolean isShallow;
+        ByteBuffer topIter = buffer.slice();
+        long currValidBytes = initialOffset;
+        Iterator<MessageAndOffset> innerIter = null;
+        long lastMessageSize = 0L;
 
-            public boolean innerDone() {
-                return (innerIter == null || !innerIter.hasNext());
-            }
-
-            public MessageAndOffset makeNextOuter() {
-                // if there isn't at least an offset and size, we are done
-                if (topIter.remaining() < 12)
-                    return allDone();
-                long offset = topIter.getLong();
-                int size = topIter.getInt();
-                if (size < Messages.MinHeaderSize)
-                    throw new InvalidMessageException("Message found with corrupt size (" + size + ")");
-
-                // we have an incomplete message
-                if (topIter.remaining() < size)
-                    return allDone();
-
-                // read the current message and check correctness
-                ByteBuffer message = topIter.slice();
-                message.limit(size);
-                topIter.position(topIter.position() + size);
-                Message newMessage = new Message(message);
-
-                if (isShallow) {
-                    return new MessageAndOffset(newMessage, offset);
-                } else {
-                    if (newMessage.compressionCodec() == NoCompressionCodec.instance) {
-                        innerIter = null;
-                        return new MessageAndOffset(newMessage, offset);
-                    } else {
-                        innerIter = ByteBufferMessageSets.decompress(newMessage).internalIterator();
-                        if (!innerIter.hasNext())
-                            innerIter = null;
-                        return makeNext();
-                    }
-                }
-            }
-
-            @Override
-            public MessageAndOffset makeNext() {
-                if (isShallow) {
-                    return makeNextOuter();
-                } else {
-                    if (innerDone())
-                        return makeNextOuter();
-                    else
-                        return innerIter.next();
-                }
-            }
-
-        };
-    }
-
-    /**
-     * Update the offsets for this message set. This method attempts to do an in-place conversion
-     * if there is no compression, but otherwise recopies the messages
-     */
-    public ByteBufferMessageSet assignOffsets(AtomicLong offsetCounter, CompressionCodec codec) {
-        if (codec == NoCompressionCodec.instance) {
-            // do an in-place conversion
-            int position = 0;
-            buffer.mark();
-            while (position < sizeInBytes() - MessageSets.LogOverhead) {
-                buffer.position(position);
-                buffer.putLong(offsetCounter.getAndIncrement());
-                position += MessageSets.LogOverhead + buffer.getInt();
-            }
-            buffer.reset();
-            return this;
-        } else {
-            // messages are compressed, crack open the messageset and recompress with correct offset
-            Iterator<MessageAndOffset> iter = this.internalIterator(/*isShallow = */false);
-            List<Message> messages = Lists.newArrayList();
-            while (iter.hasNext()) {
-                MessageAndOffset messageAndOffset = iter.next();
-                messages.add(messageAndOffset.message);
-            }
-
-            return new ByteBufferMessageSet(/*compressionCodec = */codec, /* offsetCounter = */offsetCounter, messages);
+        Iter(boolean isShallow) {
+            this.isShallow = isShallow;
         }
+
+        private boolean innerDone() {
+            return innerIter == null || !innerIter.hasNext();
+        }
+
+        private MessageAndOffset makeNextOuter() {
+            if (topIter.remaining() < 4)
+                return allDone();
+            int size = topIter.getInt();
+            lastMessageSize = size;
+            if (size < 0 || topIter.remaining() < size) {
+                if (currValidBytes == initialOffset || size < 0) {
+                    throw new InvalidMessageSizeException("invalid message size: " + size + " only received bytes: " + topIter.remaining() + " at " + currValidBytes + "( possible causes (1) a single message larger than " + "the fetch size; (2) log corruption )");
+                }
+                return allDone();
+            }
+            //
+            ByteBuffer message = topIter.slice();
+            message.limit(size);
+            topIter.position(topIter.position() + size);
+            Message newMessage = new Message(message);
+            if (isShallow) {
+                currValidBytes += 4 + size;
+                return new MessageAndOffset(newMessage, currValidBytes);
+            }
+            if (newMessage.compressionCodec() == CompressionCodec.NoCompressionCodec) {
+                if (!newMessage.isValid())
+                    throw new InvalidMessageException("Uncompressed essage is invalid");
+                innerIter = null;
+                currValidBytes += 4 + size;
+                return new MessageAndOffset(newMessage, currValidBytes);
+            }
+            //compress message
+            if (!newMessage.isValid()) {
+                throw new InvalidMessageException("Compressed message is invalid");
+            }
+            innerIter = CompressionUtils.decompress(newMessage).internalIterator(false);
+            if (!innerIter.hasNext()) {
+                currValidBytes += 4 + lastMessageSize;
+                innerIter = null;
+            }
+            return makeNext();
+        }
+
+        @Override
+        protected MessageAndOffset makeNext() {
+            if (isShallow)
+                return makeNextOuter();
+            if (innerDone())
+                return makeNextOuter();
+            MessageAndOffset messageAndOffset = innerIter.next();
+            if (!innerIter.hasNext()) {
+                currValidBytes += 4 + lastMessageSize;
+            }
+            return new MessageAndOffset(messageAndOffset.message, currValidBytes);
+        }
+
     }
 
-    /**
-     * The total number of bytes in this message set, including any partial trailing messages
-     */
-    public int sizeInBytes() {
+    @Override
+    public long writeTo(GatheringByteChannel channel, long offset, long maxSize) throws IOException {
+        buffer.mark();
+        int written = channel.write(buffer);
+        buffer.reset();
+        return written;
+    }
+
+    public long getSizeInBytes() {
         return buffer.limit();
     }
 
     /**
-     * The total number of bytes in this message set not including any partial, trailing messages
+     * check max size of each message
+     * @param maxMessageSize the max size for each message
      */
-    public int validBytes() {
-        return shallowValidBytes();
-    }
-
-    /**
-     * Two message sets are equal if their respective byte buffers are equal
-     */
-    @Override
-    public boolean equals(Object other) {
-        if (other instanceof ByteBufferMessageSet) {
-            return buffer.equals(((ByteBufferMessageSet) other).buffer);
+    public void verifyMessageSize(int maxMessageSize) {
+        Iterator<MessageAndOffset> shallowIter = internalIterator(true);
+        while (shallowIter.hasNext()) {
+            MessageAndOffset messageAndOffset = shallowIter.next();
+            int payloadSize = messageAndOffset.message.payloadSize();
+            if (payloadSize > maxMessageSize) {
+                throw new MessageSizeTooLargeException("payload size of " + payloadSize + " larger than " + maxMessageSize);
+            }
         }
-
-        return false;
     }
 
-    @Override
-    public int hashCode() {
-        return buffer.hashCode();
-    }
 }

@@ -1,78 +1,80 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ * 
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.common;
 
 import java.nio.ByteBuffer;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.google.common.base.Objects;
-import com.google.common.base.Throwables;
-import com.google.common.collect.BiMap;
 
 import kafka.message.InvalidMessageException;
 
 /**
  * A bi-directional mapping between error codes and exceptions x
+ * 
+ * @author adyliu (imxylz@gmail.com)
+ * @since 1.0
  */
-public abstract class ErrorMapping {
-    public static final ByteBuffer EmptyByteBuffer = ByteBuffer.allocate(0);
+public enum ErrorMapping {
 
-    public static final short UnknownCode = -1;
-    public static final short NoError = 0;
-    public static final short OffsetOutOfRangeCode = 1;
-    public static final short InvalidMessageCode = 2;
-    public static final short UnknownTopicOrPartitionCode = 3;
-    public static final short InvalidFetchSizeCode = 4;
-    public static final short LeaderNotAvailableCode = 5;
-    public static final short NotLeaderForPartitionCode = 6;
-    public static final short RequestTimedOutCode = 7;
-    public static final short BrokerNotAvailableCode = 8;
-    public static final short ReplicaNotAvailableCode = 9;
-    public static final short MessageSizeTooLargeCode = 10;
-    public static final short StaleControllerEpochCode = 11;
-    public static final short OffsetMetadataTooLargeCode = 12;
-    public static final short StaleLeaderEpochCode = 13;
+    UnkonwCode(-1), //
+    NoError(0), //
+    OffsetOutOfRangeCode(1), //
+    InvalidMessageCode(2), //
+    WrongPartitionCode(3), //
+    InvalidFetchSizeCode(4);
 
-    private static BiMap<Class<? extends Throwable>, Short> exceptionToCode;
+    public final short code;
 
-    static {
-        exceptionToCode.put(OffsetOutOfRangeException.class, OffsetOutOfRangeCode);
-        exceptionToCode.put(InvalidMessageException.class, InvalidMessageCode);
-        exceptionToCode.put(UnknownTopicOrPartitionException.class, UnknownTopicOrPartitionCode);
-        exceptionToCode.put(InvalidMessageSizeException.class, InvalidFetchSizeCode);
-        exceptionToCode.put(NotLeaderForPartitionException.class, NotLeaderForPartitionCode);
-        exceptionToCode.put(LeaderNotAvailableException.class, LeaderNotAvailableCode);
-        exceptionToCode.put(RequestTimedOutException.class, RequestTimedOutCode);
-        exceptionToCode.put(BrokerNotAvailableException.class, BrokerNotAvailableCode);
-        exceptionToCode.put(ReplicaNotAvailableException.class, ReplicaNotAvailableCode);
-        exceptionToCode.put(MessageSizeTooLargeException.class, MessageSizeTooLargeCode);
-        exceptionToCode.put(ControllerMovedException.class, StaleControllerEpochCode);
-        exceptionToCode.put(OffsetMetadataTooLargeException.class, OffsetMetadataTooLargeCode);
+    public static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
+
+    ErrorMapping(int code) {
+        this.code = (short) code;
     }
 
-    public static Short codeFor(Class<? extends Throwable> exception) {
-        return Objects.firstNonNull(exceptionToCode.get(exception), UnknownCode);
-    }
-
-    public static void maybeThrowException(Short code) {
-        Throwable throwable = exceptionFor(code);
-        if (throwable != null) {
-            throw Throwables.propagate(throwable);
+    public static ErrorMapping valueOf(Exception e) {
+        Class<?> clazz = e.getClass();
+        if (clazz == OffsetOutOfRangeException.class) {
+            return OffsetOutOfRangeCode;
         }
+        if (clazz == InvalidMessageException.class) {
+            return InvalidMessageCode;
+        }
+        if (clazz == InvalidPartitionException.class) {
+            return WrongPartitionCode;
+        }
+        if (clazz == InvalidMessageSizeException.class) {
+            return InvalidFetchSizeCode;
+        }
+        return UnkonwCode;
     }
 
-    static Logger logger = LoggerFactory.getLogger(ErrorMapping.class);
-
-    public static KafkaException exceptionFor(Short code) {
-        Class<? extends Throwable> throwable = exceptionToCode.inverse().get(code);
-        if (throwable == null)
-            return null;
-
-        try {
-            return (KafkaException) throwable.newInstance();
-        } catch (Exception e) {
-            logger.error("create instance of {} error", throwable, e);
+    public static ErrorMapping valueOf(short code) {
+        switch (code) {
+            case 0:
+                return NoError;
+            case 1:
+                return OffsetOutOfRangeCode;
+            case 2:
+                return InvalidMessageCode;
+            case 3:
+                return WrongPartitionCode;
+            case 4:
+                return InvalidFetchSizeCode;
+            default:
+                return UnkonwCode;
         }
-        return null;
     }
 }

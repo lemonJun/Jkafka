@@ -1,100 +1,162 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ * 
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.message;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 import java.nio.ByteBuffer;
-import java.util.HashMap;
-import java.util.List;
 
-import org.junit.Before;
 import org.junit.Test;
 
-import com.google.common.collect.Lists;
-
-import kafka.utils.TestUtils;
+import kafka.common.UnknownMagicByteException;
+import kafka.message.CompressionCodec;
+import kafka.message.Message;
 import kafka.utils.Utils;
 
+/**
+ * @author adyliu (imxylz@gmail.com)
+ * @since 1.0
+ */
 public class MessageTest {
-    public static class MessageTestVal {
-        public final byte[] key;
-        public final byte[] payload;
-        public final CompressionCodec codec;
-        public final Message message;
 
-        public MessageTestVal(byte[] key, byte[] payload, CompressionCodec codec, Message message) {
-            this.key = key;
-            this.payload = payload;
-            this.codec = codec;
-            this.message = message;
-        }
-    }
-
-    List<MessageTestVal> messages = Lists.newArrayList();
-
-    @Before
-    public void setUp() {
-        byte[][] keys = new byte[][] { null, "key".getBytes(), "".getBytes() };
-        byte[][] vals = new byte[][] { "value".getBytes(), "".getBytes(), null };
-        CompressionCodec[] codecs = new CompressionCodec[] { NoCompressionCodec.instance, GZIPCompressionCodec.instance };
-        for (byte[] k : keys) {
-            for (byte[] v : vals) {
-                for (CompressionCodec codec : codecs) {
-                    messages.add(new MessageTestVal(k, v, codec, new Message(v, k, codec)));
-                }
-            }
-        }
-
-    }
-
+    /**
+     * Test method for {@link Message#crcOffset(byte)}.
+     */
     @Test
-    public void testFieldValues() {
-        for (MessageTestVal v : messages) {
-            if (v.payload == null) {
-                assertTrue(v.message.isNull());
-                assertEquals("Payload should be null", null, v.message.payload());
-            } else {
-                TestUtils.checkEquals(ByteBuffer.wrap(v.payload), v.message.payload());
-            }
-            assertEquals(Messages.CurrentMagicValue, v.message.magic());
-            if (v.message.hasKey())
-                TestUtils.checkEquals(ByteBuffer.wrap(v.key), v.message.key());
-            else
-                assertEquals(null, v.message.key());
-            assertEquals(v.codec, v.message.compressionCodec());
+    public void testCrcOffset() {
+        assertEquals(2, Message.crcOffset((byte) 1));
+        try {
+            Message.crcOffset((byte) 0);
+            fail();
+        } catch (UnknownMagicByteException e) {
+            //ignore
         }
     }
 
+    /**
+     * Test method for {@link Message#payloadOffset(byte)}.
+     */
+    @Test
+    public void testPayloadOffset() {
+        assertEquals(6, Message.payloadOffset((byte) 1));
+    }
+
+    /**
+     * Test method for {@link Message#headerSize(byte)}.
+     */
+    @Test
+    public void testHeaderSize() {
+        assertEquals(6, Message.headerSize((byte) 1));
+    }
+
+    /**
+     * Test method for {@link Message#getSizeInBytes()}.
+     */
+    @Test
+    public void testGetSizeInBytes() {
+        Message m = new Message("demo".getBytes());
+        assertEquals(6 + 4, m.getSizeInBytes());
+    }
+
+    /**
+     * Test method for {@link Message#magic()}.
+     */
+    @Test
+    public void testMagic() {
+        Message m = new Message("demo".getBytes());
+        assertEquals(1, m.magic());
+    }
+
+    /**
+     * Test method for {@link Message#payloadSize()}.
+     */
+    @Test
+    public void testPayloadSize() {
+        Message m = new Message("demo".getBytes());
+        assertEquals(4, m.payloadSize());
+    }
+
+    /**
+     * Test method for {@link Message#attributes()}.
+     */
+    @Test
+    public void testAttributes() {
+        Message m = new Message("demo".getBytes());
+        assertEquals((byte) 0, m.attributes());
+    }
+
+    /**
+     * Test method for {@link Message#compressionCodec()}.
+     */
+    @Test
+    public void testCompressionCodec() {
+        Message m = new Message("demo".getBytes());
+        assertEquals(CompressionCodec.NoCompressionCodec, m.compressionCodec());
+    }
+
+    /**
+     * Test method for {@link Message#checksum()}.
+     */
     @Test
     public void testChecksum() {
-        for (MessageTestVal v : messages) {
-            assertTrue("Auto-computed checksum should be valid", v.message.isValid());
-            // garble checksum
-            int badChecksum = (int) ((v.message.checksum() + 1) % Integer.MAX_VALUE);
-            Utils.writeUnsignedInt(v.message.buffer, Messages.CrcOffset, badChecksum);
-            assertFalse("Message with invalid checksum should be invalid", v.message.isValid());
-        }
+        Message m = new Message("demo".getBytes());
+        assertEquals(Utils.crc32("demo".getBytes()), m.checksum());
     }
 
+    /**
+     * Test method for {@link Message#payload()}.
+     */
     @Test
-    public void testEquality() {
-        for (MessageTestVal v : messages) {
-            assertFalse("Should not equal null", v.message.equals(null));
-            assertFalse("Should not equal a random string", v.message.equals("asdf"));
-            assertTrue("Should equal itself", v.message.equals(v.message));
-            Message copy = new Message(/*bytes = */v.payload, /*key = */v.key, /*codec = */v.codec);
-            assertTrue("Should equal another message with the same content.", v.message.equals(copy));
-        }
+    public void testPayload() {
+        Message m = new Message("demo".getBytes());
+        assertEquals(ByteBuffer.wrap("demo".getBytes()), m.payload());
     }
 
+    /**
+     * Test method for {@link Message#isValid()}.
+     */
     @Test
-    public void testIsHashable() {
-        // this is silly, but why not
-        HashMap<Message, Message> m = new HashMap<Message, Message>();
-        for (MessageTestVal v : messages)
-            m.put(v.message, v.message);
-        for (MessageTestVal v : messages)
-            assertEquals(v.message, m.get(v.message));
+    public void testIsValid() {
+        Message m = new Message("demo".getBytes());
+        ByteBuffer buf = m.buffer;
+        assertTrue(m.isValid());
+        buf.put(buf.limit() - 1, (byte) (1 + buf.get(buf.limit() - 1)));
+        assertFalse(m.isValid());
     }
+
+    /**
+     * Test method for {@link Message#serializedSize()}.
+     */
+    @Test
+    public void testSerializedSize() {
+        Message m = new Message("demo".getBytes());
+        assertEquals(4 + 6 + ("demo".length()), m.serializedSize());
+    }
+
+    /**
+     * Test method for {@link Message#serializeTo(java.nio.ByteBuffer)}.
+     */
+    @Test
+    public void testSerializeTo() {
+        Message m = new Message("demo".getBytes());
+        ByteBuffer buffer = ByteBuffer.allocate(m.serializedSize());
+        m.serializeTo(buffer);
+        assertFalse(buffer.hasRemaining());
+    }
+
 }

@@ -1,44 +1,51 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ * 
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.utils;
 
-public class Range<T> {
-    public final T _1;
-    public final T _2;
+/**
+ * A generic range value with a start and end
+ * 
+ * @author adyliu (imxylz@gmail.com)
+ * @since 1.0
+ */
+public interface Range {
 
-    public Range(T minValue, T maxValue) {
-        _1 = minValue;
-        _2 = maxValue;
-    }
+    /** The first index in the range
+     * @return range of start
+     */
+    long start();
 
-    public static <T> Range<T> make(T minValue, T maxValue) {
-        return new Range<T>(minValue, maxValue);
-    }
+    /** The total number of indexes in the range
+     * @return size of range
+     */
+    long size();
 
-    @Override
-    public String toString() {
-        return "Range{" + _1 + ", " + _2 + '}';
-    }
+    /** Return true iff the range is empty
+     * @return check the range is emtpy
+     */
+    boolean isEmpty();
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o)
-            return true;
-        if (o == null || getClass() != o.getClass())
-            return false;
+    /** if value is in range
+     * @param value value for check
+     * @return check the value in range
+     */
+    boolean contains(long value);
 
-        Range range = (Range) o;
+    String toString();
 
-        if (_1 != null ? !_1.equals(range._1) : range._1 != null)
-            return false;
-        if (_2 != null ? !_2.equals(range._2) : range._2 != null)
-            return false;
-
-        return true;
-    }
-
-    @Override
-    public int hashCode() {
-        int result = _1 != null ? _1.hashCode() : 0;
-        result = 31 * result + (_2 != null ? _2.hashCode() : 0);
-        return result;
-    }
 }

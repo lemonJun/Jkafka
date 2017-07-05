@@ -1,134 +1,110 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ * 
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.network;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.SocketException;
-import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.Iterator;
-import java.util.Set;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import kafka.common.KafkaException;
-import kafka.utils.Utils;
+import kafka.utils.Closer;
 
 /**
  * Thread that accepts and configures new connections. There is only need for one of these
+ * @author adyliu (imxylz@gmail.com)
+ * @since 1.0
  */
-public class Acceptor extends AbstractServerThread {
-    public String host;
-    public int port;
-    private Processor[] processors;
-    public int sendBufferSize;
-    public int recvBufferSize;
+class Acceptor extends AbstractServerThread {
 
-    public Acceptor(String host, int port, Processor[] processors, int sendBufferSize, int recvBufferSize) {
-        this.host = host;
+    private int port;
+    private Processor[] processors;
+    private int sendBufferSize;
+    private int receiveBufferSize;
+
+    public Acceptor(int port, Processor[] processors, int sendBufferSize, int receiveBufferSize) {
+        super();
         this.port = port;
         this.processors = processors;
         this.sendBufferSize = sendBufferSize;
-        this.recvBufferSize = recvBufferSize;
-
-        serverChannel = openServerSocket(host, port);
+        this.receiveBufferSize = receiveBufferSize;
     }
 
-    Logger logger = LoggerFactory.getLogger(Acceptor.class);
-
-    public ServerSocketChannel serverChannel;
-
-    /**
-     * Accept loop that checks for new connection attempts
-     */
-    @Override
     public void run() {
-        try {
-            serverChannel.register(selector, SelectionKey.OP_ACCEPT);
-        } catch (ClosedChannelException e) {
-            throw new KafkaException(e);
-        }
-
-        startupComplete();
-        int currentProcessor = 0;
-        while (isRunning()) {
-            int ready = Utils.select(selector, 500);
-            if (ready <= 0)
-                continue;
-
-            Set<SelectionKey> keys = selector.selectedKeys();
-            Iterator<SelectionKey> iter = keys.iterator();
-            while (iter.hasNext() && isRunning()) {
-                SelectionKey key;
-                try {
-                    key = iter.next();
-                    iter.remove();
-                    if (key.isAcceptable())
-                        accept(key, processors[currentProcessor]);
-                    else
-                        throw new IllegalStateException("Unrecognized key state for acceptor thread.");
-
-                    // round robin to the next processor thread
-                    currentProcessor = (currentProcessor + 1) % processors.length;
-                } catch (Throwable e) {
-                    logger.error("Error in acceptor", e);
-                }
-            }
-        }
-        logger.debug("Closing server socket and selector.");
-        Utils.closeQuietly(serverChannel);
-        Utils.closeQuietly(selector);
-        shutdownComplete();
-    }
-
-    /*
-     * Create a server socket to listen for connections on.
-     */
-    private ServerSocketChannel openServerSocket(String host, int port) {
-        InetSocketAddress socketAddress = null;
-        if (host == null || host.trim().isEmpty())
-            socketAddress = new InetSocketAddress(port);
-        else
-            socketAddress = new InetSocketAddress(host, port);
-
-        ServerSocketChannel serverChannel = null;
+        final ServerSocketChannel serverChannel;
         try {
             serverChannel = ServerSocketChannel.open();
             serverChannel.configureBlocking(false);
+            serverChannel.socket().bind(new InetSocketAddress(port));
+            serverChannel.register(getSelector(), SelectionKey.OP_ACCEPT);
+        } catch (IOException e) {
+            logger.error("listener on port " + port + " failed.");
+            throw new RuntimeException(e);
+        }
+        //
+        logger.debug("Awaiting connection on port " + port);
+        startupComplete();
+        //
+        int currentProcessor = 0;
+        while (isRunning()) {
+            int ready = -1;
             try {
-                serverChannel.socket().bind(socketAddress);
-                logger.info("Awaiting socket connections on {}:{}.", socketAddress.getHostName(), port);
-            } catch (SocketException e) {
-                throw new KafkaException("Socket server failed to bind to %s:%d: %s.", socketAddress.getHostName(), port, e.getMessage(), e);
+                ready = getSelector().select(500L);
+            } catch (IOException e) {
+                throw new IllegalStateException(e);
             }
-        } catch (IOException e) {
-            throw new KafkaException(e);
+            if (ready <= 0)
+                continue;
+            Iterator<SelectionKey> iter = getSelector().selectedKeys().iterator();
+            while (iter.hasNext() && isRunning())
+                try {
+                    SelectionKey key = iter.next();
+                    iter.remove();
+                    //
+                    if (key.isAcceptable()) {
+                        accept(key, processors[currentProcessor]);
+                    } else {
+                        throw new IllegalStateException("Unrecognized key state for acceptor thread.");
+                    }
+                    //
+                    currentProcessor = (currentProcessor + 1) % processors.length;
+                } catch (Throwable t) {
+                    logger.error("Error in acceptor", t);
+                }
         }
-        return serverChannel;
+        //run over
+        logger.info("Closing server socket and selector.");
+        Closer.closeQuietly(serverChannel, logger);
+        Closer.closeQuietly(getSelector(), logger);
+        shutdownComplete();
     }
 
-    /*
-     * Accept a new connection
-     */
-    public Selector accept(SelectionKey key, Processor processor) {
+    private void accept(SelectionKey key, Processor processor) throws IOException {
         ServerSocketChannel serverSocketChannel = (ServerSocketChannel) key.channel();
-        SocketChannel socketChannel = null;
-        try {
-            serverSocketChannel.socket().setReceiveBufferSize(recvBufferSize);
-
-            socketChannel = serverSocketChannel.accept();
-            socketChannel.configureBlocking(false);
-            socketChannel.socket().setTcpNoDelay(true);
-            socketChannel.socket().setSendBufferSize(sendBufferSize);
-
-            logger.debug("Accepted connection from {} on {}. sendBufferSize [actual|requested]: [{}|{}] recvBufferSize [actual|requested]: [{}|{}]", socketChannel.socket().getInetAddress(), socketChannel.socket().getLocalSocketAddress(), socketChannel.socket().getSendBufferSize(), sendBufferSize, socketChannel.socket().getReceiveBufferSize(), recvBufferSize);
-        } catch (IOException e) {
-            throw new KafkaException(e);
-        }
-
-        return processor.accept(socketChannel);
+        serverSocketChannel.socket().setReceiveBufferSize(receiveBufferSize);
+        //
+        SocketChannel socketChannel = serverSocketChannel.accept();
+        socketChannel.configureBlocking(false);
+        socketChannel.socket().setTcpNoDelay(true);
+        socketChannel.socket().setSendBufferSize(sendBufferSize);
+        //
+        processor.accept(socketChannel);
     }
+
 }

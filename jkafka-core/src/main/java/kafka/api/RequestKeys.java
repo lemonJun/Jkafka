@@ -1,52 +1,58 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ * 
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package kafka.api;
 
-import java.util.Map;
+import kafka.common.annotations.ClientSide;
+import kafka.common.annotations.ServerSide;
 
-import com.google.common.collect.Maps;
+/**
+ * Request Type
+ * 
+ * @author adyliu (imxylz@gmail.com)
+ * @since 1.0
+ */
+@ClientSide
+@ServerSide
+public enum RequestKeys {
+    PRODUCE, //0
+    FETCH, //1
+    MULTIFETCH, //2
+    MULTIPRODUCE, //3
+    OFFSETS, //4
+    /** create more partitions
+     * @since 1.2
+     */
+    CREATE, //5
+    /**
+     * delete unused topic
+     * @since 1.2
+     */
+    DELETE;//6
 
-import kafka.common.KafkaException;
-import kafka.utils.Tuple2;
+    //
+    public int value = ordinal();
 
-public class RequestKeys {
-    public static final short ProduceKey = 0;
-    public static final short FetchKey = 1;
-    public static final short OffsetsKey = 2;
-    public static final short MetadataKey = 3;
-    public static final short LeaderAndIsrKey = 4;
-    public static final short StopReplicaKey = 5;
-    public static final short UpdateMetadataKey = 6;
-    public static final short ControlledShutdownKey = 7;
-    public static final short OffsetCommitKey = 8;
-    public static final short OffsetFetchKey = 9;
+    //
+    final static int size = values().length;
 
-    public static Map<Short, Tuple2<String, RequestReader>> keyToNameAndDeserializerMap = Maps.newHashMap();
-
-    static {
-        keyToNameAndDeserializerMap.put(ProduceKey, Tuple2.make("Produce", ProducerRequestReader.instance));
-        keyToNameAndDeserializerMap.put(FetchKey, Tuple2.make("Fetch", FetchRequestReader.instance));
-        keyToNameAndDeserializerMap.put(OffsetsKey, Tuple2.make("Offsets", OffsetRequestReader.instance));
-        keyToNameAndDeserializerMap.put(MetadataKey, Tuple2.make("Metadata", TopicMetadataRequestReader.instance));
-        keyToNameAndDeserializerMap.put(LeaderAndIsrKey, Tuple2.make("LeaderAndIsr", LeaderAndIsrRequestReader.instance));
-        keyToNameAndDeserializerMap.put(StopReplicaKey, Tuple2.make("StopReplica", StopReplicaRequestReader.instance));
-        keyToNameAndDeserializerMap.put(UpdateMetadataKey, Tuple2.make("UpdateMetadata", UpdateMetadataRequestReader.instance));
-        keyToNameAndDeserializerMap.put(ControlledShutdownKey, Tuple2.make("ControlledShutdown", ControlledShutdownRequestReader.instance));
-        keyToNameAndDeserializerMap.put(OffsetCommitKey, Tuple2.make("OffsetCommit", OffsetCommitRequestReader.instance));
-        keyToNameAndDeserializerMap.put(OffsetFetchKey, Tuple2.make("OffsetFetch", OffsetFetchRequestReader.instance));
-    }
-
-    public static String nameForKey(Short key) {
-        Tuple2<String, RequestReader> nameAndSerializer = keyToNameAndDeserializerMap.get(key);
-        if (nameAndSerializer == null)
-            throw new KafkaException("Wrong request type %d", key);
-
-        return nameAndSerializer._1;
-    }
-
-    public static RequestReader deserializerForKey(Short key) {
-        Tuple2<String, RequestReader> nameAndSerializer = keyToNameAndDeserializerMap.get(key);
-        if (nameAndSerializer == null)
-            throw new KafkaException("Wrong request type %d", key);
-
-        return nameAndSerializer._2;
+    public static RequestKeys valueOf(int ordinal) {
+        if (ordinal < 0 || ordinal >= size)
+            return null;
+        return values()[ordinal];
     }
 }

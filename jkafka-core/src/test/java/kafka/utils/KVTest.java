@@ -21,8 +21,6 @@ import static org.junit.Assert.*;
 
 import org.junit.Test;
 
-import kafka.utils.KV;
-
 /**
  * @author adyliu (imxylz@gmail.com)
  * @since <version>

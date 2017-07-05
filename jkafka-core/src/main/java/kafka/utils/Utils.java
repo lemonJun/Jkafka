@@ -17,19 +17,33 @@
 
 package kafka.utils;
 
-import javax.management.MBeanServer;
-import javax.management.ObjectName;
-
-import kafka.mx.IMBeanName;
-
-import java.io.*;
+import java.io.Closeable;
+import java.io.EOFException;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.io.UnsupportedEncodingException;
 import java.lang.management.ManagementFactory;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.security.MessageDigest;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 import java.util.zip.CRC32;
+
+import javax.management.MBeanServer;
+import javax.management.ObjectName;
+
+import kafka.mx.IMBeanName;
 
 /**
  * common utilities
@@ -58,6 +72,14 @@ public class Utils {
             Closer.closeQuietly(fis);
         }
 
+    }
+
+    public static void closeQuietly(Closeable closeable) {
+        try {
+            closeable.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     /**
@@ -154,6 +176,38 @@ public class Utils {
             //FIXME: force positive number
             map.put(kv[0].trim(), Integer.valueOf(kv[1].trim()));
         }
+        return map;
+    }
+
+    public static int hashcode(Object... as) {
+        if (as == null)
+            return 0;
+        int h = 1;
+        int i = 0;
+        while (i < as.length) {
+            if (as[i] != null) {
+                h = 31 * h + as[i].hashCode();
+                i += 1;
+            }
+        }
+        return h;
+    }
+
+    /**
+     * This method gets comma separated values which contains key,value pairs and returns a map of
+     * key value pairs. the format of allCSVal is key1:val1, key2:val2 ....
+     */
+    public static Map<String, String> parseCsvMap(String str) {
+        Map<String, String> map = new HashMap<String, String>();
+        if ("".equals(str))
+            return map;
+
+        String[] split = str.split("\\s*,\\s*");
+        for (String kvStr : split) {
+            String[] kv = kvStr.split("\\s*:\\s*");
+            map.put(kv[0], kv[1]);
+        }
+
         return map;
     }
 

@@ -85,6 +85,13 @@
 				<version>1.7.6</version>
 				<scope>test</scope>
 			</dependency>
+
+			<dependency>
+				<groupId>com.101tec</groupId>
+				<artifactId>zkclient</artifactId>
+				<version>0.4</version>
+			</dependency>
+
 			<dependency>
 				<groupId>log4j</groupId>
 				<artifactId>log4j</artifactId>
@@ -95,7 +102,11 @@
 				<artifactId>snappy-java</artifactId>
 				<version>1.1.1.7</version>
 			</dependency>
-
+			<dependency>
+				<groupId>com.alibaba</groupId>
+				<artifactId>fastjson</artifactId>
+				<version>${fastjson.version}</version>
+			</dependency>
 
 			<dependency>
 				<groupId>junit</groupId>

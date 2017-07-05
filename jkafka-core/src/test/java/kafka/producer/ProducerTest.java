@@ -77,7 +77,6 @@ public class ProducerTest extends BaseJafkaServer {
             producer.send(data);
         }
         producer.close();
-        ////////////////////////////////////////////////
         close(jafka);
     }
 }

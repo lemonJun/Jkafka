@@ -127,6 +127,7 @@ public class ServerRegister implements IZkStateListener, Closeable {
                 throw new RuntimeException("cannot get local host, setting 'hostname' in configuration");
             }
         }
+
         //
         final String creatorId = hostname + "-" + System.currentTimeMillis();
         final Broker broker = new Broker(config.getBrokerId(), creatorId, hostname, config.getPort(), config.isTopicAutoCreated());

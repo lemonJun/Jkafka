@@ -5,8 +5,6 @@ package kafka.utils;
 
 import org.junit.Test;
 
-import kafka.utils.TopicNameValidator;
-
 import static org.junit.Assert.*;
 
 /**

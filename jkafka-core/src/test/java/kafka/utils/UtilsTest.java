@@ -39,9 +39,6 @@ import java.util.Properties;
 
 import org.junit.Test;
 
-import kafka.utils.KV;
-import kafka.utils.Utils;
-
 /**
  * @author adyliu (imxylz@gmail.com)
  * @since 1.0

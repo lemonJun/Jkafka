@@ -23,9 +23,6 @@ import java.util.Map;
 
 import org.junit.Test;
 
-import kafka.utils.ImmutableMap;
-import kafka.utils.KV;
-
 /**
  * @author adyliu (imxylz@gmail.com)
  * @since 1.0

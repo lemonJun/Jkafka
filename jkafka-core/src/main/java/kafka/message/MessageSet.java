@@ -1,111 +1,66 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- * 
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package kafka.message;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.nio.channels.GatheringByteChannel;
+import java.util.Iterator;
 
 /**
- * Message set helper functions
- * 
- * @author adyliu (imxylz@gmail.com)
- * @since 1.0
+ * A set of messages with offsets. A message set has a fixed serialized form, though the container
+ * for the bytes could be either in-memory or on disk. The format of each message is
+ * as follows:
+ * 8 byte message offset number
+ * 4 byte size containing an integer N
+ * N message bytes as described in the Message class
  */
 public abstract class MessageSet implements Iterable<MessageAndOffset> {
 
-    public static final MessageSet Empty = new ByteBufferMessageSet(ByteBuffer.allocate(0));
-
-    public static final int LogOverhead = 4;
-
-    public static ByteBuffer createByteBuffer(CompressionCodec compressionCodec, Message... messages) {
-        if (compressionCodec == CompressionCodec.NoCompressionCodec) {
-            ByteBuffer buffer = ByteBuffer.allocate(messageSetSize(messages));
-            for (Message message : messages) {
-                message.serializeTo(buffer);
-            }
-            buffer.rewind();
-            return buffer;
-        }
-        //
-        if (messages.length == 0) {
-            ByteBuffer buffer = ByteBuffer.allocate(messageSetSize(messages));
-            buffer.rewind();
-            return buffer;
-        }
-        //
-        Message message = CompressionUtils.compress(messages, compressionCodec);
-        ByteBuffer buffer = ByteBuffer.allocate(message.serializedSize());
-        message.serializeTo(buffer);
-        buffer.rewind();
-        return buffer;
-    }
-
-    public static int entrySize(Message message) {
-        return LogOverhead + message.getSizeInBytes();
-    }
-
-    public static int messageSetSize(Iterable<Message> messages) {
-        int size = 0;
-        for (Message message : messages) {
-            size += entrySize(message);
-        }
-        return size;
-    }
-
-    public static int messageSetSize(Message... messages) {
-        int size = 0;
-        for (Message message : messages) {
-            size += entrySize(message);
-        }
-        return size;
-    }
-
     /**
-     * get the total size of this message set in bytes
-     * @return size of total message
+     * Write the messages in this set to the given channel starting at the given offset byte.
+     * Less than the complete amount may be written, but no more than maxSize can be. The number
+     * of bytes written is returned
      */
-    public abstract long getSizeInBytes();
+    public abstract int writeTo(GatheringByteChannel channel, long offset, int maxSize);
 
     /**
-     * Validate the checksum of all the messages in the set. Throws an
-     * InvalidMessageException if the checksum doesn't match the payload
-     * for any message.
+     * Provides an iterator over the message/offset pairs in this set
+     */
+    public abstract Iterator<MessageAndOffset> iterator();
+
+    /**
+     * Gives the total size of this message set in bytes
+     */
+    public abstract int sizeInBytes();
+
+    /**
+     * Validate the checksum of all the messages in the set. Throws an InvalidMessageException if the checksum doesn't
+     * match the payload for any message.
      */
     public void validate() {
         for (MessageAndOffset messageAndOffset : this)
-            if (!messageAndOffset.message.isValid()) {
+            if (!messageAndOffset.message.isValid())
                 throw new InvalidMessageException();
-            }
     }
 
-    /////////////////////////////////////////////////////////////////////////
-    //                             abstract method
-    /////////////////////////////////////////////////////////////////////////
     /**
-     * Write the messages in this set to the given channel starting at the
-     * given offset byte. Less than the complete amount may be written, but
-     * no more than maxSize can be. The number of bytes written is returned
-     * @param channel IOChannel
-     * @param offset offset of message
-     * @param maxSize size of message
-     * @throws IOException any exception
-     * @return size of result
+     * Print this message set's contents. If the message set has more than 100 messages, just
+     * print the first 100.
      */
-    public abstract long writeTo(GatheringByteChannel channel, long offset, long maxSize) throws IOException;
+    @Override
+    public String toString() {
+        StringBuilder builder = new StringBuilder();
+        builder.append(getClass().getSimpleName() + "(");
+        Iterator<MessageAndOffset> iter = this.iterator();
+        int i = 0;
+        while (iter.hasNext() && i < 100) {
+            MessageAndOffset message = iter.next();
+            builder.append(message);
+            if (iter.hasNext())
+                builder.append(", ");
+            i += 1;
+        }
+        if (iter.hasNext())
+            builder.append("...");
+        builder.append(")");
+        return builder.toString();
+    }
+
 }

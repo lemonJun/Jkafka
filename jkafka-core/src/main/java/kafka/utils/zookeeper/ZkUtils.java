@@ -103,7 +103,7 @@ public class ZkUtils {
         List<String> nodes = getChildrenParentMayNotExist(zkClient, BrokerIdsPath);
         for (String node : nodes) {
             final String brokerInfoString = readData(zkClient, BrokerIdsPath + "/" + node);
-            cluster.add(Broker.createBroker(Integer.valueOf(node), brokerInfoString));
+            //            cluster.add(Broker.createBroker(Integer.valueOf(node), brokerInfoString));
         }
         return cluster;
     }
@@ -111,7 +111,8 @@ public class ZkUtils {
     public static TopicCount getTopicCount(ZkClient zkClient, String group, String consumerId) {
         ZkGroupDirs dirs = new ZkGroupDirs(group);
         String topicCountJson = ZkUtils.readData(zkClient, dirs.consumerRegistryDir + "/" + consumerId);
-        return TopicCount.parse(consumerId, topicCountJson);
+        //        return TopicCount.parse(consumerId, topicCountJson);
+        return null;
     }
 
     /**

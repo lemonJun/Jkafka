@@ -17,6 +17,11 @@
 
 package kafka.server;
 
+import java.io.Closeable;
+import java.io.File;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,14 +31,10 @@ import kafka.log.LogManager;
 import kafka.mx.ServerInfo;
 import kafka.mx.SocketServerStats;
 import kafka.network.SocketServer;
+import kafka.utils.KafkaScheduler;
 import kafka.utils.Mx4jLoader;
 import kafka.utils.Scheduler;
 import kafka.utils.Utils;
-
-import java.io.Closeable;
-import java.io.File;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * The main server container
@@ -49,7 +50,7 @@ public class Server implements Closeable {
 
     final ServerConfig config;
 
-    final Scheduler scheduler = new Scheduler(1, "jafka-logcleaner-", false);
+    final Scheduler scheduler = new KafkaScheduler(1, "jafka-logcleaner-", false);
 
     private LogManager logManager;
 
@@ -90,6 +91,7 @@ public class Server implements Closeable {
                             1000L * 60 * 60 * config.getLogRetentionHours(), //
                             needRecovery);
             this.logManager.setRollingStategy(config.getRollingStrategy());
+
             logManager.load();
 
             RequestHandlers handlers = new RequestHandlers(logManager);

@@ -43,6 +43,8 @@ import java.util.zip.CRC32;
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
+import com.google.common.collect.Lists;
+
 import kafka.mx.IMBeanName;
 
 /**
@@ -191,6 +193,35 @@ public class Utils {
             }
         }
         return h;
+    }
+
+    public static <K, V> Tuple2<K, V> head(Map<K, V> map) {
+        for (Map.Entry<K, V> entry : map.entrySet()) {
+            return Tuple2.make(entry.getKey(), entry.getValue());
+        }
+        return null;
+    }
+
+    public static <S> S head(Iterable<S> current) {
+        for (S s : current) {
+            return s;
+        }
+        return null;
+    }
+
+    public static <S> List<S> tail(List<S> current) {
+        return current != null && current.size() > 1 ? current.subList(1, current.size()) : Lists.<S> newArrayList();
+    }
+
+    public static <S> List<S> tail(Iterable<S> current) {
+        List<S> tail = Lists.newArrayList();
+        int i = 0;
+        for (S s : current) {
+            if (i > 0)
+                tail.add(s);
+            i++;
+        }
+        return tail;
     }
 
     /**

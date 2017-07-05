@@ -14,6 +14,7 @@ import kafka.utils.VerifiableProperties;
 import kafka.utils.ZKConfig;
 
 /**
+ * 
  * Configuration settings for the kafka server
  */
 public class KafkaConfig extends ZKConfig {
@@ -22,6 +23,11 @@ public class KafkaConfig extends ZKConfig {
     public KafkaConfig(Properties originalProps) {
         this(new VerifiableProperties(originalProps));
         props.verify();
+    }
+
+    public static KafkaConfig fromProps(Properties originalProps) {
+        KafkaConfig config = new KafkaConfig(new VerifiableProperties(originalProps));
+        return config;
     }
 
     private long getLogRetentionTimeMillis() {
@@ -249,6 +255,10 @@ public class KafkaConfig extends ZKConfig {
 
     /* the number of network threads that the server uses for handling network requests */
     public int numNetworkThreads;
+
+    public final int metricNumSamples = 2;
+
+    public final long metricSampleWindowMs = 3000;
 
     /* the number of io threads that the server uses for carrying out network requests */
     public int numIoThreads;

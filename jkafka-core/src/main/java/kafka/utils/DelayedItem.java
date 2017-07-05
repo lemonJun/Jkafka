@@ -40,8 +40,11 @@ public class DelayedItem<T> implements Delayed {
         long myEnd = createdMs + delayMs;
         long yourEnd = delayed.createdMs + delayed.delayMs;
 
-        if (myEnd < yourEnd) return -1;
-        else if (myEnd > yourEnd) return 1;
-        else return 0;
+        if (myEnd < yourEnd)
+            return -1;
+        else if (myEnd > yourEnd)
+            return 1;
+        else
+            return 0;
     }
 }

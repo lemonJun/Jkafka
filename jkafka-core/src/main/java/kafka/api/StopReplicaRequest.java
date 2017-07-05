@@ -25,13 +25,7 @@ public class StopReplicaRequest extends RequestOrResponse {
     public boolean deletePartitions;
     public Set<Tuple2<String, Integer>> partitions;
 
-    public StopReplicaRequest(short versionId,
-                              int correlationId,
-                              String clientId,
-                              int controllerId,
-                              int controllerEpoch,
-                              boolean deletePartitions,
-                              Set<Tuple2<String, Integer>> partitions) {
+    public StopReplicaRequest(short versionId, int correlationId, String clientId, int controllerId, int controllerEpoch, boolean deletePartitions, Set<Tuple2<String, Integer>> partitions) {
         super(RequestKeys.StopReplicaKey, correlationId);
         this.versionId = versionId;
         this.clientId = clientId;
@@ -41,31 +35,24 @@ public class StopReplicaRequest extends RequestOrResponse {
         this.partitions = partitions;
     }
 
-    public StopReplicaRequest(boolean deletePartitions,
-                              Set<Tuple2<String, Integer>> partitions,
-                              int controllerId,
-                              int controllerEpoch,
-                              int correlationId) {
-        this(StopReplicaRequestReader.CurrentVersion, correlationId, StopReplicaRequestReader.DefaultClientId,
-                controllerId, controllerEpoch, deletePartitions, partitions);
+    public StopReplicaRequest(boolean deletePartitions, Set<Tuple2<String, Integer>> partitions, int controllerId, int controllerEpoch, int correlationId) {
+        this(StopReplicaRequestReader.CurrentVersion, correlationId, StopReplicaRequestReader.DefaultClientId, controllerId, controllerEpoch, deletePartitions, partitions);
     }
 
     @Override
     public int sizeInBytes() {
         return 2 + /* versionId */
-                4 + /* correlation id */
-                ApiUtils.shortStringLength(clientId) +
-                4 + /* controller id*/
-                4 + /* controller epoch */
-                1 + /* deletePartitions */
-                4 /* partition count */
-                + Utils.foldLeft(partitions, 0, new Function2<Integer, Tuple2<String, Integer>, Integer>() {
-            @Override
-            public Integer apply(Integer arg1, Tuple2<String, Integer> arg2) {
-                return arg1 + (ApiUtils.shortStringLength(arg2._1)) +
-                        4 /* partition id */;
-            }
-        });
+                        4 + /* correlation id */
+                        ApiUtils.shortStringLength(clientId) + 4 + /* controller id*/
+                        4 + /* controller epoch */
+                        1 + /* deletePartitions */
+                        4 /* partition count */
+                        + Utils.foldLeft(partitions, 0, new Function2<Integer, Tuple2<String, Integer>, Integer>() {
+                            @Override
+                            public Integer apply(Integer arg1, Tuple2<String, Integer> arg2) {
+                                return arg1 + (ApiUtils.shortStringLength(arg2._1)) + 4 /* partition id */;
+                            }
+                        });
     }
 
     @Override
@@ -79,7 +66,7 @@ public class StopReplicaRequest extends RequestOrResponse {
         buffer.put((byte) (deletePartitions ? 1 : 0));
         buffer.putInt(partitions.size());
 
-        Utils.foreach(partitions, new Callable1<Tuple2<String,Integer>>() {
+        Utils.foreach(partitions, new Callable1<Tuple2<String, Integer>>() {
             @Override
             public void apply(Tuple2<String, Integer> arg) {
                 String topic = arg._1;

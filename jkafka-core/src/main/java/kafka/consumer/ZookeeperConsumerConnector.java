@@ -1,6 +1,5 @@
 package kafka.consumer;
 
-
 import static com.google.common.base.Preconditions.checkState;
 import static kafka.utils.ZkUtils.BrokerTopicsPath;
 import static kafka.utils.ZkUtils.createEphemeralPathExpectConflict;
@@ -126,9 +125,7 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
             consumerUuid = config.consumerId;
         } else { // generate unique consumerId automatically
             UUID uuid = UUID.randomUUID();
-            consumerUuid = String.format("%s-%d-%s", Utils.getHostName(),
-                    System.currentTimeMillis(),
-                    Long.toHexString(uuid.getMostSignificantBits()).substring(0, 8));
+            consumerUuid = String.format("%s-%d-%s", Utils.getHostName(), System.currentTimeMillis(), Long.toHexString(uuid.getMostSignificantBits()).substring(0, 8));
         }
         consumerIdString = config.groupId + "_" + consumerUuid;
 
@@ -144,10 +141,7 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
                 public void run() {
                     autoCommit();
                 }
-            },
-                    /*delay =*/ config.autoCommitIntervalMs,
-                    /*period =*/ config.autoCommitIntervalMs,
-                    /*unit =*/ TimeUnit.MILLISECONDS);
+            }, /*delay =*/ config.autoCommitIntervalMs, /*period =*/ config.autoCommitIntervalMs, /*unit =*/ TimeUnit.MILLISECONDS);
         }
 
         KafkaMetricsReporter.startReporters(config.props);
@@ -173,11 +167,9 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
 
     public String consumerIdString;
 
-
     public ZookeeperConsumerConnector(ConsumerConfig config) {
         this(config, true);
     }
-
 
     @Override
     public Multimap<String, KafkaStream<byte[], byte[]>> createMessageStreams(Map<String, Integer> topicCountMap) {
@@ -187,11 +179,9 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
     @Override
     public <K, V> Multimap<String, KafkaStream<K, V>> createMessageStreams(Map<String, Integer> topicCountMap, Decoder<K> keyDecoder, Decoder<V> valueDecoder) {
         if (messageStreamCreated.getAndSet(true))
-            throw new RuntimeException(this.getClass().getSimpleName() +
-                    " can create message streams at most once");
+            throw new RuntimeException(this.getClass().getSimpleName() + " can create message streams at most once");
         return consume(topicCountMap, keyDecoder, valueDecoder);
     }
-
 
     @Override
     public <K, V> List<KafkaStream<K, V>> createMessageStreamsByFilter(TopicFilter topicFilter, int numStreams, Decoder<K> keyDecoder, Decoder<V> valueDecoder) {
@@ -257,14 +247,12 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
                     @Override
                     public void apply(String _) {
                         LinkedBlockingQueue<FetchedDataChunk> queue = new LinkedBlockingQueue<FetchedDataChunk>(config.queuedMaxMessages);
-                        KafkaStream<K, V> stream = new KafkaStream<K, V>(
-                                queue, config.consumerTimeoutMs, keyDecoder, valueDecoder, config.clientId);
+                        KafkaStream<K, V> stream = new KafkaStream<K, V>(queue, config.consumerTimeoutMs, keyDecoder, valueDecoder, config.clientId);
                         queuesAndStreams.add(Tuple2.make(queue, stream));
                     }
                 });
             }
         });
-
 
         ZKGroupDirs dirs = new ZKGroupDirs(config.groupId);
         registerConsumerInZK(dirs, consumerIdString, topicCount);
@@ -273,21 +261,18 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
         return loadBalancerListener.kafkaMessageAndMetadataStreams;
     }
 
-    private <K, V> void reinitializeConsumer(TopicCount topicCount,
-                                             final List<Tuple2<LinkedBlockingQueue<FetchedDataChunk>, KafkaStream<K, V>>> queuesAndStreams) {
+    private <K, V> void reinitializeConsumer(TopicCount topicCount, final List<Tuple2<LinkedBlockingQueue<FetchedDataChunk>, KafkaStream<K, V>>> queuesAndStreams) {
         ZKGroupDirs dirs = new ZKGroupDirs(config.groupId);
 
         // listener to consumer and partition changes
         if (loadBalancerListener == null) {
             Multimap<String, KafkaStream<K, V>> topicStreamsMap = HashMultimap.create();
-            loadBalancerListener = new ZKRebalancerListener(
-                    config.groupId, consumerIdString, topicStreamsMap);
+            loadBalancerListener = new ZKRebalancerListener(config.groupId, consumerIdString, topicStreamsMap);
         }
 
         // create listener for session expired event if not exist yet
         if (sessionExpirationListener == null)
-            sessionExpirationListener = new ZKSessionExpireListener(
-                    dirs, consumerIdString, topicCount, loadBalancerListener);
+            sessionExpirationListener = new ZKSessionExpireListener(dirs, consumerIdString, topicCount, loadBalancerListener);
 
         // create listener for topic partition change event if not exist yet
         if (topicPartitionChangeListener == null)
@@ -300,10 +285,10 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
 
         List<Tuple2<LinkedBlockingQueue<FetchedDataChunk>, KafkaStream<K, V>>> allQueuesAndStreams;
         if (topicCount instanceof WildcardTopicCount) {
-             /*
-              * Wild-card consumption streams share the same queues, so we need to
-              * duplicate the list for the subsequent zip operation.
-              */
+            /*
+             * Wild-card consumption streams share the same queues, so we need to
+             * duplicate the list for the subsequent zip operation.
+             */
             allQueuesAndStreams = Utils.flatList(0, consumerThreadIdsPerTopic.keySet().size(), new Function1<Integer, Tuple2<LinkedBlockingQueue<FetchedDataChunk>, KafkaStream<K, V>>>() {
                 @Override
                 public Tuple2<LinkedBlockingQueue<FetchedDataChunk>, KafkaStream<K, V>> apply(Integer _) {
@@ -329,11 +314,8 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
             }
         });
 
-        checkState(topicThreadIds.size() == allQueuesAndStreams.size(),
-                String.format("Mismatch between thread ID count (%d) and queue count (%d)",
-                        topicThreadIds.size(), allQueuesAndStreams.size()));
-        List<Tuple2<Tuple2<String, String>, Tuple2<LinkedBlockingQueue<FetchedDataChunk>, KafkaStream<K, V>>>>
-                threadQueueStreamPairs = Utils.zip(topicThreadIds, allQueuesAndStreams);
+        checkState(topicThreadIds.size() == allQueuesAndStreams.size(), String.format("Mismatch between thread ID count (%d) and queue count (%d)", topicThreadIds.size(), allQueuesAndStreams.size()));
+        List<Tuple2<Tuple2<String, String>, Tuple2<LinkedBlockingQueue<FetchedDataChunk>, KafkaStream<K, V>>>> threadQueueStreamPairs = Utils.zip(topicThreadIds, allQueuesAndStreams);
 
         Utils.foreach(threadQueueStreamPairs, new Callable1<Tuple2<Tuple2<String, String>, Tuple2<LinkedBlockingQueue<FetchedDataChunk>, KafkaStream<K, V>>>>() {
             @Override
@@ -342,20 +324,17 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
                 final LinkedBlockingQueue<FetchedDataChunk> q = e._2._1;
                 topicThreadIdAndQueues.put(topicThreadId, q);
                 logger.debug("Adding topicThreadId {} and queue {} to topicThreadIdAndQueues data structure", topicThreadId, q);
-                newGauge(
-                        config.clientId + "-" + config.groupId + "-" + topicThreadId._1 + "-" + topicThreadId._2 + "-FetchQueueSize",
-                        new Gauge<Integer>() {
-                            @Override
-                            public Integer value() {
-                                return q.size();
-                            }
-                        });
+                newGauge(config.clientId + "-" + config.groupId + "-" + topicThreadId._1 + "-" + topicThreadId._2 + "-FetchQueueSize", new Gauge<Integer>() {
+                    @Override
+                    public Integer value() {
+                        return q.size();
+                    }
+                });
 
             }
         });
 
-        Multimap<String, Tuple2<Tuple2<String, String>, Tuple2<LinkedBlockingQueue<FetchedDataChunk>, KafkaStream<K, V>>>>
-                groupedByTopic = Utils.groupby(threadQueueStreamPairs, new Function1<Tuple2<Tuple2<String, String>, Tuple2<LinkedBlockingQueue<FetchedDataChunk>, KafkaStream<K, V>>>, String>() {
+        Multimap<String, Tuple2<Tuple2<String, String>, Tuple2<LinkedBlockingQueue<FetchedDataChunk>, KafkaStream<K, V>>>> groupedByTopic = Utils.groupby(threadQueueStreamPairs, new Function1<Tuple2<Tuple2<String, String>, Tuple2<LinkedBlockingQueue<FetchedDataChunk>, KafkaStream<K, V>>>, String>() {
             @Override
             public String apply(Tuple2<Tuple2<String, String>, Tuple2<LinkedBlockingQueue<FetchedDataChunk>, KafkaStream<K, V>>> _) {
                 return _._1._1;
@@ -403,16 +382,14 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
     private void registerConsumerInZK(ZKGroupDirs dirs, String consumerIdString, TopicCount topicCount) {
         logger.info("begin registering consumer {} in ZK", consumerIdString);
         String timestamp = SystemTime.instance.milliseconds() + "";
-        String consumerRegistrationInfo = Json.encode(ImmutableMap.of("version", 1, "subscription", topicCount.getTopicCountMap(), "pattern", topicCount.pattern(),
-                "timestamp", timestamp));
+        String consumerRegistrationInfo = Json.encode(ImmutableMap.of("version", 1, "subscription", topicCount.getTopicCountMap(), "pattern", topicCount.pattern(), "timestamp", timestamp));
 
-        createEphemeralPathExpectConflictHandleZKBug(zkClient, dirs.consumerRegistryDir() + "/" + consumerIdString, consumerRegistrationInfo, null,
-                new Function2<String, Object, Boolean>() {
-                    @Override
-                    public Boolean apply(String consumerZKString, Object consumer) {
-                        return true;
-                    }
-                }, config.zkSessionTimeoutMs);
+        createEphemeralPathExpectConflictHandleZKBug(zkClient, dirs.consumerRegistryDir() + "/" + consumerIdString, consumerRegistrationInfo, null, new Function2<String, Object, Boolean>() {
+            @Override
+            public Boolean apply(String consumerZKString, Object consumer) {
+                return true;
+            }
+        }, config.zkSessionTimeoutMs);
         logger.info("end registering consumer {} in ZK", consumerIdString);
     }
 
@@ -653,8 +630,8 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
                     if (done) {
                         return;
                     } else {
-              /* Here the cache is at a risk of being stale. To take future rebalancing decisions correctly, we should
-               * clear the cache */
+                        /* Here the cache is at a risk of being stale. To take future rebalancing decisions correctly, we should
+                         * clear the cache */
                         logger.info("Rebalancing attempt failed. Clearing the cache before the next rebalancing operation is triggered");
                     }
                     // stop all fetchers and clear all the queues to avoid data duplication
@@ -670,7 +647,6 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
 
             throw new ConsumerRebalanceFailedException(consumerIdString + " can't rebalance after " + config.rebalanceMaxRetries + " retries");
         }
-
 
         private boolean rebalance(final Cluster cluster) {
             final Map<String, Set<String>> myTopicThreadIdsMap = TopicCounts.constructTopicCount(group, consumerIdString, zkClient).getConsumerThreadIdsPerTopic();
@@ -712,7 +688,6 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
                     @Override
                     public void apply(final String topic, final Set<String> consumerThreadIdSet) {
 
-
                         currentTopicRegistry.put(topic, new Pool<Integer, PartitionTopicInfo>());
 
                         final ZKGroupTopicDirs topicDirs = new ZKGroupTopicDirs(group, topic);
@@ -722,13 +697,11 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
                         final int nPartsPerConsumer = curPartitions.size() / curConsumers.size();
                         final int nConsumersWithExtraPart = curPartitions.size() % curConsumers.size();
 
-                        logger.info("Consumer " + consumerIdString + " rebalancing the following partitions: " + curPartitions +
-                                " for topic " + topic + " with consumers: " + curConsumers);
+                        logger.info("Consumer " + consumerIdString + " rebalancing the following partitions: " + curPartitions + " for topic " + topic + " with consumers: " + curConsumers);
 
                         Utils.foreach(consumerThreadIdSet, new Callable1<String>() {
                             @Override
                             public void apply(String consumerThreadId) {
-
 
                                 int myConsumerPosition = curConsumers.indexOf(consumerThreadId);
                                 assert (myConsumerPosition >= 0);
@@ -773,9 +746,7 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
             }
         }
 
-        private void closeFetchersForQueues(Cluster cluster,
-                                            Multimap<String, KafkaStream<K, V>> messageStreams,
-                                            Iterable<BlockingQueue<FetchedDataChunk>> queuesToBeCleared) {
+        private void closeFetchersForQueues(Cluster cluster, Multimap<String, KafkaStream<K, V>> messageStreams, Iterable<BlockingQueue<FetchedDataChunk>> queuesToBeCleared) {
             List<PartitionTopicInfo> allPartitionInfos = Utils.mapLists(topicRegistry.values(), new Function1<Pool<Integer, PartitionTopicInfo>, Collection<PartitionTopicInfo>>() {
                 @Override
                 public Collection<PartitionTopicInfo> apply(Pool<Integer, PartitionTopicInfo> p) {
@@ -800,9 +771,7 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
             }
         }
 
-        private void clearFetcherQueues(Iterable<PartitionTopicInfo> topicInfos, Cluster cluster,
-                                        Iterable<BlockingQueue<FetchedDataChunk>> queuesTobeCleared,
-                                        Multimap<String, KafkaStream<K, V>> messageStreams) {
+        private void clearFetcherQueues(Iterable<PartitionTopicInfo> topicInfos, Cluster cluster, Iterable<BlockingQueue<FetchedDataChunk>> queuesTobeCleared, Multimap<String, KafkaStream<K, V>> messageStreams) {
 
             // Clear all but the currently iterated upon chunk in the consumer thread's queue
             Utils.foreach(queuesTobeCleared, new Callable1<BlockingQueue<FetchedDataChunk>>() {
@@ -830,8 +799,7 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
             logger.info("Cleared the data chunks in all the consumer message iterators");
         }
 
-        private void closeFetchers(Cluster cluster, Multimap<String, KafkaStream<K, V>> messageStreams,
-                                   final Map<String, Set<String>> relevantTopicThreadIdsMap) {
+        private void closeFetchers(Cluster cluster, Multimap<String, KafkaStream<K, V>> messageStreams, final Map<String, Set<String>> relevantTopicThreadIdsMap) {
             // only clear the fetcher queues for certain topic partitions that *might* no longer be served by this consumer
             // after this rebalancing attempt
             List<BlockingQueue<FetchedDataChunk>> queuesTobeCleared = Utils.mapList(Utils.filter(topicThreadIdAndQueues, new Predicate<Map.Entry<Tuple2<String, String>, BlockingQueue<FetchedDataChunk>>>() {
@@ -864,13 +832,12 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
                 }
             });
 
-            logger.info("Consumer {} selected partitions : {}", consumerIdString,
-                    Utils.sortWith(allPartitionInfos, new Comparator<PartitionTopicInfo>() {
-                        @Override
-                        public int compare(PartitionTopicInfo s, PartitionTopicInfo t) {
-                            return s.partitionId < t.partitionId ? -1 : (s.partitionId == t.partitionId ? 0 : 1);
-                        }
-                    }));
+            logger.info("Consumer {} selected partitions : {}", consumerIdString, Utils.sortWith(allPartitionInfos, new Comparator<PartitionTopicInfo>() {
+                @Override
+                public int compare(PartitionTopicInfo s, PartitionTopicInfo t) {
+                    return s.partitionId < t.partitionId ? -1 : (s.partitionId == t.partitionId ? 0 : 1);
+                }
+            }));
 
             if (fetcher != null)
                 fetcher.startConnections(allPartitionInfos, cluster);
@@ -905,7 +872,7 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
                     return sum + (decision ? 0 : 1);
                 }
             });
-      /* even if one of the partition ownership attempt has failed, return false */
+            /* even if one of the partition ownership attempt has failed, return false */
             if (hasPartitionOwnershipFailed > 0) {
                 // remove all paths that we have owned in ZK
                 Utils.foreach(successfullyOwnedPartitions, new Callable1<Tuple2<String, Integer>>() {
@@ -915,12 +882,11 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
                     }
                 });
                 return false;
-            } else return true;
+            } else
+                return true;
         }
 
-        private void addPartitionTopicInfo(Pool<String, Pool<Integer, PartitionTopicInfo>> currentTopicRegistry,
-                                           ZKGroupTopicDirs topicDirs, int partition,
-                                           String topic, String consumerThreadId) {
+        private void addPartitionTopicInfo(Pool<String, Pool<Integer, PartitionTopicInfo>> currentTopicRegistry, ZKGroupTopicDirs topicDirs, int partition, String topic, String consumerThreadId) {
             Pool<Integer, PartitionTopicInfo> partTopicInfoMap = currentTopicRegistry.get(topic);
 
             String znode = topicDirs.consumerOffsetDir() + "/" + partition;
@@ -931,19 +897,12 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
             BlockingQueue<FetchedDataChunk> queue = topicThreadIdAndQueues.get(Tuple2.make(topic, consumerThreadId));
             AtomicLong consumedOffset = new AtomicLong(offset);
             AtomicLong fetchedOffset = new AtomicLong(offset);
-            PartitionTopicInfo partTopicInfo = new PartitionTopicInfo(topic,
-                    partition,
-                    queue,
-                    consumedOffset,
-                    fetchedOffset,
-                    new AtomicInteger(config.fetchMessageMaxBytes),
-                    config.clientId);
+            PartitionTopicInfo partTopicInfo = new PartitionTopicInfo(topic, partition, queue, consumedOffset, fetchedOffset, new AtomicInteger(config.fetchMessageMaxBytes), config.clientId);
             partTopicInfoMap.put(partition, partTopicInfo);
             logger.debug("{} selected new offset {}", partTopicInfo, offset);
             checkpointedOffsets.put(new TopicAndPartition(topic, partition), offset);
         }
     }
-
 
     class WildcardStreamsHandler<K, V> implements TopicEventHandler<String> {
         TopicFilter topicFilter;
@@ -964,40 +923,33 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
             this.valueDecoder = valueDecoder;
 
             if (messageStreamCreated.getAndSet(true))
-                throw new RuntimeException("Each consumer connector can create " +
-                        "message streams by filter at most once.");
+                throw new RuntimeException("Each consumer connector can create " + "message streams by filter at most once.");
 
             wildcardQueuesAndStreams = Utils.flatList(1, numStreams, new Function1<Integer, Tuple2<LinkedBlockingQueue<FetchedDataChunk>, KafkaStream<K, V>>>() {
                 @Override
                 public Tuple2<LinkedBlockingQueue<FetchedDataChunk>, KafkaStream<K, V>> apply(Integer arg) {
                     LinkedBlockingQueue<FetchedDataChunk> queue = new LinkedBlockingQueue<FetchedDataChunk>(config.queuedMaxMessages);
-                    KafkaStream<K, V> stream = new KafkaStream<K, V>(queue,
-                            config.consumerTimeoutMs,
-                            keyDecoder,
-                            valueDecoder,
-                            config.clientId);
+                    KafkaStream<K, V> stream = new KafkaStream<K, V>(queue, config.consumerTimeoutMs, keyDecoder, valueDecoder, config.clientId);
                     return Tuple2.make(queue, stream);
                 }
             });
 
-            wildcardTopics =
-                    Utils.filter(getChildrenParentMayNotExist(zkClient, ZkUtils.BrokerTopicsPath), new Predicate<String>() {
-                        @Override
-                        public boolean apply(String _) {
-                            return topicFilter.isTopicAllowed(_);
-                        }
-                    });
+            wildcardTopics = Utils.filter(getChildrenParentMayNotExist(zkClient, ZkUtils.BrokerTopicsPath), new Predicate<String>() {
+                @Override
+                public boolean apply(String _) {
+                    return topicFilter.isTopicAllowed(_);
+                }
+            });
 
-            wildcardTopicCount = TopicCounts.constructTopicCount(
-                    consumerIdString, topicFilter, numStreams, zkClient);
+            wildcardTopicCount = TopicCounts.constructTopicCount(consumerIdString, topicFilter, numStreams, zkClient);
 
             dirs = new ZKGroupDirs(config.groupId);
             registerConsumerInZK(dirs, consumerIdString, wildcardTopicCount);
             reinitializeConsumer(wildcardTopicCount, wildcardQueuesAndStreams);
 
-    /*
-     * Topic events will trigger subsequent synced rebalances.
-     */
+            /*
+             * Topic events will trigger subsequent synced rebalances.
+             */
             logger.info("Creating topic event watcher for topics {}", topicFilter);
             wildcardTopicWatcher = new ZookeeperTopicEventWatcher(zkClient, this);
         }
@@ -1023,11 +975,11 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
             if (!addedTopics.isEmpty())
                 logger.info("Topic event: added topics = {}", addedTopics);
 
-      /*
-       * TODO: Deleted topics are interesting (and will not be a concern until
-       * 0.8 release). We may need to remove these topics from the rebalance
-       * listener's map in reinitializeConsumer.
-       */
+            /*
+             * TODO: Deleted topics are interesting (and will not be a concern until
+             * 0.8 release). We may need to remove these topics from the rebalance
+             * listener's map in reinitializeConsumer.
+             */
             List<String> deletedTopics = Utils.filter(wildcardTopics, new Predicate<String>() {
                 @Override
                 public boolean apply(String _) {

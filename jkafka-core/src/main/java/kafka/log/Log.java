@@ -44,7 +44,6 @@ import kafka.utils.ThreadSafe;
 import kafka.utils.Time;
 import kafka.utils.Utils;
 
-
 @ThreadSafe
 public class Log extends KafkaMetricsGroup implements Closeable {
     public File dir;
@@ -78,30 +77,26 @@ public class Log extends KafkaMetricsGroup implements Closeable {
         loadSegments();
         nextOffset = new AtomicLong(activeSegment().nextOffset());
 
-
         logger.info("Completed load of log {} with log end offset {}", name(), logEndOffset());
 
-        newGauge(name() + "-" + "NumLogSegments",
-                new Gauge<Integer>() {
+        newGauge(name() + "-" + "NumLogSegments", new Gauge<Integer>() {
 
-                    @Override
-                    public Integer value() {
-                        return numberOfSegments();
-                    }
-                });
+            @Override
+            public Integer value() {
+                return numberOfSegments();
+            }
+        });
 
-        newGauge(name() + "-" + "LogEndOffset",
-                new Gauge<Long>() {
+        newGauge(name() + "-" + "LogEndOffset", new Gauge<Long>() {
 
-                    @Override
-                    public Long value() {
-                        return logEndOffset();
-                    }
-                });
+            @Override
+            public Long value() {
+                return logEndOffset();
+            }
+        });
     }
 
     Logger logger = LoggerFactory.getLogger(Log.class);
-
 
     /* A lock that guards all modifications to the log */
     private Object lock = new Object();
@@ -112,13 +107,11 @@ public class Log extends KafkaMetricsGroup implements Closeable {
     /* the actual segments of the log */
     private ConcurrentNavigableMap<Long, LogSegment> segments = new ConcurrentSkipListMap<Long, LogSegment>();
 
-
     /* The number of times the log has been truncated */
     private AtomicInteger truncates = new AtomicInteger(0);
 
     /* Calculate the offset of the next message */
     private AtomicLong nextOffset;
-
 
     /**
      * The name of this log
@@ -135,9 +128,11 @@ public class Log extends KafkaMetricsGroup implements Closeable {
         // first do a pass through the files in the log directory and remove any temporary files
         // and complete any interrupted swap operations
         for (File file : dir.listFiles()) {
-            if (!file.isFile()) continue;
+            if (!file.isFile())
+                continue;
 
-            if (!file.canRead()) throw new KafkaException("Could not read file " + file);
+            if (!file.canRead())
+                throw new KafkaException("Could not read file " + file);
 
             String filename = file.getName();
             if (filename.endsWith(Logs.DeletedFileSuffix) || filename.endsWith(Logs.CleanedFileSuffix)) {
@@ -166,7 +161,8 @@ public class Log extends KafkaMetricsGroup implements Closeable {
 
         // now do a second pass and load all the .log and .index files
         for (File file : dir.listFiles()) {
-            if (!file.isFile()) continue;
+            if (!file.isFile())
+                continue;
 
             String filename = file.getName();
             if (filename.endsWith(Logs.IndexFileSuffix)) {
@@ -180,11 +176,7 @@ public class Log extends KafkaMetricsGroup implements Closeable {
                 // if its a log file, load the corresponding log segment
                 long start = Long.parseLong(filename.substring(0, filename.length() - Logs.LogFileSuffix.length()));
                 boolean hasIndex = Logs.indexFilename(dir, start).exists();
-                LogSegment segment = new LogSegment(dir,
-                        /*startOffset = */start,
-                       /* indexIntervalBytes =*/ config.indexInterval,
-                       /* maxIndexSize =*/ config.maxIndexSize,
-                        time);
+                LogSegment segment = new LogSegment(dir, /*startOffset = */start, /* indexIntervalBytes =*/ config.indexInterval, /* maxIndexSize =*/ config.maxIndexSize, time);
                 if (!hasIndex) {
                     logger.error("Could not find index file corresponding to log file {}, rebuilding index...", segment.log.file.getAbsolutePath());
                     segment.recover(config.maxMessageSize);
@@ -195,11 +187,7 @@ public class Log extends KafkaMetricsGroup implements Closeable {
 
         if (logSegments().size() == 0) {
             // no existing segments, create a new mutable segment beginning at offset 0
-            segments.put(0L, new LogSegment(dir,
-                    /*startOffset =*/ 0L,
-                    /*indexIntervalBytes = */config.indexInterval,
-                   /* maxIndexSize = */config.maxIndexSize,
-                    time));
+            segments.put(0L, new LogSegment(dir, /*startOffset =*/ 0L, /*indexIntervalBytes = */config.indexInterval, /* maxIndexSize = */config.maxIndexSize, time));
         } else {
             recoverLog();
             // reset the index size of the currently active log segment to allow more entries
@@ -228,8 +216,7 @@ public class Log extends KafkaMetricsGroup implements Closeable {
                 truncatedBytes = curr.recover(config.maxMessageSize);
             } catch (InvalidOffsetException e) {
                 long startOffset = curr.baseOffset;
-                logger.warn("Found invalid offset during recovery for log " + dir.getName() + ". Deleting the corrupt segment and " +
-                        "creating an empty one with starting offset " + startOffset);
+                logger.warn("Found invalid offset during recovery for log " + dir.getName() + ". Deleting the corrupt segment and " + "creating an empty one with starting offset " + startOffset);
                 curr.truncateTo(startOffset);
             }
             if (truncatedBytes > 0) {
@@ -244,7 +231,6 @@ public class Log extends KafkaMetricsGroup implements Closeable {
             }
         }
     }
-
 
     /**
      * Check if we have the "clean shutdown" file
@@ -333,8 +319,7 @@ public class Log extends KafkaMetricsGroup implements Closeable {
                 while (iterator.hasNext()) {
                     MessageAndOffset messageAndOffset = iterator.next();
                     if (MessageSets.entrySize(messageAndOffset.message) > config.maxMessageSize)
-                        throw new MessageSizeTooLargeException("Message size is %d bytes which exceeds the maximum configured message size of %d.",
-                                MessageSets.entrySize(messageAndOffset.message), config.maxMessageSize);
+                        throw new MessageSizeTooLargeException("Message size is %d bytes which exceeds the maximum configured message size of %d.", MessageSets.entrySize(messageAndOffset.message), config.maxMessageSize);
                 }
 
                 // now append to the log
@@ -343,8 +328,7 @@ public class Log extends KafkaMetricsGroup implements Closeable {
                 // increment the log end offset
                 nextOffset.set(appendInfo.lastOffset + 1);
 
-                logger.trace("Appended message set to log {} with first offset: {}, next offset: {}, and messages: {}",
-                        this.name(), appendInfo.firstOffset, nextOffset.get(), validMessages);
+                logger.trace("Appended message set to log {} with first offset: {}, next offset: {}, and messages: {}", this.name(), appendInfo.firstOffset, nextOffset.get(), validMessages);
 
                 if (unflushedMessages() >= config.flushInterval)
                     flush();
@@ -513,7 +497,6 @@ public class Log extends KafkaMetricsGroup implements Closeable {
         });
     }
 
-
     /**
      * The offset of the next message that will be appended to the log
      */
@@ -528,15 +511,8 @@ public class Log extends KafkaMetricsGroup implements Closeable {
      */
     private LogSegment maybeRoll() {
         LogSegment segment = activeSegment();
-        if (segment.size() > config.segmentSize ||
-                segment.size() > 0 && time.milliseconds() - segment.created > config.segmentMs ||
-                segment.index.isFull()) {
-            logger.debug("Rolling new log segment in {} (log_size = {}/{}, index_size = {}/{}, age_ms = {}/{}).",
-                    name(), segment.size(), config.segmentSize,
-                    segment.index.entries(),
-                    segment.index.maxEntries,
-                    time.milliseconds() - segment.created,
-                    config.segmentMs);
+        if (segment.size() > config.segmentSize || segment.size() > 0 && time.milliseconds() - segment.created > config.segmentMs || segment.index.isFull()) {
+            logger.debug("Rolling new log segment in {} (log_size = {}/{}, index_size = {}/{}, age_ms = {}/{}).", name(), segment.size(), config.segmentSize, segment.index.entries(), segment.index.maxEntries, time.milliseconds() - segment.created, config.segmentMs);
             return roll();
         } else {
             return segment;
@@ -556,19 +532,17 @@ public class Log extends KafkaMetricsGroup implements Closeable {
             File logFile = Logs.logFilename(dir, newOffset);
             File indexFile = Logs.indexFilename(dir, newOffset);
             for (File file : ImmutableList.of(logFile, indexFile)) {
-                if (!file.exists()) continue;
+                if (!file.exists())
+                    continue;
                 logger.warn("Newly rolled segment file " + file.getName() + " already exists; deleting it first");
                 file.delete();
             }
 
             Map.Entry<Long, LogSegment> entry = segments.lastEntry();
-            if (entry != null) entry.getValue().index.trimToValidSize();
+            if (entry != null)
+                entry.getValue().index.trimToValidSize();
 
-            LogSegment segment = new LogSegment(dir,
-                    /*startOffset = */newOffset,
-                    config.indexInterval,
-                    config.maxIndexSize,
-                    time);
+            LogSegment segment = new LogSegment(dir, /*startOffset = */newOffset, config.indexInterval, config.maxIndexSize, time);
             LogSegment prev = addSegment(segment);
             if (prev != null)
                 throw new KafkaException("Trying to roll a new log segment for topic partition %s with start offset %d while it already exists.", name(), newOffset);
@@ -586,7 +560,6 @@ public class Log extends KafkaMetricsGroup implements Closeable {
             return segment;
         }
     }
-
 
     /**
      * The number of messages appended to the log since the last flush
@@ -611,8 +584,7 @@ public class Log extends KafkaMetricsGroup implements Closeable {
         if (offset <= this.recoveryPoint)
             return;
 
-        logger.debug("Flushing log {} up to offset {}, last flushed: {} current time: {} unflushed = {}",
-                name(), offset, lastFlushTime(), time.milliseconds(), unflushedMessages());
+        logger.debug("Flushing log {} up to offset {}, last flushed: {} current time: {} unflushed = {}", name(), offset, lastFlushTime(), time.milliseconds(), unflushedMessages());
 
         for (LogSegment segment : logSegments(this.recoveryPoint, offset))
             segment.flush();
@@ -690,17 +662,12 @@ public class Log extends KafkaMetricsGroup implements Closeable {
                     deleteSegment(_);
                 }
             });
-            addSegment(new LogSegment(dir,
-                    newOffset,
-                    config.indexInterval,
-                    config.maxIndexSize,
-                    time));
+            addSegment(new LogSegment(dir, newOffset, config.indexInterval, config.maxIndexSize, time));
             this.nextOffset.set(newOffset);
             this.recoveryPoint = Math.min(newOffset, this.recoveryPoint);
             truncates.getAndIncrement();
         }
     }
-
 
     /**
      * The time this log is last known to have been fully flushed to disk

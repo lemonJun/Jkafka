@@ -14,8 +14,7 @@ public class Whitelist extends TopicFilter {
     public boolean isTopicAllowed(String topic) {
         boolean allowed = topic.matches(regex);
 
-        logger.debug("{} {}",
-                topic, (allowed) ? "allowed" : "filtered");
+        logger.debug("{} {}", topic, (allowed) ? "allowed" : "filtered");
 
         return allowed;
     }

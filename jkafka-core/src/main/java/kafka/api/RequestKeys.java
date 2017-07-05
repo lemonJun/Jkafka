@@ -36,14 +36,16 @@ public class RequestKeys {
 
     public static String nameForKey(Short key) {
         Tuple2<String, RequestReader> nameAndSerializer = keyToNameAndDeserializerMap.get(key);
-        if (nameAndSerializer == null) throw new KafkaException("Wrong request type %d", key);
+        if (nameAndSerializer == null)
+            throw new KafkaException("Wrong request type %d", key);
 
         return nameAndSerializer._1;
     }
 
     public static RequestReader deserializerForKey(Short key) {
         Tuple2<String, RequestReader> nameAndSerializer = keyToNameAndDeserializerMap.get(key);
-        if (nameAndSerializer == null) throw new KafkaException("Wrong request type %d", key);
+        if (nameAndSerializer == null)
+            throw new KafkaException("Wrong request type %d", key);
 
         return nameAndSerializer._2;
     }

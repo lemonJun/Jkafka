@@ -66,8 +66,7 @@ public class OffsetIndex implements Closeable {
         maxEntries = mmap.limit() / 8;
         lastOffset = readLastEntry().offset;
 
-        logger.debug("Loaded index file {} with maxEntries = {}, maxIndexSize = {}, entries = {}, lastOffset = {}, file position = {}",
-                file.getAbsolutePath(), maxEntries, maxIndexSize, entries(), lastOffset, mmap.position());
+        logger.debug("Loaded index file {} with maxEntries = {}, maxIndexSize = {}, entries = {}, lastOffset = {}, file position = {}", file.getAbsolutePath(), maxEntries, maxIndexSize, entries(), lastOffset, mmap.position());
 
     }
 
@@ -83,18 +82,18 @@ public class OffsetIndex implements Closeable {
         try {
             boolean newlyCreated = file.createNewFile();
             raf = new RandomAccessFile(file, "rw");
-        /* pre-allocate the file if necessary */
+            /* pre-allocate the file if necessary */
             if (newlyCreated) {
                 if (maxIndexSize < 8)
                     throw new IllegalArgumentException("Invalid max index size: " + maxIndexSize);
                 raf.setLength(roundToExactMultiple(maxIndexSize, 8));
             }
 
-        /* memory-map the file */
+            /* memory-map the file */
             long len = raf.length();
             MappedByteBuffer idx = raf.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, len);
 
-        /* set the position in the index for the next entry */
+            /* set the position in the index for the next entry */
             if (newlyCreated)
                 idx.position(0);
             else
@@ -109,7 +108,6 @@ public class OffsetIndex implements Closeable {
         }
     }
 
-
     /* the number of eight-byte entries currently in the index */
     private AtomicInteger size;
 
@@ -120,7 +118,6 @@ public class OffsetIndex implements Closeable {
 
     /* the last offset in the index */
     public long lastOffset;
-
 
     /**
      * The last entry in the index
@@ -134,8 +131,7 @@ public class OffsetIndex implements Closeable {
                     case 0:
                         return new OffsetPosition(baseOffset, 0);
                     default:
-                        return new OffsetPosition(baseOffset + relativeOffset(OffsetIndex.this.mmap, s - 1),
-                                physical(OffsetIndex.this.mmap, s - 1));
+                        return new OffsetPosition(baseOffset + relativeOffset(OffsetIndex.this.mmap, s - 1), physical(OffsetIndex.this.mmap, s - 1));
                 }
             }
         });
@@ -163,7 +159,6 @@ public class OffsetIndex implements Closeable {
             }
         });
     }
-
 
     /**
      * Find the slot in which the largest offset less than or equal to the given
@@ -245,8 +240,7 @@ public class OffsetIndex implements Closeable {
                     lastOffset = offset;
                     checkState(entries() * 8 == mmap.position(), entries() + " entries but file position in index is " + mmap.position() + ".");
                 } else {
-                    throw new InvalidOffsetException("Attempt to append an offset (%d) to position %d no larger than the last offset appended (%d) to %s.",
-                            offset, entries(), lastOffset, file.getAbsolutePath());
+                    throw new InvalidOffsetException("Attempt to append an offset (%d) to position %d no larger than the last offset appended (%d) to %s.", offset, entries(), lastOffset, file.getAbsolutePath());
                 }
                 return null;
             }
@@ -279,11 +273,11 @@ public class OffsetIndex implements Closeable {
                 ByteBuffer idx = mmap.duplicate();
                 int slot = indexSlotFor(idx, offset);
 
-      /* There are 3 cases for choosing the new size
-       * 1) if there is no entry in the index <= the offset, delete everything
-       * 2) if there is an entry for this exact offset, delete it and everything larger than it
-       * 3) if there is no entry for this offset, delete everything larger than the next smallest
-       */
+                /* There are 3 cases for choosing the new size
+                 * 1) if there is no entry in the index <= the offset, delete everything
+                 * 2) if there is an entry for this exact offset, delete it and everything larger than it
+                 * 3) if there is no entry for this offset, delete everything larger than the next smallest
+                 */
                 int newEntries;
                 if (slot < 0)
                     newEntries = 0;
@@ -298,7 +292,6 @@ public class OffsetIndex implements Closeable {
             }
         });
     }
-
 
     /**
      * Truncates index to a known number of entries.
@@ -346,7 +339,7 @@ public class OffsetIndex implements Closeable {
                     int roundedNewSize = roundToExactMultiple(newSize, 8);
                     int position = OffsetIndex.this.mmap.position();
 
-      /* Windows won't let us modify the file length while the file is mmapped :-( */
+                    /* Windows won't let us modify the file length while the file is mmapped :-( */
                     if (Os.isWindows)
                         forceUnmap(OffsetIndex.this.mmap);
 
@@ -435,13 +428,9 @@ public class OffsetIndex implements Closeable {
      * @throw IllegalArgumentException if any problems are found
      */
     public void sanityCheck() {
-        checkState(entries() == 0 || lastOffset > baseOffset,
-                String.format("Corrupt index found, index file (%s) has non-zero size but the last offset is %d and the base offset is %d",
-                        file.getAbsolutePath(), lastOffset, baseOffset));
+        checkState(entries() == 0 || lastOffset > baseOffset, String.format("Corrupt index found, index file (%s) has non-zero size but the last offset is %d and the base offset is %d", file.getAbsolutePath(), lastOffset, baseOffset));
         long len = file.length();
-        checkState(len % 8 == 0,
-                "Index file " + file.getName() + " is corrupt, found " + len +
-                        " bytes which is not positive or not a multiple of 8.");
+        checkState(len % 8 == 0, "Index file " + file.getName() + " is corrupt, found " + len + " bytes which is not positive or not a multiple of 8.");
     }
 
     /**

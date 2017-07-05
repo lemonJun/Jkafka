@@ -50,10 +50,7 @@ public class TopicMetadata {
     }
 
     public int sizeInBytes() {
-        return 2 /* error code */ +
-                shortStringLength(topic) +
-                4
-                + Utils.foldLeft(partitionsMetadata, 0, new Function2<Integer, PartitionMetadata, Integer>() {
+        return 2 /* error code */ + shortStringLength(topic) + 4 + Utils.foldLeft(partitionsMetadata, 0, new Function2<Integer, PartitionMetadata, Integer>() {
             @Override
             public Integer apply(Integer arg1, PartitionMetadata _) {
                 return arg1 + _.sizeInBytes(); /* size and partition data array */
@@ -62,11 +59,11 @@ public class TopicMetadata {
     }
 
     public void writeTo(final ByteBuffer buffer) {
-    /* error code */
+        /* error code */
         buffer.putShort(errorCode);
-    /* topic */
+        /* topic */
         writeShortString(buffer, topic);
-    /* number of partitions */
+        /* number of partitions */
         buffer.putInt(partitionsMetadata.size());
 
         Utils.foreach(partitionsMetadata, new Callable1<PartitionMetadata>() {
@@ -87,25 +84,21 @@ public class TopicMetadata {
                 public void apply(PartitionMetadata partitionMetadata) {
                     switch (partitionMetadata.errorCode) {
                         case ErrorMapping.NoError:
-                            topicMetadataInfo.append(String.format("\nMetadata for partition [%s,%d] is %s", topic,
-                                    partitionMetadata.partitionId, partitionMetadata.toString()));
+                            topicMetadataInfo.append(String.format("\nMetadata for partition [%s,%d] is %s", topic, partitionMetadata.partitionId, partitionMetadata.toString()));
                             break;
                         case ErrorMapping.ReplicaNotAvailableCode:
                             // this error message means some replica other than the leader is not available. The consumer
                             // doesn't care about non leader replicas, so ignore this
-                            topicMetadataInfo.append(String.format("\nMetadata for partition [%s,%d] is %s", topic,
-                                    partitionMetadata.partitionId, partitionMetadata.toString()));
+                            topicMetadataInfo.append(String.format("\nMetadata for partition [%s,%d] is %s", topic, partitionMetadata.partitionId, partitionMetadata.toString()));
                             break;
                         default:
-                            topicMetadataInfo.append(String.format("\nMetadata for partition [%s,%d] is not available due to %s", topic,
-                                    partitionMetadata.partitionId, ErrorMapping.exceptionFor(partitionMetadata.errorCode).getClass().getName()));
+                            topicMetadataInfo.append(String.format("\nMetadata for partition [%s,%d] is not available due to %s", topic, partitionMetadata.partitionId, ErrorMapping.exceptionFor(partitionMetadata.errorCode).getClass().getName()));
                     }
                 }
             });
 
         } else {
-            topicMetadataInfo.append(String.format("\nNo partition metadata for topic %s due to %s", topic,
-                    ErrorMapping.exceptionFor(errorCode).getClass().getName()));
+            topicMetadataInfo.append(String.format("\nNo partition metadata for topic %s due to %s", topic, ErrorMapping.exceptionFor(errorCode).getClass().getName()));
         }
         topicMetadataInfo.append("}");
         return topicMetadataInfo.toString();

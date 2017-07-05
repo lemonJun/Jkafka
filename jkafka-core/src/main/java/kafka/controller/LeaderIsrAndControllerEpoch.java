@@ -23,13 +23,17 @@ public class LeaderIsrAndControllerEpoch {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
 
         LeaderIsrAndControllerEpoch that = (LeaderIsrAndControllerEpoch) o;
 
-        if (controllerEpoch != that.controllerEpoch) return false;
-        if (leaderAndIsr != null ? !leaderAndIsr.equals(that.leaderAndIsr) : that.leaderAndIsr != null) return false;
+        if (controllerEpoch != that.controllerEpoch)
+            return false;
+        if (leaderAndIsr != null ? !leaderAndIsr.equals(that.leaderAndIsr) : that.leaderAndIsr != null)
+            return false;
 
         return true;
     }

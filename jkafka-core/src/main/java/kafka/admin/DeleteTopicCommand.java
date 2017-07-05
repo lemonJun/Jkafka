@@ -16,15 +16,8 @@ import kafka.utils.ZkUtils;
 public class DeleteTopicCommand {
     public static void main(String[] args) throws IOException {
         OptionParser parser = new OptionParser();
-        OptionSpec<String> topicOpt = parser.accepts("topic", "REQUIRED: The topic to be deleted.")
-                .withRequiredArg()
-                .describedAs("topic")
-                .ofType(String.class);
-        OptionSpec<String> zkConnectOpt = parser.accepts("zookeeper", "REQUIRED: The connection string for the zookeeper connection in the form host:port. " +
-                "Multiple URLS can be given to allow fail-over.")
-                .withRequiredArg()
-                .describedAs("urls")
-                .ofType(String.class);
+        OptionSpec<String> topicOpt = parser.accepts("topic", "REQUIRED: The topic to be deleted.").withRequiredArg().describedAs("topic").ofType(String.class);
+        OptionSpec<String> zkConnectOpt = parser.accepts("zookeeper", "REQUIRED: The connection string for the zookeeper connection in the form host:port. " + "Multiple URLS can be given to allow fail-over.").withRequiredArg().describedAs("urls").ofType(String.class);
 
         OptionSet options = parser.parse(args);
 

@@ -54,24 +54,18 @@ public class OfflinePartitionLeaderSelector implements PartitionLeaderSelector {
         int currentLeaderIsrZkPathVersion = currentLeaderAndIsr.zkVersion;
         LeaderAndIsr newLeaderAndIsr;
         if (liveBrokersInIsr.isEmpty()) {
-            logger.debug("No broker in ISR is alive for {}. Pick the leader from the alive assigned replicas: {}",
-                    topicAndPartition, liveAssignedReplicasToThisPartition);
+            logger.debug("No broker in ISR is alive for {}. Pick the leader from the alive assigned replicas: {}", topicAndPartition, liveAssignedReplicasToThisPartition);
             if (liveAssignedReplicasToThisPartition.isEmpty()) {
-                throw new NoReplicaOnlineException("No replica for partition " +
-                        "%s is alive. Live brokers are: [%s], Assigned replicas are: [%s]", topicAndPartition, controllerContext.liveBrokerIds()
-                        , assignedReplicas);
+                throw new NoReplicaOnlineException("No replica for partition " + "%s is alive. Live brokers are: [%s], Assigned replicas are: [%s]", topicAndPartition, controllerContext.liveBrokerIds(), assignedReplicas);
             }
 
             ControllerStats.instance.uncleanLeaderElectionRate.mark();
             int newLeader = Utils.head(liveAssignedReplicasToThisPartition);
-            logger.warn("No broker in ISR is alive for {}. Elect leader {} from live brokers {}. There's potential data loss.",
-                    topicAndPartition, newLeader, liveAssignedReplicasToThisPartition);
-            newLeaderAndIsr = new LeaderAndIsr(newLeader, currentLeaderEpoch + 1,
-                    Lists.newArrayList(newLeader), currentLeaderIsrZkPathVersion + 1);
+            logger.warn("No broker in ISR is alive for {}. Elect leader {} from live brokers {}. There's potential data loss.", topicAndPartition, newLeader, liveAssignedReplicasToThisPartition);
+            newLeaderAndIsr = new LeaderAndIsr(newLeader, currentLeaderEpoch + 1, Lists.newArrayList(newLeader), currentLeaderIsrZkPathVersion + 1);
         } else {
             int newLeader = Utils.head(liveBrokersInIsr);
-            logger.debug("Some broker in ISR is alive for {}. Select {} from ISR {} to be the leader.",
-                    topicAndPartition, newLeader, liveBrokersInIsr);
+            logger.debug("Some broker in ISR is alive for {}. Select {} from ISR {} to be the leader.", topicAndPartition, newLeader, liveBrokersInIsr);
             newLeaderAndIsr = new LeaderAndIsr(newLeader, currentLeaderEpoch + 1, liveBrokersInIsr, currentLeaderIsrZkPathVersion + 1);
         }
 

@@ -19,7 +19,8 @@ public abstract class ApiUtils {
      */
     public static String readShortString(ByteBuffer buffer) {
         int size = buffer.getShort();
-        if (size < 0) return null;
+        if (size < 0)
+            return null;
 
         byte[] bytes = new byte[size];
         buffer.get(bytes);
@@ -69,7 +70,8 @@ public abstract class ApiUtils {
      * @param string The string to write
      */
     public static int shortStringLength(String string) {
-        if (string == null) return 2;
+        if (string == null)
+            return 2;
 
         byte[] encodedString = getBytes(string);
         if (encodedString.length > Short.MAX_VALUE)

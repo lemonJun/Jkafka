@@ -16,7 +16,8 @@ public class ZKStringSerializer implements ZkSerializer {
 
     @Override
     public Object deserialize(byte[] bytes) throws ZkMarshallingError {
-        if (bytes == null) return null;
+        if (bytes == null)
+            return null;
 
         return new String(bytes, Charsets.UTF_8);
     }

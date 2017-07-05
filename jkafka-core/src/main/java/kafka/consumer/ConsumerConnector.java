@@ -1,6 +1,5 @@
 package kafka.consumer;
 
-
 import java.util.List;
 import java.util.Map;
 
@@ -33,8 +32,7 @@ public interface ConsumerConnector {
      *          The number of items in the list is #streams. Each stream supports
      *          an iterator over message/metadata pairs.
      */
-    <K,V> Multimap<String, KafkaStream<K, V>> createMessageStreams(Map<String, Integer> topicCountMap,
-    Decoder<K> keyDecoder, Decoder<V> valueDecoder);
+    <K, V> Multimap<String, KafkaStream<K, V>> createMessageStreams(Map<String, Integer> topicCountMap, Decoder<K> keyDecoder, Decoder<V> valueDecoder);
 
     /**
      *  Create a list of message streams for all topics that match a given filter.
@@ -46,10 +44,7 @@ public interface ConsumerConnector {
      *  @return a list of KafkaStream each of which provides an
      *          iterator over message/metadata pairs over allowed topics.
      */
-    <K,V> List<KafkaStream<K,V>> createMessageStreamsByFilter(TopicFilter topicFilter,
-    int numStreams /*= 1*/,
-    Decoder<K> keyDecoder /*= new DefaultDecoder()*/,
-    Decoder<V> valueDecoder /* = new DefaultDecoder()*/);
+    <K, V> List<KafkaStream<K, V>> createMessageStreamsByFilter(TopicFilter topicFilter, int numStreams /*= 1*/, Decoder<K> keyDecoder /*= new DefaultDecoder()*/, Decoder<V> valueDecoder /* = new DefaultDecoder()*/);
 
     /**
      *  Commit the offsets of all broker partitions connected by this connector.

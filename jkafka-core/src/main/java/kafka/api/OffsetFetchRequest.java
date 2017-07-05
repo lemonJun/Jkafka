@@ -30,16 +30,11 @@ public class OffsetFetchRequest extends RequestOrResponse {
     public short versionId;
     public String clientId;
 
-    public OffsetFetchRequest(String groupId,
-                              List<TopicAndPartition> requestInfo) {
+    public OffsetFetchRequest(String groupId, List<TopicAndPartition> requestInfo) {
         this(groupId, requestInfo, OffsetFetchRequestReader.CurrentVersion, 0, OffsetFetchRequestReader.DefaultClientId);
     }
 
-    public OffsetFetchRequest(String groupId,
-                              List<TopicAndPartition> requestInfo,
-                              short versionId,
-                              int correlationId,
-                              String clientId) {
+    public OffsetFetchRequest(String groupId, List<TopicAndPartition> requestInfo, short versionId, int correlationId, String clientId) {
         super(RequestKeys.OffsetFetchKey, correlationId);
         this.groupId = groupId;
         this.requestInfo = requestInfo;
@@ -59,19 +54,16 @@ public class OffsetFetchRequest extends RequestOrResponse {
     @Override
     public int sizeInBytes() {
         return 2 + /* versionId */
-                4 + /* correlationId */
-                shortStringLength(clientId) +
-                shortStringLength(groupId) +
-                4  /* topic count */
-                + Utils.foldLeft(requestInfoGroupedByTopic, 0,
-                new Function3<Integer, String, Collection<TopicAndPartition>, Integer>() {
-                    @Override
-                    public Integer apply(Integer count, String topic, Collection<TopicAndPartition> arg3) {
-                        return count + shortStringLength(topic) + /* topic */
+                        4 + /* correlationId */
+                        shortStringLength(clientId) + shortStringLength(groupId) + 4 /* topic count */
+                        + Utils.foldLeft(requestInfoGroupedByTopic, 0, new Function3<Integer, String, Collection<TopicAndPartition>, Integer>() {
+                            @Override
+                            public Integer apply(Integer count, String topic, Collection<TopicAndPartition> arg3) {
+                                return count + shortStringLength(topic) + /* topic */
                                 4 + /* number of partitions */
                                 arg3.size() * 4 /* partition */;
-                    }
-                });
+                            }
+                        });
     }
 
     @Override
@@ -82,14 +74,14 @@ public class OffsetFetchRequest extends RequestOrResponse {
         writeShortString(buffer, clientId);
 
         // Write OffsetFetchRequest
-        writeShortString(buffer, groupId);             // consumer group
+        writeShortString(buffer, groupId); // consumer group
         buffer.putInt(requestInfoGroupedByTopic.size()); // number of topics
 
         Utils.foreach(requestInfoGroupedByTopic, new Callable2<String, Collection<TopicAndPartition>>() {
             @Override
             public void apply(String topic, Collection<TopicAndPartition> topicAndPartitions) {
                 writeShortString(buffer, topic); // topic
-                buffer.putInt(topicAndPartitions.size());       // number of partitions for this topic
+                buffer.putInt(topicAndPartitions.size()); // number of partitions for this topic
 
                 Utils.foreach(topicAndPartitions, new Callable1<TopicAndPartition>() {
                     @Override
@@ -106,10 +98,7 @@ public class OffsetFetchRequest extends RequestOrResponse {
         Map<TopicAndPartition, OffsetMetadataAndError> responseMap = Utils.map(requestInfo, new Function1<TopicAndPartition, Tuple2<TopicAndPartition, OffsetMetadataAndError>>() {
             @Override
             public Tuple2<TopicAndPartition, OffsetMetadataAndError> apply(TopicAndPartition topicAndPartition) {
-                return Tuple2.make(topicAndPartition,
-                        new OffsetMetadataAndError(OffsetMetadataAndError.InvalidOffset,
-                                OffsetMetadataAndError.NoMetadata,
-                                ErrorMapping.codeFor(e.getClass())));
+                return Tuple2.make(topicAndPartition, new OffsetMetadataAndError(OffsetMetadataAndError.InvalidOffset, OffsetMetadataAndError.NoMetadata, ErrorMapping.codeFor(e.getClass())));
             }
         });
 

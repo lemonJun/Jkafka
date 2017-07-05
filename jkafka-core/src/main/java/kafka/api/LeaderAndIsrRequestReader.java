@@ -29,17 +29,16 @@ public class LeaderAndIsrRequestReader implements RequestReader {
         int controllerId = buffer.getInt();
         int controllerEpoch = buffer.getInt();
         int partitionStateInfosCount = buffer.getInt();
-        Map<Tuple2<String, Integer>, PartitionStateInfo> partitionStateInfos =
-                Utils.flatMap(0, partitionStateInfosCount, new Function0<Tuple2<Tuple2<String, Integer>, PartitionStateInfo>>() {
-                    @Override
-                    public Tuple2<Tuple2<String, Integer>, PartitionStateInfo> apply() {
-                        String topic = readShortString(buffer);
-                        int partition = buffer.getInt();
-                        PartitionStateInfo partitionStateInfo = PartitionStateInfos.readFrom(buffer);
+        Map<Tuple2<String, Integer>, PartitionStateInfo> partitionStateInfos = Utils.flatMap(0, partitionStateInfosCount, new Function0<Tuple2<Tuple2<String, Integer>, PartitionStateInfo>>() {
+            @Override
+            public Tuple2<Tuple2<String, Integer>, PartitionStateInfo> apply() {
+                String topic = readShortString(buffer);
+                int partition = buffer.getInt();
+                PartitionStateInfo partitionStateInfo = PartitionStateInfos.readFrom(buffer);
 
-                        return Tuple2.make(Tuple2.make(topic, partition), partitionStateInfo);
-                    }
-                });
+                return Tuple2.make(Tuple2.make(topic, partition), partitionStateInfo);
+            }
+        });
 
         int leadersCount = buffer.getInt();
         Set<Broker> leaders = Utils.flatSet(0, leadersCount, new Function1<Integer, Broker>() {

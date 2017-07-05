@@ -25,27 +25,28 @@ public class LogAppendInfo {
 
     @Override
     public String toString() {
-        return "LogAppendInfo{" +
-                "firstOffset=" + firstOffset +
-                ", lastOffset=" + lastOffset +
-                ", codec=" + codec +
-                ", shallowCount=" + shallowCount +
-                ", offsetsMonotonic=" + offsetsMonotonic +
-                '}';
+        return "LogAppendInfo{" + "firstOffset=" + firstOffset + ", lastOffset=" + lastOffset + ", codec=" + codec + ", shallowCount=" + shallowCount + ", offsetsMonotonic=" + offsetsMonotonic + '}';
     }
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
 
         LogAppendInfo that = (LogAppendInfo) o;
 
-        if (firstOffset != that.firstOffset) return false;
-        if (lastOffset != that.lastOffset) return false;
-        if (offsetsMonotonic != that.offsetsMonotonic) return false;
-        if (shallowCount != that.shallowCount) return false;
-        if (codec != null ? !codec.equals(that.codec) : that.codec != null) return false;
+        if (firstOffset != that.firstOffset)
+            return false;
+        if (lastOffset != that.lastOffset)
+            return false;
+        if (offsetsMonotonic != that.offsetsMonotonic)
+            return false;
+        if (shallowCount != that.shallowCount)
+            return false;
+        if (codec != null ? !codec.equals(that.codec) : that.codec != null)
+            return false;
 
         return true;
     }

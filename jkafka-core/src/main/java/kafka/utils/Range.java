@@ -15,20 +15,22 @@ public class Range<T> {
 
     @Override
     public String toString() {
-        return "Range{"+ _1 +
-                ", " + _2 +
-                '}';
+        return "Range{" + _1 + ", " + _2 + '}';
     }
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
 
         Range range = (Range) o;
 
-        if (_1 != null ? !_1.equals(range._1) : range._1 != null) return false;
-        if (_2 != null ? !_2.equals(range._2) : range._2 != null) return false;
+        if (_1 != null ? !_1.equals(range._1) : range._1 != null)
+            return false;
+        if (_2 != null ? !_2.equals(range._2) : range._2 != null)
+            return false;
 
         return true;
     }

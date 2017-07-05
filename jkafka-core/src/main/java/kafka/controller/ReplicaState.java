@@ -6,17 +6,20 @@ public enum ReplicaState {
         public byte state() {
             return 1;
         }
-    }, OnlineReplica {
+    },
+    OnlineReplica {
         @Override
         public byte state() {
             return 2;
         }
-    }, OfflineReplica {
+    },
+    OfflineReplica {
         @Override
         public byte state() {
             return 3;
         }
-    }, NonExistentReplica {
+    },
+    NonExistentReplica {
         @Override
         public byte state() {
             return 4;

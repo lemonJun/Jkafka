@@ -56,10 +56,9 @@ public class PartitionStateMachine {
         brokerRequestBatch = new ControllerBrokerRequestBatch(controller.controllerContext, new Callable3<Integer, RequestOrResponse, Callable1<RequestOrResponse>>() {
             @Override
             public void apply(Integer integer, RequestOrResponse requestOrResponse, Callable1<RequestOrResponse> requestOrResponseCallable1) {
-                controller.sendRequest(integer,requestOrResponse,requestOrResponseCallable1);
+                controller.sendRequest(integer, requestOrResponse, requestOrResponseCallable1);
             }
-        },
-                controllerId, controller.clientId());
+        }, controllerId, controller.clientId());
         noOpPartitionLeaderSelector = new NoOpLeaderSelector(controllerContext);
 
         logger = LoggerFactory.getLogger(PartitionStateMachine.class + "[Partition state machine on Controller " + controllerId + "]: ");
@@ -74,7 +73,6 @@ public class PartitionStateMachine {
     private NoOpLeaderSelector noOpPartitionLeaderSelector;
     Logger logger;
     private Logger stateChangeLogger = LoggerFactory.getLogger(KafkaControllers.stateChangeLogger);
-
 
     /**
      * Invoked on successful controller election. First registers a topic change listener since that triggers all
@@ -103,7 +101,6 @@ public class PartitionStateMachine {
         partitionState.clear();
     }
 
-
     /**
      * This API invokes the OnlinePartition state change on all partitions in either the NewPartition or OfflinePartition
      * state. This is called on a successful controller election and on broker changes
@@ -115,10 +112,8 @@ public class PartitionStateMachine {
             for (Map.Entry<TopicAndPartition, PartitionState> entry : partitionState.entrySet()) {
                 TopicAndPartition topicAndPartition = entry.getKey();
                 PartitionState partitionState = entry.getValue();
-                if (partitionState.equals(PartitionState.OfflinePartition)
-                        || partitionState.equals(PartitionState.NewPartition))
-                    handleStateChange(topicAndPartition.topic, topicAndPartition.partition,
-                            PartitionState.OnlinePartition, controller.offlinePartitionSelector);
+                if (partitionState.equals(PartitionState.OfflinePartition) || partitionState.equals(PartitionState.NewPartition))
+                    handleStateChange(topicAndPartition.topic, topicAndPartition.partition, PartitionState.OnlinePartition, controller.offlinePartitionSelector);
             }
             brokerRequestBatch.sendRequestsToBrokers(controller.epoch(), controllerContext.correlationId.getAndIncrement());
         } catch (Throwable e) {
@@ -126,7 +121,6 @@ public class PartitionStateMachine {
             // TODO: It is not enough to bail out and log an error, it is important to trigger leader election for those partitions
         }
     }
-
 
     /**
      * This API is invoked by the partition change zookeeper listener
@@ -138,8 +132,7 @@ public class PartitionStateMachine {
         handleStateChanges(partitions, targetState, noOpPartitionLeaderSelector);
     }
 
-    public void handleStateChanges(Set<TopicAndPartition> partitions, final PartitionState targetState,
-                                   final PartitionLeaderSelector leaderSelector /*= noOpPartitionLeaderSelector*/) {
+    public void handleStateChanges(Set<TopicAndPartition> partitions, final PartitionState targetState, final PartitionLeaderSelector leaderSelector /*= noOpPartitionLeaderSelector*/) {
         logger.info("Invoking state change to {} for partitions {}", targetState, partitions);
         try {
             brokerRequestBatch.newBatch();
@@ -157,7 +150,6 @@ public class PartitionStateMachine {
         }
     }
 
-
     /**
      * This API exercises the partition's state machine. It ensures that every state transition happens from a legal
      * previous state to the target state.
@@ -166,13 +158,10 @@ public class PartitionStateMachine {
      * @param partition   The partition for which the state transition is invoked
      * @param targetState The end state that the partition should be moved to
      */
-    private void handleStateChange(String topic, int partition, PartitionState targetState,
-                                   PartitionLeaderSelector leaderSelector) {
+    private void handleStateChange(String topic, int partition, PartitionState targetState, PartitionLeaderSelector leaderSelector) {
         TopicAndPartition topicAndPartition = new TopicAndPartition(topic, partition);
         if (!hasStarted.get())
-            throw new StateChangeFailedException("Controller %d epoch %d initiated state change for partition %s to %s failed because " +
-                    "the partition state machine has not started",
-                    controllerId, controller.epoch(), topicAndPartition, targetState);
+            throw new StateChangeFailedException("Controller %d epoch %d initiated state change for partition %s to %s failed because " + "the partition state machine has not started", controllerId, controller.epoch(), topicAndPartition, targetState);
         PartitionState currState = Utils.getOrElse(partitionState, topicAndPartition, PartitionState.NonExistentPartition);
         try {
             switch (targetState) {
@@ -183,13 +172,11 @@ public class PartitionStateMachine {
                     partitionState.put(topicAndPartition, PartitionState.NewPartition);
 
                     String assignedReplicas = Joiner.on(',').join(controllerContext.partitionReplicaAssignment.get(topicAndPartition));
-                    stateChangeLogger.trace(String.format("Controller %d epoch %d changed partition %s state from NotExists to New with assigned replicas %s",
-                            controllerId, controller.epoch(), topicAndPartition, assignedReplicas));
+                    stateChangeLogger.trace(String.format("Controller %d epoch %d changed partition %s state from NotExists to New with assigned replicas %s", controllerId, controller.epoch(), topicAndPartition, assignedReplicas));
                     break;
                 // post: partition has been assigned replicas
                 case OnlinePartition:
-                    assertValidPreviousStates(topicAndPartition, Lists.newArrayList(PartitionState.NewPartition,
-                            PartitionState.OnlinePartition, PartitionState.OfflinePartition), PartitionState.OnlinePartition);
+                    assertValidPreviousStates(topicAndPartition, Lists.newArrayList(PartitionState.NewPartition, PartitionState.OnlinePartition, PartitionState.OfflinePartition), PartitionState.OnlinePartition);
                     switch (partitionState.get(topicAndPartition)) {
                         case NewPartition:
                             // initialize leader and isr path for new partition
@@ -205,30 +192,26 @@ public class PartitionStateMachine {
                     }
                     partitionState.put(topicAndPartition, PartitionState.OnlinePartition);
                     int leader = controllerContext.partitionLeadershipInfo.get(topicAndPartition).leaderAndIsr.leader;
-                    stateChangeLogger.trace("Controller {} epoch {} changed partition {} from {} to OnlinePartition with leader {}",
-                            controllerId, controller.epoch(), topicAndPartition, partitionState.get(topicAndPartition), leader);
+                    stateChangeLogger.trace("Controller {} epoch {} changed partition {} from {} to OnlinePartition with leader {}", controllerId, controller.epoch(), topicAndPartition, partitionState.get(topicAndPartition), leader);
                     break;
                 // post: partition has a leader
                 case OfflinePartition:
                     // pre: partition should be in New or Online state
                     assertValidPreviousStates(topicAndPartition, Lists.newArrayList(PartitionState.NewPartition, PartitionState.OnlinePartition), PartitionState.OfflinePartition);
                     // should be called when the leader for a partition is no longer alive
-                    stateChangeLogger.trace("Controller {} epoch {} changed partition {} state from Online to Offline",
-                            controllerId, controller.epoch(), topicAndPartition);
+                    stateChangeLogger.trace("Controller {} epoch {} changed partition {} state from Online to Offline", controllerId, controller.epoch(), topicAndPartition);
                     partitionState.put(topicAndPartition, PartitionState.OfflinePartition);
                     break;
                 // post: partition has no alive leader
                 case NonExistentPartition:
                     // pre: partition should be in Offline state
                     assertValidPreviousStates(topicAndPartition, Lists.newArrayList(PartitionState.OfflinePartition), PartitionState.NonExistentPartition);
-                    stateChangeLogger.trace("Controller {} epoch {} changed partition {} state from Offline to NotExists",
-                            controllerId, controller.epoch(), topicAndPartition);
+                    stateChangeLogger.trace("Controller {} epoch {} changed partition {} state from Offline to NotExists", controllerId, controller.epoch(), topicAndPartition);
                     partitionState.put(topicAndPartition, PartitionState.NonExistentPartition);
                     // post: partition state is deleted from all brokers and zookeeper
             }
         } catch (Throwable t) {
-            stateChangeLogger.error(String.format("Controller %d epoch %d initiated state change for partition %s from %s to %s failed",
-                    controllerId, controller.epoch(), topicAndPartition, currState, targetState), t);
+            stateChangeLogger.error(String.format("Controller %d epoch %d initiated state change for partition %s from %s to %s failed", controllerId, controller.epoch(), topicAndPartition, currState, targetState), t);
         }
     }
 
@@ -258,14 +241,10 @@ public class PartitionStateMachine {
         }
     }
 
-    private void assertValidPreviousStates(TopicAndPartition topicAndPartition, List<PartitionState> fromStates,
-                                           PartitionState targetState) {
+    private void assertValidPreviousStates(TopicAndPartition topicAndPartition, List<PartitionState> fromStates, PartitionState targetState) {
         if (!fromStates.contains(partitionState.get(topicAndPartition)))
-            throw new IllegalStateException(String.format("Partition %s should be in the %s states before moving to %s state",
-                    topicAndPartition, fromStates.toString(), targetState) + String.format(". Instead it is in %s state",
-                    partitionState.get(topicAndPartition)));
+            throw new IllegalStateException(String.format("Partition %s should be in the %s states before moving to %s state", topicAndPartition, fromStates.toString(), targetState) + String.format(". Instead it is in %s state", partitionState.get(topicAndPartition)));
     }
-
 
     /**
      * Invoked on the NonExistentPartition->NewPartition state transition to update the controller's cache with the
@@ -297,35 +276,26 @@ public class PartitionStateMachine {
         });
         switch (liveAssignedReplicas.size()) {
             case 0:
-                String failMsg = String.format("encountered error during state change of partition %s from New to Online, assigned replicas are [%s], " +
-                        "live brokers are [%s]. No assigned replica is alive.",
-                        topicAndPartition, replicaAssignment.toString(), controllerContext.liveBrokerIds());
+                String failMsg = String.format("encountered error during state change of partition %s from New to Online, assigned replicas are [%s], " + "live brokers are [%s]. No assigned replica is alive.", topicAndPartition, replicaAssignment.toString(), controllerContext.liveBrokerIds());
                 stateChangeLogger.error("Controller {} epoch {} ", controllerId, controller.epoch() + failMsg);
                 throw new StateChangeFailedException(failMsg);
             default:
                 logger.debug("Live assigned replicas for partition {} are: [{}]", topicAndPartition, liveAssignedReplicas);
                 // make the first replica in the list of assigned replicas, the leader
                 Integer leader = Utils.head(liveAssignedReplicas);
-                LeaderIsrAndControllerEpoch leaderIsrAndControllerEpoch = new LeaderIsrAndControllerEpoch(new LeaderAndIsr(leader, liveAssignedReplicas),
-                        controller.epoch());
+                LeaderIsrAndControllerEpoch leaderIsrAndControllerEpoch = new LeaderIsrAndControllerEpoch(new LeaderAndIsr(leader, liveAssignedReplicas), controller.epoch());
                 logger.debug("Initializing leader and isr for partition {} to {}", topicAndPartition, leaderIsrAndControllerEpoch);
                 try {
-                    ZkUtils.createPersistentPath(controllerContext.zkClient,
-                            ZkUtils.getTopicPartitionLeaderAndIsrPath(topicAndPartition.topic, topicAndPartition.partition),
-                            ZkUtils.leaderAndIsrZkData(leaderIsrAndControllerEpoch.leaderAndIsr, controller.epoch()));
+                    ZkUtils.createPersistentPath(controllerContext.zkClient, ZkUtils.getTopicPartitionLeaderAndIsrPath(topicAndPartition.topic, topicAndPartition.partition), ZkUtils.leaderAndIsrZkData(leaderIsrAndControllerEpoch.leaderAndIsr, controller.epoch()));
                     // NOTE: the above write can fail only if the current controller lost its zk session and the new controller
                     // took over and initialized this partition. This can happen if the current controller went into a long
                     // GC pause
                     controllerContext.partitionLeadershipInfo.put(topicAndPartition, leaderIsrAndControllerEpoch);
-                    brokerRequestBatch.addLeaderAndIsrRequestForBrokers(liveAssignedReplicas, topicAndPartition.topic,
-                            topicAndPartition.partition, leaderIsrAndControllerEpoch, Sets.newHashSet(replicaAssignment));
+                    brokerRequestBatch.addLeaderAndIsrRequestForBrokers(liveAssignedReplicas, topicAndPartition.topic, topicAndPartition.partition, leaderIsrAndControllerEpoch, Sets.newHashSet(replicaAssignment));
                 } catch (ZkNodeExistsException e) {
                     // read the controller epoch
-                    LeaderIsrAndControllerEpoch leaderIsrAndEpoch = ZkUtils.getLeaderIsrAndEpochForPartition(zkClient, topicAndPartition.topic,
-                            topicAndPartition.partition);
-                    failMsg = String.format("encountered error while changing partition %s's state from New to Online since LeaderAndIsr path already " +
-                            "exists with value %s and controller epoch %d",
-                            topicAndPartition, leaderIsrAndEpoch.leaderAndIsr.toString(), leaderIsrAndEpoch.controllerEpoch);
+                    LeaderIsrAndControllerEpoch leaderIsrAndEpoch = ZkUtils.getLeaderIsrAndEpochForPartition(zkClient, topicAndPartition.topic, topicAndPartition.partition);
+                    failMsg = String.format("encountered error while changing partition %s's state from New to Online since LeaderAndIsr path already " + "exists with value %s and controller epoch %d", topicAndPartition, leaderIsrAndEpoch.leaderAndIsr.toString(), leaderIsrAndEpoch.controllerEpoch);
                     stateChangeLogger.error(String.format("Controller %d epoch %d ", controllerId, controller.epoch()) + failMsg);
                     throw new StateChangeFailedException(failMsg);
                 }
@@ -343,8 +313,7 @@ public class PartitionStateMachine {
     public void electLeaderForPartition(String topic, int partition, PartitionLeaderSelector leaderSelector) {
         TopicAndPartition topicAndPartition = new TopicAndPartition(topic, partition);
         // handle leader election for the partitions whose leader is no longer alive
-        stateChangeLogger.trace(String.format("Controller %d epoch %d started leader election for partition %s",
-                controllerId, controller.epoch(), topicAndPartition));
+        stateChangeLogger.trace(String.format("Controller %d epoch %d started leader election for partition %s", controllerId, controller.epoch(), topicAndPartition));
         try {
             Boolean zookeeperPathUpdateSucceeded = false;
             LeaderAndIsr newLeaderAndIsr = null;
@@ -354,10 +323,7 @@ public class PartitionStateMachine {
                 LeaderAndIsr currentLeaderAndIsr = currentLeaderIsrAndEpoch.leaderAndIsr;
                 int controllerEpoch = currentLeaderIsrAndEpoch.controllerEpoch;
                 if (controllerEpoch > controller.epoch()) {
-                    String failMsg = String.format("aborted leader election for partition [%s,%d] since the LeaderAndIsr path was " +
-                            "already written by another controller. This probably means that the current controller %d went through " +
-                            "a soft failure and another controller was elected with epoch %d.",
-                            topic, partition, controllerId, controllerEpoch);
+                    String failMsg = String.format("aborted leader election for partition [%s,%d] since the LeaderAndIsr path was " + "already written by another controller. This probably means that the current controller %d went through " + "a soft failure and another controller was elected with epoch %d.", topic, partition, controllerId, controllerEpoch);
                     stateChangeLogger.error(String.format("Controller %d epoch %d ", controllerId, controller.epoch()) + failMsg);
                     throw new StateChangeFailedException(failMsg);
                 }
@@ -366,10 +332,7 @@ public class PartitionStateMachine {
                 LeaderAndIsr leaderAndIsr = tuple2._1;
                 List<Integer> replicas = tuple2._2;
 
-
-                Tuple2<Boolean, Integer> ret = ZkUtils.conditionalUpdatePersistentPath(zkClient,
-                        ZkUtils.getTopicPartitionLeaderAndIsrPath(topic, partition),
-                        ZkUtils.leaderAndIsrZkData(leaderAndIsr, controller.epoch()), currentLeaderAndIsr.zkVersion);
+                Tuple2<Boolean, Integer> ret = ZkUtils.conditionalUpdatePersistentPath(zkClient, ZkUtils.getTopicPartitionLeaderAndIsrPath(topic, partition), ZkUtils.leaderAndIsrZkData(leaderAndIsr, controller.epoch()), currentLeaderAndIsr.zkVersion);
                 Boolean updateSucceeded = ret._1;
                 Integer newVersion = ret._2;
                 newLeaderAndIsr = leaderAndIsr;
@@ -380,12 +343,10 @@ public class PartitionStateMachine {
             LeaderIsrAndControllerEpoch newLeaderIsrAndControllerEpoch = new LeaderIsrAndControllerEpoch(newLeaderAndIsr, controller.epoch());
             // update the leader cache
             controllerContext.partitionLeadershipInfo.put(new TopicAndPartition(topic, partition), newLeaderIsrAndControllerEpoch);
-            stateChangeLogger.trace(String.format("Controller %d epoch %d elected leader %d for Offline partition %s",
-                    controllerId, controller.epoch(), newLeaderAndIsr.leader, topicAndPartition));
+            stateChangeLogger.trace(String.format("Controller %d epoch %d elected leader %d for Offline partition %s", controllerId, controller.epoch(), newLeaderAndIsr.leader, topicAndPartition));
             Collection<Integer> replicas = controllerContext.partitionReplicaAssignment.get(new TopicAndPartition(topic, partition));
             // store new leader and isr info in cache
-            brokerRequestBatch.addLeaderAndIsrRequestForBrokers(replicasForThisPartition, topic, partition,
-                    newLeaderIsrAndControllerEpoch, Sets.newHashSet(replicas));
+            brokerRequestBatch.addLeaderAndIsrRequestForBrokers(replicasForThisPartition, topic, partition, newLeaderIsrAndControllerEpoch, Sets.newHashSet(replicas));
         } catch (LeaderElectionNotNeededException e) {
             // swallow
         } catch (NoReplicaOnlineException e) {
@@ -402,7 +363,6 @@ public class PartitionStateMachine {
         zkClient.subscribeChildChanges(ZkUtils.BrokerTopicsPath, new TopicChangeListener());
     }
 
-
     public void registerPartitionChangeListener(String topic) {
         zkClient.subscribeDataChanges(ZkUtils.getTopicPath(topic), new AddPartitionsListener(topic));
     }
@@ -410,10 +370,10 @@ public class PartitionStateMachine {
     private LeaderIsrAndControllerEpoch getLeaderIsrAndEpochOrThrowException(String topic, int partition) {
         TopicAndPartition topicAndPartition = new TopicAndPartition(topic, partition);
         LeaderIsrAndControllerEpoch currentLeaderIsrAndEpoch = ZkUtils.getLeaderIsrAndEpochForPartition(zkClient, topic, partition);
-        if (currentLeaderIsrAndEpoch != null) return currentLeaderIsrAndEpoch;
+        if (currentLeaderIsrAndEpoch != null)
+            return currentLeaderIsrAndEpoch;
 
-        String failMsg = String.format("LeaderAndIsr information doesn't exist for partition %s in %s state",
-                topicAndPartition, partitionState.get(topicAndPartition));
+        String failMsg = String.format("LeaderAndIsr information doesn't exist for partition %s in %s state", topicAndPartition, partitionState.get(topicAndPartition));
         throw new StateChangeFailedException(failMsg);
     }
 
@@ -422,7 +382,6 @@ public class PartitionStateMachine {
      */
     class TopicChangeListener implements IZkChildListener {
         Logger logger = LoggerFactory.getLogger(TopicChangeListener.class + "[TopicChangeListener on Controller " + controller.config.brokerId + "]: ");
-
 
         @Override
         public void handleChildChange(String parentPath, List<String> children) throws Exception {
@@ -433,7 +392,6 @@ public class PartitionStateMachine {
                         Set<String> currentChildren = Sets.newHashSet(children);
                         Set<String> newTopics = Sets.newHashSet(currentChildren);
                         newTopics.removeAll(controllerContext.allTopics);
-
 
                         final Set<String> deletedTopics = Sets.newHashSet(controllerContext.allTopics);
                         deletedTopics.removeAll(currentChildren);
@@ -449,8 +407,7 @@ public class PartitionStateMachine {
                             }
                         });
                         controllerContext.partitionReplicaAssignment.putAll(addedPartitionReplicaAssignment);
-                        logger.info("New topics: [{}], deleted topics: [{}], new partition replica assignment [{}]", newTopics,
-                                deletedTopics, addedPartitionReplicaAssignment);
+                        logger.info("New topics: [{}], deleted topics: [{}], new partition replica assignment [{}]", newTopics, deletedTopics, addedPartitionReplicaAssignment);
                         if (newTopics.size() > 0)
                             controller.onNewTopicCreation(newTopics, addedPartitionReplicaAssignment.keySet());
                     } catch (Throwable e) {
@@ -462,7 +419,6 @@ public class PartitionStateMachine {
         }
     }
 
-
     class AddPartitionsListener implements IZkDataListener {
         public String topic;
 
@@ -471,7 +427,6 @@ public class PartitionStateMachine {
         }
 
         Logger logger = LoggerFactory.getLogger(AddPartitionsListener.class + "[AddPartitionsListener on " + controller.config.brokerId + "]: ");
-
 
         @Override
         public void handleDataChange(String dataPath, Object data) throws Exception {

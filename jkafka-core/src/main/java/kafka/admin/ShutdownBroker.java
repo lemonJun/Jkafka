@@ -59,18 +59,13 @@ public class ShutdownBroker {
             controllerHost = brokerInfo.getString("host");
             controllerJmxPort = brokerInfo.getIntValue("jmx_port");
 
-
             JMXServiceURL jmxUrl = new JMXServiceURL(String.format("service:jmx:rmi:///jndi/rmi://%s:%d/jmxrmi", controllerHost, controllerJmxPort));
             logger.info("Connecting to jmx url {}", jmxUrl);
             JMXConnector jmxc = JMXConnectorFactory.connect(jmxUrl, null);
             MBeanServerConnection mbsc = jmxc.getMBeanServerConnection();
-            Set<TopicAndPartition> leaderPartitionsRemaining = (Set<TopicAndPartition>) mbsc.invoke(new ObjectName(KafkaControllers.MBeanName),
-                    "shutdownBroker",
-                    new Object[]{params.brokerId},
-                    new String[]{Integer.class.getName()});
+            Set<TopicAndPartition> leaderPartitionsRemaining = (Set<TopicAndPartition>) mbsc.invoke(new ObjectName(KafkaControllers.MBeanName), "shutdownBroker", new Object[] { params.brokerId }, new String[] { Integer.class.getName() });
             boolean shutdownComplete = (leaderPartitionsRemaining.size() == 0);
-            logger.info("Shutdown status: " +
-                    ((shutdownComplete) ? "complete" : "incomplete (broker still leads {} partitions)"), leaderPartitionsRemaining);
+            logger.info("Shutdown status: " + ((shutdownComplete) ? "complete" : "incomplete (broker still leads {} partitions)"), leaderPartitionsRemaining);
             return shutdownComplete;
 
         } catch (Throwable t) {
@@ -84,25 +79,10 @@ public class ShutdownBroker {
 
     public static void main(String[] args) {
         OptionParser parser = new OptionParser();
-        OptionSpec<Integer> brokerOpt = parser.accepts("broker", "REQUIRED: The broker to shutdown.")
-                .withRequiredArg()
-                .describedAs("Broker Id")
-                .ofType(Integer.class);
-        OptionSpec<String> zkConnectOpt = parser.accepts("zookeeper", "REQUIRED: The connection string for the zookeeper connection in the form host:port. " +
-                "Multiple URLS can be given to allow fail-over.")
-                .withRequiredArg()
-                .describedAs("urls")
-                .ofType(String.class);
-        OptionSpec<Integer> numRetriesOpt = parser.accepts("num.retries", "Number of attempts to retry if shutdown does not complete.")
-                .withRequiredArg()
-                .describedAs("number of retries")
-                .ofType(Integer.class)
-                .defaultsTo(0);
-        OptionSpec<Integer> retryIntervalOpt = parser.accepts("retry.interval.ms", "Retry interval if retries requested.")
-                .withRequiredArg()
-                .describedAs("retry interval in ms (> 1000)")
-                .ofType(Integer.class)
-                .defaultsTo(1000);
+        OptionSpec<Integer> brokerOpt = parser.accepts("broker", "REQUIRED: The broker to shutdown.").withRequiredArg().describedAs("Broker Id").ofType(Integer.class);
+        OptionSpec<String> zkConnectOpt = parser.accepts("zookeeper", "REQUIRED: The connection string for the zookeeper connection in the form host:port. " + "Multiple URLS can be given to allow fail-over.").withRequiredArg().describedAs("urls").ofType(String.class);
+        OptionSpec<Integer> numRetriesOpt = parser.accepts("num.retries", "Number of attempts to retry if shutdown does not complete.").withRequiredArg().describedAs("number of retries").ofType(Integer.class).defaultsTo(0);
+        OptionSpec<Integer> retryIntervalOpt = parser.accepts("retry.interval.ms", "Retry interval if retries requested.").withRequiredArg().describedAs("retry interval in ms (> 1000)").ofType(Integer.class).defaultsTo(1000);
 
         OptionSet options = parser.parse(args);
         CommandLineUtils.checkRequiredArgs(parser, options, brokerOpt, zkConnectOpt);
@@ -120,7 +100,8 @@ public class ShutdownBroker {
                 } catch (InterruptedException e) {
                     // ignore
                 }
-                if (invokeShutdown(shutdownParams)) break;
+                if (invokeShutdown(shutdownParams))
+                    break;
             }
         }
     }

@@ -35,18 +35,15 @@ public class PreferredReplicaPartitionLeaderSelector implements PartitionLeaderS
         // check if preferred replica is the current leader
         int currentLeader = controllerContext.partitionLeadershipInfo.get(topicAndPartition).leaderAndIsr.leader;
         if (currentLeader == preferredReplica) {
-            throw new LeaderElectionNotNeededException("Preferred replica %d is already the current leader for partition %s",
-                    preferredReplica, topicAndPartition);
+            throw new LeaderElectionNotNeededException("Preferred replica %d is already the current leader for partition %s", preferredReplica, topicAndPartition);
         }
 
         logger.info("Current leader {} for partition {} is not the preferred replica. Trigerring preferred replica leader election", currentLeader, topicAndPartition);
 
         // check if preferred replica is not the current leader and is alive and in the isr
         if (controllerContext.liveBrokerIds().contains(preferredReplica) && currentLeaderAndIsr.isr.contains(preferredReplica)) {
-            return Tuple2.make(new LeaderAndIsr(preferredReplica, currentLeaderAndIsr.leaderEpoch + 1, currentLeaderAndIsr.isr,
-                    currentLeaderAndIsr.zkVersion + 1), assignedReplicas);
+            return Tuple2.make(new LeaderAndIsr(preferredReplica, currentLeaderAndIsr.leaderEpoch + 1, currentLeaderAndIsr.isr, currentLeaderAndIsr.zkVersion + 1), assignedReplicas);
         }
-        throw new StateChangeFailedException("Preferred replica %d for partition %s is either not alive or not in the isr. Current leader and ISR: [%s]",
-                preferredReplica, topicAndPartition, currentLeaderAndIsr);
+        throw new StateChangeFailedException("Preferred replica %d for partition %s is either not alive or not in the isr. Current leader and ISR: [%s]", preferredReplica, topicAndPartition, currentLeaderAndIsr);
     }
 }

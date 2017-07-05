@@ -14,10 +14,7 @@ public class ControllerBrokerStateInfo {
     public BlockingQueue<Tuple2<RequestOrResponse, Callable1<RequestOrResponse>>> messageQueue;
     public RequestSendThread requestSendThread;
 
-    public ControllerBrokerStateInfo(BlockingChannel channel,
-                                     Broker broker,
-                                     BlockingQueue<Tuple2<RequestOrResponse, Callable1<RequestOrResponse>>> messageQueue,
-                                     RequestSendThread requestSendThread) {
+    public ControllerBrokerStateInfo(BlockingChannel channel, Broker broker, BlockingQueue<Tuple2<RequestOrResponse, Callable1<RequestOrResponse>>> messageQueue, RequestSendThread requestSendThread) {
         this.channel = channel;
         this.broker = broker;
         this.messageQueue = messageQueue;

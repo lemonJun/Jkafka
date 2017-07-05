@@ -55,8 +55,7 @@ public class ClientUtils {
                 topicMetadataResponse = producer.send(topicMetadataRequest);
                 fetchMetaDataSucceeded = true;
             } catch (Throwable e) {
-                logger.warn("Fetching topic metadata with correlation id {} for topics [{}] from broker [{}] failed",
-                        correlationId, topics, shuffledBrokers.get(i), e);
+                logger.warn("Fetching topic metadata with correlation id {} for topics [{}] from broker [{}] failed", correlationId, topics, shuffledBrokers.get(i), e);
                 t = e;
             } finally {
                 i = i + 1;
@@ -79,8 +78,7 @@ public class ClientUtils {
      * @param clientId The client's identifier
      * @return topic metadata response
      */
-    public static TopicMetadataResponse fetchTopicMetadata(Set<String> topics, Collection<Broker> brokers, String clientId, int timeoutMs,
-                                                           int correlationId /*= 0*/) {
+    public static TopicMetadataResponse fetchTopicMetadata(Set<String> topics, Collection<Broker> brokers, String clientId, int timeoutMs, int correlationId /*= 0*/) {
         Properties props = new Properties();
         props.put("metadata.broker.list", Joiner.on(',').join(Utils.mapList(brokers, new Function1<Broker, String>() {
             @Override

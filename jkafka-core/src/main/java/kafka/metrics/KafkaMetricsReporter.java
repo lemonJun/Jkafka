@@ -19,7 +19,7 @@ public abstract class KafkaMetricsReporter {
                     Utils.foreach(metricsConfig.reporters, new Callable1<String>() {
                         @Override
                         public void apply(String reporterType) {
-                            KafkaMetricsReporter reporter = Utils.<KafkaMetricsReporter>createObject(reporterType);
+                            KafkaMetricsReporter reporter = Utils.<KafkaMetricsReporter> createObject(reporterType);
                             reporter.init(verifiableProps);
                             if (reporter instanceof KafkaMetricsReporterMBean)
                                 Utils.registerMBean(reporter, ((KafkaMetricsReporterMBean) reporter).getMBeanName());

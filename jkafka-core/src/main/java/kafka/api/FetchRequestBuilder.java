@@ -19,7 +19,7 @@ public class FetchRequestBuilder {
     private int minBytes = FetchRequestReader.DefaultMinBytes;
     private Map<TopicAndPartition, PartitionFetchInfo> requestMap = Maps.newHashMap();
 
-    public FetchRequestBuilder addFetch(String topic, int partition, long offset, int fetchSize)  {
+    public FetchRequestBuilder addFetch(String topic, int partition, long offset, int fetchSize) {
         requestMap.put(new TopicAndPartition(topic, partition), new PartitionFetchInfo(offset, fetchSize));
         return this;
     }
@@ -32,7 +32,7 @@ public class FetchRequestBuilder {
     /**
      * Only for internal use. Clients shouldn't set replicaId.
      */
-    public FetchRequestBuilder replicaId(int replicaId){
+    public FetchRequestBuilder replicaId(int replicaId) {
         this.replicaId = replicaId;
         return this;
     }
@@ -48,8 +48,7 @@ public class FetchRequestBuilder {
     }
 
     public FetchRequest build() {
-        FetchRequest fetchRequest = new
-                FetchRequest(versionId, correlationId.getAndIncrement(), clientId, replicaId, maxWait, minBytes, requestMap);
+        FetchRequest fetchRequest = new FetchRequest(versionId, correlationId.getAndIncrement(), clientId, replicaId, maxWait, minBytes, requestMap);
         requestMap.clear();
         return fetchRequest;
     }

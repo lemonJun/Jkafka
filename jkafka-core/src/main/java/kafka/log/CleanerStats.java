@@ -18,8 +18,9 @@ public class CleanerStats {
         clear();
     }
 
-    public long startTime, mapCompleteTime, endTime, bytesRead, bytesWritten, mapBytesRead, mapMessagesRead, messagesRead, messagesWritten;
-
+    public long startTime, mapCompleteTime, endTime, bytesRead, bytesWritten,
+                    mapBytesRead, mapMessagesRead, messagesRead,
+                    messagesWritten;
 
     public void readMessage(int size) {
         messagesRead += 1;

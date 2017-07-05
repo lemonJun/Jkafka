@@ -55,15 +55,12 @@ public class TopicMetadataResponse extends RequestOrResponse {
     public int sizeInBytes() {
         Collection<Broker> brokers = extractBrokers(topicsMetadata).values();
 
-        return 4 + 4
-                + Utils.foldLeft(brokers, 0, new Function2<Integer, Broker, Integer>() {
+        return 4 + 4 + Utils.foldLeft(brokers, 0, new Function2<Integer, Broker, Integer>() {
             @Override
             public Integer apply(Integer arg1, Broker _) {
                 return arg1 + _.sizeInBytes();
             }
-        })
-                + 4
-                + Utils.foldLeft(topicsMetadata, 0, new Function2<Integer, TopicMetadata, Integer>() {
+        }) + 4 + Utils.foldLeft(topicsMetadata, 0, new Function2<Integer, TopicMetadata, Integer>() {
             @Override
             public Integer apply(Integer arg1, TopicMetadata _) {
                 return arg1 + _.sizeInBytes();
@@ -74,7 +71,7 @@ public class TopicMetadataResponse extends RequestOrResponse {
     @Override
     public void writeTo(final ByteBuffer buffer) {
         buffer.putInt(correlationId);
-    /* brokers */
+        /* brokers */
         Collection<Broker> brokers = extractBrokers(topicsMetadata).values();
         buffer.putInt(brokers.size());
         Utils.foreach(brokers, new Callable1<Broker>() {
@@ -83,7 +80,7 @@ public class TopicMetadataResponse extends RequestOrResponse {
                 _.writeTo(buffer);
             }
         });
-    /* topic metadata */
+        /* topic metadata */
         buffer.putInt(topicsMetadata.size());
 
         Utils.foreach(topicsMetadata, new Callable1<TopicMetadata>() {
@@ -108,7 +105,8 @@ public class TopicMetadataResponse extends RequestOrResponse {
                 List<Broker> lst = Lists.newArrayList();
                 lst.addAll(_.replicas);
 
-                if (_.leader != null) lst.add(_.leader);
+                if (_.leader != null)
+                    lst.add(_.leader);
 
                 return lst;
             }

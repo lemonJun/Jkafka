@@ -50,17 +50,17 @@ public class ProducerPool {
                 Utils.foreach(tmd.partitionsMetadata, new Callable1<PartitionMetadata>() {
                     @Override
                     public void apply(PartitionMetadata pmd) {
-                        if(pmd.leader != null)
+                        if (pmd.leader != null)
                             newBrokers.add(pmd.leader);
                     }
                 });
             }
         });
-        synchronized(lock)  {
+        synchronized (lock) {
             Utils.foreach(newBrokers, new Callable1<Broker>() {
                 @Override
                 public void apply(Broker b) {
-                    if(syncProducers.containsKey(b.id)){
+                    if (syncProducers.containsKey(b.id)) {
                         syncProducers.get(b.id).close();
                         syncProducers.put(b.id, ProducerPool.createSyncProducer(config, b));
                     } else
@@ -70,10 +70,11 @@ public class ProducerPool {
         }
     }
 
-    public SyncProducer getProducer(int brokerId)  {
-        synchronized(lock) {
+    public SyncProducer getProducer(int brokerId) {
+        synchronized (lock) {
             SyncProducer producer = syncProducers.get(brokerId);
-            if (producer != null) return producer;
+            if (producer != null)
+                return producer;
 
             throw new UnavailableProducerException("Sync producer for broker id %d does not exist", brokerId);
         }
@@ -82,11 +83,11 @@ public class ProducerPool {
     /**
      * Closes all the producers in the pool
      */
-    public void close()  {
-        synchronized(lock) {
+    public void close() {
+        synchronized (lock) {
             logger.info("Closing all sync producers");
             Iterator<SyncProducer> iter = syncProducers.values().iterator();
-            while(iter.hasNext())
+            while (iter.hasNext())
                 iter.next().close();
         }
     }

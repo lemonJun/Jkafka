@@ -22,7 +22,6 @@ public class Topic {
         if (!found)
             throw new InvalidTopicException("topic name " + topic + " is illegal,  contains a character other than ASCII alphanumerics, '.', '_' and '-'");
 
-
         if (!matcher.group().equals(topic))
             throw new InvalidTopicException("topic name " + topic + " is illegal, contains a character other than ASCII alphanumerics, '.', '_' and '-'");
     }

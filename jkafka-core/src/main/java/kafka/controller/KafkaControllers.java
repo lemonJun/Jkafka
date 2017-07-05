@@ -25,15 +25,11 @@ public abstract class KafkaControllers {
             return controllerInfo.getIntValue("brokerid");
         } catch (Throwable t) {
             // It may be due to an incompatible controller register version
-            logger.warn("Failed to parse the controller info as json. "
-                    + "Probably this controller is still using the old " +
-                    "format [{}] to store the broker id in zookeeper", controllerInfoString);
+            logger.warn("Failed to parse the controller info as json. " + "Probably this controller is still using the old " + "format [{}] to store the broker id in zookeeper", controllerInfoString);
             try {
                 return Integer.parseInt(controllerInfoString);
             } catch (Throwable t1) {
-                throw new KafkaException(t1,
-                        "Failed to parse the controller info: " + controllerInfoString
-                                + ". This is neither the new or the old format.");
+                throw new KafkaException(t1, "Failed to parse the controller info: " + controllerInfoString + ". This is neither the new or the old format.");
             }
         }
     }

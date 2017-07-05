@@ -24,11 +24,7 @@ public class RequestSendThread extends ShutdownableThread {
     public BlockingQueue<Tuple2<RequestOrResponse, Callable1<RequestOrResponse>>> queue;
     public BlockingChannel channel;
 
-    public RequestSendThread(int controllerId,
-                             ControllerContext controllerContext,
-                             int toBrokerId,
-                             BlockingQueue<Tuple2<RequestOrResponse, Callable1<RequestOrResponse>>> queue,
-                             BlockingChannel channel) {
+    public RequestSendThread(int controllerId, ControllerContext controllerContext, int toBrokerId, BlockingQueue<Tuple2<RequestOrResponse, Callable1<RequestOrResponse>>> queue, BlockingChannel channel) {
         super(String.format("Controller-%d-to-broker-%d-send-thread", controllerId, toBrokerId));
 
         this.controllerId = controllerId;
@@ -67,8 +63,7 @@ public class RequestSendThread extends ShutdownableThread {
                     case RequestKeys.UpdateMetadataKey:
                         response = UpdateMetadataResponse.readFrom(receive.buffer());
                 }
-                stateChangeLogger.trace("Controller {} epoch {} received response correlationId {} for a request sent to broker {}",
-                        controllerId, controllerContext.epoch, response.correlationId, toBrokerId);
+                stateChangeLogger.trace("Controller {} epoch {} received response correlationId {} for a request sent to broker {}", controllerId, controllerContext.epoch, response.correlationId, toBrokerId);
 
                 if (callback != null) {
                     callback.apply(response);

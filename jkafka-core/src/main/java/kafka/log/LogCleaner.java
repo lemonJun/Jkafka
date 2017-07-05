@@ -72,10 +72,7 @@ public class LogCleaner {
             }
         });
 
-        throttler = new Throttler(/*desiredRatePerSec =*/ config.maxIoBytesPerSecond,
-                /*checkIntervalMs =*/ 300,
-                /*throttleDown =*/ true,
-                time);
+        throttler = new Throttler(/*desiredRatePerSec =*/ config.maxIoBytesPerSecond, /*checkIntervalMs =*/ 300, /*throttleDown =*/ true, time);
 
         cleaners = Utils.flatList(0, config.numThreads, new Function1<Integer, CleanerThread>() {
             @Override
@@ -125,7 +122,6 @@ public class LogCleaner {
         });
     }
 
-
     /**
      * Stop the background cleaning
      */
@@ -156,6 +152,7 @@ public class LogCleaner {
     public void awaitCleaned(String topic, int part, long offset) throws InterruptedException {
         awaitCleaned(topic, part, offset, 30000L);
     }
+
     public void awaitCleaned(String topic, int part, long offset, long timeout /* = 30000L*/) throws InterruptedException {
         while (!allCleanerCheckpoints().containsKey(new TopicAndPartition(topic, part)))
             cleaned.tryAcquire(timeout, TimeUnit.MILLISECONDS);
@@ -181,14 +178,13 @@ public class LogCleaner {
     public LogToClean grabFilthiestLog() {
         synchronized (lock) {
             final Map<TopicAndPartition, Long> lastClean = allCleanerCheckpoints();
-            List<LogToClean> cleanableLogs = Utils.mapList(
-                    Utils.filter(logs, new Predicate<Map.Entry<TopicAndPartition, Log>>() {
-                        @Override
-                        public boolean apply(Map.Entry<TopicAndPartition, Log> l) {
-                            return l.getValue().config.dedupe  // skip any logs marked for delete rather than dedupe
-                                    && !inProgress.contains(l.getKey());   // skip any logs already in-progress
-                        }
-                    }), new Function1<Map.Entry<TopicAndPartition, Log>, LogToClean>() {
+            List<LogToClean> cleanableLogs = Utils.mapList(Utils.filter(logs, new Predicate<Map.Entry<TopicAndPartition, Log>>() {
+                @Override
+                public boolean apply(Map.Entry<TopicAndPartition, Log> l) {
+                    return l.getValue().config.dedupe // skip any logs marked for delete rather than dedupe
+                                    && !inProgress.contains(l.getKey()); // skip any logs already in-progress
+                }
+            }), new Function1<Map.Entry<TopicAndPartition, Log>, LogToClean>() {
                 @Override
                 public LogToClean apply(Map.Entry<TopicAndPartition, Log> l) {
                     return new LogToClean(l.getKey(), l.getValue(), Utils.getOrElse(lastClean, l.getKey(), 0L));
@@ -198,8 +194,8 @@ public class LogCleaner {
             List<LogToClean> dirtyLogs = Utils.filter(cleanableLogs, new Predicate<LogToClean>() {
                 @Override
                 public boolean apply(LogToClean l) {
-                    return l.totalBytes() > 0  // must have some bytes
-                            && l.cleanableRatio > l.log.config.minCleanableRatio; // and must meet the minimum threshold for dirty byte ratio
+                    return l.totalBytes() > 0 // must have some bytes
+                                    && l.cleanableRatio > l.log.config.minCleanableRatio; // and must meet the minimum threshold for dirty byte ratio
                 }
             });
 

@@ -26,7 +26,6 @@ public class FetchRequestAndResponseStatsRegistry {
         return globalStats.getAndMaybePut(clientId);
     }
 
-
     public static class FetchRequestAndResponseStats {
         public String clientId;
 

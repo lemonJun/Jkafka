@@ -32,10 +32,14 @@ public class Json {
      * This method does not properly handle non-ascii characters.
      */
     public static String encode(Object obj) {
-        if (obj == null) return "null";
-        if (obj instanceof Boolean) return obj.toString();
-        if (obj instanceof String) return "\"" + obj + "\"";
-        if (obj instanceof Number) return obj.toString();
+        if (obj == null)
+            return "null";
+        if (obj instanceof Boolean)
+            return obj.toString();
+        if (obj instanceof String)
+            return "\"" + obj + "\"";
+        if (obj instanceof Number)
+            return obj.toString();
 
         return JSON.toJSONString(obj);
     }

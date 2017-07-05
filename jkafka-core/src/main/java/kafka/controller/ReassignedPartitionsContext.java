@@ -9,36 +9,36 @@ public class ReassignedPartitionsContext {
     public KafkaController.ReassignedPartitionsIsrChangeListener isrChangeListener;
 
     public ReassignedPartitionsContext() {
-        this(Lists.<Integer>newArrayList(), null);
+        this(Lists.<Integer> newArrayList(), null);
     }
 
     public ReassignedPartitionsContext(Collection<Integer> newReplicas) {
         this(newReplicas, null);
     }
-    public ReassignedPartitionsContext(Collection<Integer> newReplicas,
-                                       KafkaController.ReassignedPartitionsIsrChangeListener isrChangeListener) {
+
+    public ReassignedPartitionsContext(Collection<Integer> newReplicas, KafkaController.ReassignedPartitionsIsrChangeListener isrChangeListener) {
         this.newReplicas = newReplicas;
         this.isrChangeListener = isrChangeListener;
     }
 
     @Override
     public String toString() {
-        return "ReassignedPartitionsContext{" +
-                "newReplicas=" + newReplicas +
-                ", isrChangeListener=" + isrChangeListener +
-                '}';
+        return "ReassignedPartitionsContext{" + "newReplicas=" + newReplicas + ", isrChangeListener=" + isrChangeListener + '}';
     }
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
 
         ReassignedPartitionsContext that = (ReassignedPartitionsContext) o;
 
         if (isrChangeListener != null ? !isrChangeListener.equals(that.isrChangeListener) : that.isrChangeListener != null)
             return false;
-        if (newReplicas != null ? !newReplicas.equals(that.newReplicas) : that.newReplicas != null) return false;
+        if (newReplicas != null ? !newReplicas.equals(that.newReplicas) : that.newReplicas != null)
+            return false;
 
         return true;
     }

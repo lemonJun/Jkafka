@@ -28,14 +28,11 @@ public class TopicData {
     }
 
     public static int headerSize(String topic) {
-        return shortStringLength(topic) +
-                4 /* partition count */;
+        return shortStringLength(topic) + 4 /* partition count */;
     }
-
 
     public final String topic;
     public final Map<Integer, FetchResponsePartitionData> partitionData;
-
 
     public TopicData(String topic, Map<Integer, FetchResponsePartitionData> partitionData) {
         this.topic = topic;
@@ -43,13 +40,12 @@ public class TopicData {
     }
 
     public int sizeInBytes() {
-        return TopicData.headerSize(topic) + Utils.foldLeft(partitionData.values(), 0,
-                new Function2<Integer, FetchResponsePartitionData, Integer>() {
-                    @Override
-                    public Integer apply(Integer folded, FetchResponsePartitionData arg) {
-                        return folded + arg.sizeInBytes() + 4;
-                    }
-                });
+        return TopicData.headerSize(topic) + Utils.foldLeft(partitionData.values(), 0, new Function2<Integer, FetchResponsePartitionData, Integer>() {
+            @Override
+            public Integer apply(Integer folded, FetchResponsePartitionData arg) {
+                return folded + arg.sizeInBytes() + 4;
+            }
+        });
     }
 
     public int headerSize() {

@@ -27,13 +27,7 @@ public class UpdateMetadataRequest extends RequestOrResponse {
     public Map<TopicAndPartition, PartitionStateInfo> partitionStateInfos;
     public Set<Broker> aliveBrokers;
 
-    public UpdateMetadataRequest(short versionId,
-                                 int correlationId,
-                                 String clientId,
-                                 int controllerId,
-                                 int controllerEpoch,
-                                 Map<TopicAndPartition, PartitionStateInfo> partitionStateInfos,
-                                 Set<Broker> aliveBrokers) {
+    public UpdateMetadataRequest(short versionId, int correlationId, String clientId, int controllerId, int controllerEpoch, Map<TopicAndPartition, PartitionStateInfo> partitionStateInfos, Set<Broker> aliveBrokers) {
         super(RequestKeys.UpdateMetadataKey, correlationId);
         this.versionId = versionId;
         this.clientId = clientId;
@@ -43,34 +37,26 @@ public class UpdateMetadataRequest extends RequestOrResponse {
         this.aliveBrokers = aliveBrokers;
     }
 
-    public UpdateMetadataRequest(int controllerId, int controllerEpoch, int correlationId, String clientId,
-                                 Map<TopicAndPartition, PartitionStateInfo> partitionStateInfos,
-                                 Set<Broker> aliveBrokers) {
-        this(UpdateMetadataRequestReader.CurrentVersion, correlationId, clientId,
-                controllerId, controllerEpoch, partitionStateInfos, aliveBrokers);
+    public UpdateMetadataRequest(int controllerId, int controllerEpoch, int correlationId, String clientId, Map<TopicAndPartition, PartitionStateInfo> partitionStateInfos, Set<Broker> aliveBrokers) {
+        this(UpdateMetadataRequestReader.CurrentVersion, correlationId, clientId, controllerId, controllerEpoch, partitionStateInfos, aliveBrokers);
     }
 
     @Override
     public int sizeInBytes() {
-        return 2 /* version id */ +
-                4 /* correlation id */ +
-                (2 + clientId.length()) /* client id */ +
-                4 /* controller id */ +
-                4 /* controller epoch */ +
-                4 /* number of partitions */
-                + Utils.foldLeft(partitionStateInfos, 0, new Function3<Integer, TopicAndPartition, PartitionStateInfo, Integer>() {
-            @Override
-            public Integer apply(Integer arg1, TopicAndPartition key, PartitionStateInfo value) {
-                return arg1 + (2 + key.topic.length())
-                         /* topic */ + 4 /* partition */ + value.sizeInBytes() /* partition state info */
-                        + 4 /* number of alive brokers in the cluster */;
-            }
-        }) + Utils.foldLeft(aliveBrokers, 0, new Function2<Integer, Broker, Integer>() {
-            @Override
-            public Integer apply(Integer arg1, Broker _) {
-                return arg1 + _.sizeInBytes();
-            }
-        });
+        return 2 /* version id */ + 4 /* correlation id */ + (2 + clientId.length()) /* client id */ + 4 /* controller id */ + 4 /* controller epoch */ + 4 /* number of partitions */
+                        + Utils.foldLeft(partitionStateInfos, 0, new Function3<Integer, TopicAndPartition, PartitionStateInfo, Integer>() {
+                            @Override
+                            public Integer apply(Integer arg1, TopicAndPartition key, PartitionStateInfo value) {
+                                return arg1 + (2 + key.topic.length())
+                                /* topic */ + 4 /* partition */ + value.sizeInBytes() /* partition state info */
+                                                + 4 /* number of alive brokers in the cluster */;
+                            }
+                        }) + Utils.foldLeft(aliveBrokers, 0, new Function2<Integer, Broker, Integer>() {
+                            @Override
+                            public Integer apply(Integer arg1, Broker _) {
+                                return arg1 + _.sizeInBytes();
+                            }
+                        });
     }
 
     @Override

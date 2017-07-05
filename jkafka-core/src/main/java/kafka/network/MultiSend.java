@@ -37,8 +37,7 @@ public abstract class MultiSend<S extends Send> extends Send {
             if (sendComplete)
                 current = Utils.tail(current);
         } while (!complete() && sendComplete);
-        logger.trace("Bytes written as part of multisend call : {} Total bytes written so far : Expected bytes to write : {}",
-                totalWrittenPerCall, totalWritten, expectedBytesToWrite);
+        logger.trace("Bytes written as part of multisend call : {} Total bytes written so far : Expected bytes to write : {}", totalWrittenPerCall, totalWritten, expectedBytesToWrite);
 
         return totalWrittenPerCall;
     }

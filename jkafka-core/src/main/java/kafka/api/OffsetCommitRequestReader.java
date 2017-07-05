@@ -40,10 +40,7 @@ public class OffsetCommitRequestReader implements RequestReader {
                         long offset = buffer.getLong();
                         String metadata = readShortString(buffer);
 
-                        return Tuple2.make(
-                                new TopicAndPartition(topic, partitionId),
-                                new OffsetMetadataAndError(offset, metadata)
-                        );
+                        return Tuple2.make(new TopicAndPartition(topic, partitionId), new OffsetMetadataAndError(offset, metadata));
                     }
                 });
             }

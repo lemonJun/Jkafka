@@ -46,8 +46,7 @@ public class ConsumerConfigs {
         if (autoOffsetReset == OffsetRequestReader.SmallestTimeString) {
         } else if (autoOffsetReset == OffsetRequestReader.LargestTimeString) {
         } else {
-            throw new InvalidConfigException("Wrong value " + autoOffsetReset + " of auto.offset.reset in ConsumerConfig; " +
-                    "Valid values are " + OffsetRequestReader.SmallestTimeString + " and " + OffsetRequestReader.LargestTimeString);
+            throw new InvalidConfigException("Wrong value " + autoOffsetReset + " of auto.offset.reset in ConsumerConfig; " + "Valid values are " + OffsetRequestReader.SmallestTimeString + " and " + OffsetRequestReader.LargestTimeString);
         }
     }
 }

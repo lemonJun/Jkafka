@@ -59,8 +59,7 @@ public class ReplicaStateMachine {
             public void apply(Integer integer, RequestOrResponse requestOrResponse, Callable1<RequestOrResponse> requestOrResponseCallable1) {
                 controller.sendRequest(integer, requestOrResponse, requestOrResponseCallable1);
             }
-        },
-                controllerId, controller.clientId());
+        }, controllerId, controller.clientId());
 
         logger = LoggerFactory.getLogger(ReplicaStateMachine.class + "[Replica state machine on controller " + controller.config.brokerId + "]: ");
     }
@@ -84,8 +83,7 @@ public class ReplicaStateMachine {
         initializeReplicaState();
         hasStarted.set(true);
         // move all Online replicas to Online
-        handleStateChanges(getAllReplicasOnBroker(controllerContext.allTopics,
-                controllerContext.liveBrokerIds()), ReplicaState.OnlineReplica);
+        handleStateChanges(getAllReplicasOnBroker(controllerContext.allTopics, controllerContext.liveBrokerIds()), ReplicaState.OnlineReplica);
         logger.info("Started replica state machine with initial state -> {}", replicaState.toString());
     }
 
@@ -93,7 +91,6 @@ public class ReplicaStateMachine {
     public void registerListeners() {
         registerBrokerChangeListener();
     }
-
 
     /**
      * Invoked on controller shutdown.
@@ -138,9 +135,7 @@ public class ReplicaStateMachine {
     public void handleStateChange(String topic, int partition, final int replicaId, ReplicaState targetState) {
         TopicAndPartition topicAndPartition = new TopicAndPartition(topic, partition);
         if (!hasStarted.get())
-            throw new StateChangeFailedException("Controller %d epoch %d initiated state change of replica %d for partition %s " +
-                    "to %s failed because replica state machine has not started",
-                    controllerId, controller.epoch(), replicaId, topicAndPartition, targetState);
+            throw new StateChangeFailedException("Controller %d epoch %d initiated state change of replica %d for partition %s " + "to %s failed because replica state machine has not started", controllerId, controller.epoch(), replicaId, topicAndPartition, targetState);
         try {
             Utils.getOrElseUpdate(replicaState, Tuple3.make(topic, partition, replicaId), ReplicaState.NonExistentReplica);
             Collection<Integer> replicaAssignment = controllerContext.partitionReplicaAssignment.get(topicAndPartition);
@@ -151,18 +146,14 @@ public class ReplicaStateMachine {
                     LeaderIsrAndControllerEpoch leaderIsrAndControllerEpoch = ZkUtils.getLeaderIsrAndEpochForPartition(zkClient, topic, partition);
                     if (leaderIsrAndControllerEpoch != null) {
                         if (leaderIsrAndControllerEpoch.leaderAndIsr.leader == replicaId)
-                            throw new StateChangeFailedException(String.format("Replica %d for partition %s cannot be moved to NewReplica",
-                                    replicaId, topicAndPartition) + "state as it is being requested to become leader");
-                        brokerRequestBatch.addLeaderAndIsrRequestForBrokers(Lists.newArrayList(replicaId),
-                                topic, partition, leaderIsrAndControllerEpoch,
-                                Sets.newHashSet(replicaAssignment));
+                            throw new StateChangeFailedException(String.format("Replica %d for partition %s cannot be moved to NewReplica", replicaId, topicAndPartition) + "state as it is being requested to become leader");
+                        brokerRequestBatch.addLeaderAndIsrRequestForBrokers(Lists.newArrayList(replicaId), topic, partition, leaderIsrAndControllerEpoch, Sets.newHashSet(replicaAssignment));
                     } else {
                         // new leader request will be sent to this replica when one gets elected
                     }
 
                     replicaState.put(Tuple3.make(topic, partition, replicaId), ReplicaState.NewReplica);
-                    stateChangeLogger.trace("Controller {} epoch {} changed state of replica {} for partition {} to NewReplica",
-                            controllerId, controller.epoch(), replicaId, topicAndPartition);
+                    stateChangeLogger.trace("Controller {} epoch {} changed state of replica {} for partition {} to NewReplica", controllerId, controller.epoch(), replicaId, topicAndPartition);
                     break;
                 case NonExistentReplica:
                     assertValidPreviousStates(topic, partition, replicaId, Lists.newArrayList(ReplicaState.OfflineReplica), targetState);
@@ -177,8 +168,7 @@ public class ReplicaStateMachine {
                         }
                     }));
                     replicaState.remove(Tuple3.make(topic, partition, replicaId));
-                    stateChangeLogger.trace("Controller {} epoch {} changed state of replica {} for partition {} to NonExistentReplica",
-                            controllerId, controller.epoch(), replicaId, topicAndPartition);
+                    stateChangeLogger.trace("Controller {} epoch {} changed state of replica {} for partition {} to NonExistentReplica", controllerId, controller.epoch(), replicaId, topicAndPartition);
                     break;
                 case OnlineReplica:
                     assertValidPreviousStates(topic, partition, replicaId, Lists.newArrayList(ReplicaState.NewReplica, ReplicaState.OnlineReplica, ReplicaState.OfflineReplica), targetState);
@@ -188,22 +178,18 @@ public class ReplicaStateMachine {
                         Collection<Integer> currentAssignedReplicas1 = controllerContext.partitionReplicaAssignment.get(topicAndPartition);
                         if (!currentAssignedReplicas1.contains(replicaId))
                             controllerContext.partitionReplicaAssignment.put(topicAndPartition, replicaId);
-                        stateChangeLogger.trace("Controller {} epoch {} changed state of replica {} for partition {} to OnlineReplica",
-                                controllerId, controller.epoch(), replicaId, topicAndPartition);
+                        stateChangeLogger.trace("Controller {} epoch {} changed state of replica {} for partition {} to OnlineReplica", controllerId, controller.epoch(), replicaId, topicAndPartition);
                     } else {
                         // check if the leader for this partition ever existed
                         LeaderIsrAndControllerEpoch leaderIsrAndControllerEpoch1 = controllerContext.partitionLeadershipInfo.get(topicAndPartition);
                         if (leaderIsrAndControllerEpoch1 != null) {
-                            brokerRequestBatch.addLeaderAndIsrRequestForBrokers(Lists.newArrayList(replicaId), topic, partition, leaderIsrAndControllerEpoch1,
-                                    Sets.newHashSet(replicaAssignment));
+                            brokerRequestBatch.addLeaderAndIsrRequestForBrokers(Lists.newArrayList(replicaId), topic, partition, leaderIsrAndControllerEpoch1, Sets.newHashSet(replicaAssignment));
                             replicaState.put(Tuple3.make(topic, partition, replicaId), ReplicaState.OnlineReplica);
-                            stateChangeLogger.trace("Controller {} epoch {} changed state of replica {} for partition {} to OnlineReplica",
-                                    controllerId, controller.epoch(), replicaId, topicAndPartition);
+                            stateChangeLogger.trace("Controller {} epoch {} changed state of replica {} for partition {} to OnlineReplica", controllerId, controller.epoch(), replicaId, topicAndPartition);
                         } else { // that means the partition was never in OnlinePartition state, this means the broker never
                             // started a log for that partition and does not have a high watermark value for this partition
                         }
                     }
-
 
                     replicaState.put(Tuple3.make(topic, partition, replicaId), ReplicaState.OnlineReplica);
                     break;
@@ -224,36 +210,27 @@ public class ReplicaStateMachine {
                             leaderAndIsrIsEmpty = true;
                         } else {
                             // send the shrunk ISR state change request only to the leader
-                            brokerRequestBatch.addLeaderAndIsrRequestForBrokers(Lists.newArrayList(updatedLeaderIsrAndControllerEpoch.leaderAndIsr.leader),
-                                    topic, partition, updatedLeaderIsrAndControllerEpoch, Sets.newHashSet(replicaAssignment));
+                            brokerRequestBatch.addLeaderAndIsrRequestForBrokers(Lists.newArrayList(updatedLeaderIsrAndControllerEpoch.leaderAndIsr.leader), topic, partition, updatedLeaderIsrAndControllerEpoch, Sets.newHashSet(replicaAssignment));
                             replicaState.put(Tuple3.make(topic, partition, replicaId), ReplicaState.OfflineReplica);
-                            stateChangeLogger.trace("Controller {} epoch {} changed state of replica {} for partition {} to OfflineReplica",
-                                    controllerId, controller.epoch(), replicaId, topicAndPartition);
+                            stateChangeLogger.trace("Controller {} epoch {} changed state of replica {} for partition {} to OfflineReplica", controllerId, controller.epoch(), replicaId, topicAndPartition);
                             leaderAndIsrIsEmpty = false;
                         }
 
                         if (leaderAndIsrIsEmpty)
-                            throw new StateChangeFailedException(
-                                    "Failed to change state of replica %d for partition %s since the leader and isr path in zookeeper is empty",
-                                    replicaId, topicAndPartition);
+                            throw new StateChangeFailedException("Failed to change state of replica %d for partition %s since the leader and isr path in zookeeper is empty", replicaId, topicAndPartition);
                     }
             }
         } catch (Throwable t) {
-            stateChangeLogger.error("Controller {} epoch {} initiated state change of replica {} for partition [{},{}] to {} failed",
-                    controllerId, controller.epoch(), replicaId, topic, partition, targetState, t);
+            stateChangeLogger.error("Controller {} epoch {} initiated state change of replica {} for partition [{},{}] to {} failed", controllerId, controller.epoch(), replicaId, topic, partition, targetState, t);
         }
     }
 
-    private void assertValidPreviousStates(String topic, int partition, int replicaId, List<ReplicaState> fromStates,
-                                           ReplicaState targetState) {
+    private void assertValidPreviousStates(String topic, int partition, int replicaId, List<ReplicaState> fromStates, ReplicaState targetState) {
         boolean contains = fromStates.contains(replicaState.get(Tuple3.make(topic, partition, replicaId)));
         if (!contains) {
-            throw new KafkaException(String.format("Replica %s for partition [%s,%d] should be in the %s states before moving to %s state",
-                    replicaId, topic, partition, fromStates, targetState) +
-                    String.format(". Instead it is in %s state", replicaState.get(Tuple3.make(topic, partition, replicaId))));
+            throw new KafkaException(String.format("Replica %s for partition [%s,%d] should be in the %s states before moving to %s state", replicaId, topic, partition, fromStates, targetState) + String.format(". Instead it is in %s state", replicaState.get(Tuple3.make(topic, partition, replicaId))));
         }
     }
-
 
     private void registerBrokerChangeListener() {
         zkClient.subscribeChildChanges(ZkUtils.BrokerIdsPath, new BrokerChangeListener());
@@ -271,11 +248,9 @@ public class ReplicaStateMachine {
             String topic = topicPartition.topic;
             int partition = topicPartition.partition;
 
-
             boolean contains = controllerContext.liveBrokerIds().contains(replicaId);
 
-            replicaState.put(Tuple3.make(topic, partition, replicaId),
-                    contains ? ReplicaState.OnlineReplica : ReplicaState.OfflineReplica);
+            replicaState.put(Tuple3.make(topic, partition, replicaId), contains ? ReplicaState.OnlineReplica : ReplicaState.OfflineReplica);
         }
     }
 
@@ -357,13 +332,12 @@ public class ReplicaStateMachine {
                                 Set<Integer> deadBrokerIds = Sets.newHashSet(controllerContext.liveOrShuttingDownBrokerIds());
                                 deadBrokerIds.removeAll(curBrokerIds);
 
-                                controllerContext.liveBrokers(Sets.newHashSet(Utils.filter(
-                                        Utils.mapList(curBrokerIds, new Function1<Integer, Broker>() {
-                                            @Override
-                                            public Broker apply(Integer _) {
-                                                return ZkUtils.getBrokerInfo(zkClient, _);
-                                            }
-                                        }), new Predicate<Broker>() {
+                                controllerContext.liveBrokers(Sets.newHashSet(Utils.filter(Utils.mapList(curBrokerIds, new Function1<Integer, Broker>() {
+                                    @Override
+                                    public Broker apply(Integer _) {
+                                        return ZkUtils.getBrokerInfo(zkClient, _);
+                                    }
+                                }), new Predicate<Broker>() {
                                     @Override
                                     public boolean apply(Broker _) {
                                         return _ != null;
@@ -371,8 +345,7 @@ public class ReplicaStateMachine {
                                 })));
 
                                 // curBrokerIds.map(ZkUtils.getBrokerInfo(zkClient, _)).filter(_.isDefined).map(_.get));
-                                logger.info("Newly added brokers: {}, deleted brokers: {}, all live brokers: {}",
-                                        newBrokerIds, deadBrokerIds, controllerContext.liveBrokerIds());
+                                logger.info("Newly added brokers: {}, deleted brokers: {}, all live brokers: {}", newBrokerIds, deadBrokerIds, controllerContext.liveBrokerIds());
                                 Utils.foreach(newBrokers, new Callable1<Broker>() {
                                     @Override
                                     public void apply(Broker _) {

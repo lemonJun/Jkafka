@@ -25,31 +25,27 @@ public class RequestChannel extends KafkaMetricsGroup {
         for (int i = 0; i < numProcessors; ++i)
             responseQueues[i] = new LinkedBlockingQueue<Response>();
 
-        newGauge("RequestQueueSize",
-                new Gauge<Integer>() {
-                    @Override
-                    public Integer value() {
-                        return requestQueue.size();
-                    }
-                });
+        newGauge("RequestQueueSize", new Gauge<Integer>() {
+            @Override
+            public Integer value() {
+                return requestQueue.size();
+            }
+        });
 
         for (int i = 0; i < numProcessors; ++i) {
             final int finalI = i;
-            newGauge(
-                    "Processor-" + i + "-ResponseQueueSize",
-                    new Gauge<Integer>() {
-                        @Override
-                        public Integer value() {
-                            return responseQueues[finalI].size();
-                        }
-                    });
+            newGauge("Processor-" + i + "-ResponseQueueSize", new Gauge<Integer>() {
+                @Override
+                public Integer value() {
+                    return responseQueues[finalI].size();
+                }
+            });
         }
     }
 
     private List<ResponseListener> responseListeners = Lists.newArrayList();
     private ArrayBlockingQueue<Request> requestQueue;
     private BlockingQueue<Response>[] responseQueues;
-
 
     /**
      * Send a request to be handled, potentially blocking until there is room in the queue for the request

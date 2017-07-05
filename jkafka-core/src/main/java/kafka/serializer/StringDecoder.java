@@ -23,7 +23,6 @@ public class StringDecoder implements Decoder<String> {
         encoding = (props == null) ? "UTF8" : props.getString("serializer.encoding", "UTF8");
     }
 
-
     @Override
     public String fromBytes(byte[] bytes) {
         try {

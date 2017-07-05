@@ -79,8 +79,7 @@ public class ConsumerIterator<K, V> extends IteratorTemplate<MessageAndMetadata<
                 long cdcFetchOffset = currentDataChunk.fetchOffset;
                 long ctiConsumeOffset = currentTopicInfo.getConsumeOffset();
                 if (ctiConsumeOffset < cdcFetchOffset) {
-                    logger.error("consumed offset: {} doesn't match fetch offset: {} for {};\n Consumer may lose data",
-                            ctiConsumeOffset, cdcFetchOffset, currentTopicInfo);
+                    logger.error("consumed offset: {} doesn't match fetch offset: {} for {};\n Consumer may lose data", ctiConsumeOffset, cdcFetchOffset, currentTopicInfo);
                     currentTopicInfo.resetConsumeOffset(cdcFetchOffset);
                 }
                 localCurrent = currentDataChunk.messages.iterator();
@@ -89,9 +88,7 @@ public class ConsumerIterator<K, V> extends IteratorTemplate<MessageAndMetadata<
             }
             // if we just updated the current chunk and it is empty that means the fetch size is too small!
             if (currentDataChunk.messages.validBytes() == 0)
-                throw new MessageSizeTooLargeException("Found a message larger than the maximum fetch size of this consumer on topic " +
-                        "%s partition %d at fetch offset %d. Increase the fetch size, or decrease the maximum message size the broker will allow.",
-                        currentDataChunk.topicInfo.topic, currentDataChunk.topicInfo.partitionId, currentDataChunk.fetchOffset);
+                throw new MessageSizeTooLargeException("Found a message larger than the maximum fetch size of this consumer on topic " + "%s partition %d at fetch offset %d. Increase the fetch size, or decrease the maximum message size the broker will allow.", currentDataChunk.topicInfo.topic, currentDataChunk.topicInfo.partitionId, currentDataChunk.fetchOffset);
         }
         MessageAndOffset item = localCurrent.next();
         // reject the messages that have already been consumed

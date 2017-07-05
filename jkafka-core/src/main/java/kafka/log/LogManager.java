@@ -53,15 +53,7 @@ public class LogManager {
      * <p/>
      * A background thread handles log retention by periodically truncating excess log segments.
      */
-    public LogManager(List<File> logDirs,
-                      Map<String, LogConfig> topicConfigs,
-                      LogConfig defaultConfig,
-                      CleanerConfig cleanerConfig,
-                      Long flushCheckMs,
-                      Long flushCheckpointMs,
-                      Long retentionCheckMs,
-                      Scheduler scheduler,
-                      Time time) {
+    public LogManager(List<File> logDirs, Map<String, LogConfig> topicConfigs, LogConfig defaultConfig, CleanerConfig cleanerConfig, Long flushCheckMs, Long flushCheckpointMs, Long retentionCheckMs, Scheduler scheduler, Time time) {
         this.logDirs = logDirs;
         this.topicConfigs = topicConfigs;
         this.defaultConfig = defaultConfig;
@@ -91,7 +83,6 @@ public class LogManager {
     public int InitialTaskDelayMs = 30 * 1000;
     private Object logCreationLock = new Object();
     private Pool<TopicAndPartition, Log> logs = new Pool<TopicAndPartition, Log>();
-
 
     private List<FileLock> dirLocks;
     private Map<File, OffsetCheckpoint> recoveryPointCheckpoints;
@@ -141,8 +132,7 @@ public class LogManager {
             public FileLock apply(File dir) {
                 FileLock lock = new FileLock(new File(dir, LockFile));
                 if (!lock.tryLock())
-                    throw new KafkaException("Failed to acquire lock on file .lock in " + lock.file.getParentFile().getAbsolutePath() +
-                            ". A Kafka instance in another process or thread is using this directory.");
+                    throw new KafkaException("Failed to acquire lock on file .lock in " + lock.file.getParentFile().getAbsolutePath() + ". A Kafka instance in another process or thread is using this directory.");
                 return lock;
             }
         });
@@ -154,7 +144,7 @@ public class LogManager {
     private void loadLogs(List<File> dirs) {
         for (File dir : dirs) {
             Map<TopicAndPartition, Long> recoveryPoints = this.recoveryPointCheckpoints.get(dir).read();
-      /* load the logs */
+            /* load the logs */
             File[] subDirs = dir.listFiles();
             if (subDirs != null) {
                 File cleanShutDownFile = new File(dir, Logs.CleanShutdownFile);
@@ -165,11 +155,7 @@ public class LogManager {
                         logger.info("Loading log '" + subDir.getName() + "'");
                         TopicAndPartition topicPartition = parseTopicPartitionName(subDir.getName());
                         LogConfig config = Utils.getOrElse(topicConfigs, topicPartition.topic, defaultConfig);
-                        Log log = new Log(subDir,
-                                config,
-                                Utils.getOrElse(recoveryPoints, topicPartition, 0L),
-                                scheduler,
-                                time);
+                        Log log = new Log(subDir, config, Utils.getOrElse(recoveryPoints, topicPartition, 0L), scheduler, time);
                         Log previous = this.logs.put(topicPartition, log);
                         if (previous != null)
                             throw new IllegalArgumentException(String.format("Duplicate log directories found: %s, %s!", log.dir.getAbsolutePath(), previous.dir.getAbsolutePath()));
@@ -184,7 +170,7 @@ public class LogManager {
      * Start the background threads to flush logs and do log cleanup
      */
     public void startup() {
-    /* Schedule the cleanup task to delete old logs */
+        /* Schedule the cleanup task to delete old logs */
         if (scheduler != null) {
             logger.info("Starting log cleanup with a period of {} ms.", retentionCheckMs);
             scheduler.schedule("kafka-log-retention", new Runnable() {
@@ -192,29 +178,20 @@ public class LogManager {
                 public void run() {
                     cleanupLogs();
                 }
-            },
-                    InitialTaskDelayMs,
-                    retentionCheckMs,
-                    TimeUnit.MILLISECONDS);
+            }, InitialTaskDelayMs, retentionCheckMs, TimeUnit.MILLISECONDS);
             logger.info("Starting log flusher with a default period of {} ms.", flushCheckMs);
             scheduler.schedule("kafka-log-flusher", new Runnable() {
                 @Override
                 public void run() {
                     flushDirtyLogs();
                 }
-            },
-                    InitialTaskDelayMs,
-                    flushCheckMs,
-                    TimeUnit.MILLISECONDS);
+            }, InitialTaskDelayMs, flushCheckMs, TimeUnit.MILLISECONDS);
             scheduler.schedule("kafka-recovery-point-checkpoint", new Runnable() {
                 @Override
                 public void run() {
                     checkpointRecoveryPointOffsets();
                 }
-            },
-                    InitialTaskDelayMs,
-                    flushCheckpointMs,
-                    TimeUnit.MILLISECONDS);
+            }, InitialTaskDelayMs, flushCheckpointMs, TimeUnit.MILLISECONDS);
         }
         if (cleanerConfig.enableCleaner)
             cleaner.startup();
@@ -338,23 +315,16 @@ public class LogManager {
             Log log = logs.get(topicAndPartition);
 
             // check if the log has already been created in another thread
-            if (log != null) return log;
+            if (log != null)
+                return log;
 
             // if not, create it
             File dataDir = nextLogDir();
             File dir = new File(dataDir, topicAndPartition.topic + "-" + topicAndPartition.partition);
             dir.mkdirs();
-            log = new Log(dir,
-                    config,
-                    /*recoveryPoint = */0L,
-                    scheduler,
-                    time);
+            log = new Log(dir, config, /*recoveryPoint = */0L, scheduler, time);
             logs.put(topicAndPartition, log);
-            logger.info("Created log for partition [{},{}] in {} with properties {{}}.",
-                    topicAndPartition.topic,
-                    topicAndPartition.partition,
-                    dataDir.getAbsolutePath(),
-                    config.toProps());
+            logger.info("Created log for partition [{},{}] in {} with properties {{}}.", topicAndPartition.topic, topicAndPartition.partition, dataDir.getAbsolutePath(), config.toProps());
             return log;
         }
     }
@@ -396,7 +366,6 @@ public class LogManager {
                 }
             }
 
-
             return new File(min);
         }
     }
@@ -420,7 +389,8 @@ public class LogManager {
      * is at least logRetentionSize bytes in size
      */
     private int cleanupSegmentsToMaintainSize(Log log) {
-        if (log.config.retentionSize < 0 || log.size() < log.config.retentionSize) return 0;
+        if (log.config.retentionSize < 0 || log.size() < log.config.retentionSize)
+            return 0;
 
         final AtomicLong diff = new AtomicLong(log.size() - log.config.retentionSize);
 
@@ -445,13 +415,13 @@ public class LogManager {
         int total = 0;
         long startMs = time.milliseconds();
         for (Log log : allLogs()) {
-            if (log.config.dedupe) continue;
+            if (log.config.dedupe)
+                continue;
 
             logger.debug("Garbage collecting '{}'", log.name());
             total += cleanupExpiredSegments(log) + cleanupSegmentsToMaintainSize(log);
         }
-        logger.debug("Log cleanup completed. " + total + " files deleted in " +
-                (time.milliseconds() - startMs) / 1000 + " seconds");
+        logger.debug("Log cleanup completed. " + total + " files deleted in " + (time.milliseconds() - startMs) / 1000 + " seconds");
     }
 
     /**
@@ -481,8 +451,7 @@ public class LogManager {
 
                 try {
                     long timeSinceLastFlush = time.milliseconds() - log.lastFlushTime();
-                    logger.debug("Checking if flush is needed on " + topicAndPartition.topic + " flush interval  " + log.config.flushMs +
-                            " last flushed " + log.lastFlushTime() + " time since last flush: " + timeSinceLastFlush);
+                    logger.debug("Checking if flush is needed on " + topicAndPartition.topic + " flush interval  " + log.config.flushMs + " last flushed " + log.lastFlushTime() + " time since last flush: " + timeSinceLastFlush);
                     if (timeSinceLastFlush >= log.config.flushMs)
                         log.flush();
                 } catch (Throwable e) {

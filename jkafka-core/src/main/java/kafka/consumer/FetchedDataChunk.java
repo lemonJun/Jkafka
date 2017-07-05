@@ -15,14 +15,19 @@ public class FetchedDataChunk {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
 
         FetchedDataChunk that = (FetchedDataChunk) o;
 
-        if (fetchOffset != that.fetchOffset) return false;
-        if (messages != null ? !messages.equals(that.messages) : that.messages != null) return false;
-        if (topicInfo != null ? !topicInfo.equals(that.topicInfo) : that.topicInfo != null) return false;
+        if (fetchOffset != that.fetchOffset)
+            return false;
+        if (messages != null ? !messages.equals(that.messages) : that.messages != null)
+            return false;
+        if (topicInfo != null ? !topicInfo.equals(that.topicInfo) : that.topicInfo != null)
+            return false;
 
         return true;
     }
@@ -37,10 +42,6 @@ public class FetchedDataChunk {
 
     @Override
     public String toString() {
-        return "FetchedDataChunk{" +
-                "messages=" + messages +
-                ", topicInfo=" + topicInfo +
-                ", fetchOffset=" + fetchOffset +
-                '}';
+        return "FetchedDataChunk{" + "messages=" + messages + ", topicInfo=" + topicInfo + ", fetchOffset=" + fetchOffset + '}';
     }
 }

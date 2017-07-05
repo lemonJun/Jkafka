@@ -30,7 +30,6 @@ public class FileLock {
         }
     }
 
-
     private FileChannel channel;
     private java.nio.channels.FileLock flock = null;
 

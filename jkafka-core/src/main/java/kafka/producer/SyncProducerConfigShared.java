@@ -15,8 +15,7 @@ public abstract class SyncProducerConfigShared {
         sendBufferBytes = props.getInt("send.buffer.bytes", 100 * 1024);
         clientId = props.getString("client.id", SyncProducerConfig.DefaultClientId);
         requestRequiredAcks = props.getShort("request.required.acks", SyncProducerConfig.DefaultRequiredAcks);
-        requestTimeoutMs = props.getIntInRange("request.timeout.ms", SyncProducerConfig.DefaultAckTimeoutMs,
-                Range.make(1, Integer.MAX_VALUE));
+        requestTimeoutMs = props.getIntInRange("request.timeout.ms", SyncProducerConfig.DefaultAckTimeoutMs, Range.make(1, Integer.MAX_VALUE));
     }
 
     public int sendBufferBytes;

@@ -23,24 +23,11 @@ public class SocketServer {
     public int recvBufferSize;
     public int maxRequestSize;
 
-    public SocketServer(int brokerId,
-                        String host,
-                        int port,
-                        int numProcessorThreads,
-                        int maxQueuedRequests,
-                        int sendBufferSize,
-                        int recvBufferSize) {
+    public SocketServer(int brokerId, String host, int port, int numProcessorThreads, int maxQueuedRequests, int sendBufferSize, int recvBufferSize) {
         this(brokerId, host, port, numProcessorThreads, maxQueuedRequests, sendBufferSize, recvBufferSize, Integer.MAX_VALUE);
     }
 
-    public SocketServer(int brokerId,
-                        String host,
-                        int port,
-                        int numProcessorThreads,
-                        int maxQueuedRequests,
-                        int sendBufferSize,
-                        int recvBufferSize,
-                        int maxRequestSize) {
+    public SocketServer(int brokerId, String host, int port, int numProcessorThreads, int maxQueuedRequests, int sendBufferSize, int recvBufferSize, int maxRequestSize) {
         this.brokerId = brokerId;
         this.host = host;
         this.port = port;

@@ -45,7 +45,8 @@ import kafka.utils.Utils;
 public abstract class AbstractFetcherThread extends ShutdownableThread {
     public String name, clientId;
     public Broker sourceBroker;
-    public int socketTimeout, socketBufferSize, fetchSize, fetcherBrokerId/* = -1*/, maxWait/* = 0*/, minBytes/* = 1*/;
+    public int socketTimeout, socketBufferSize, fetchSize,
+                    fetcherBrokerId/* = -1*/, maxWait/* = 0*/, minBytes/* = 1*/;
     public boolean isInterruptible/* = true*/;
 
     protected AbstractFetcherThread(String name, String clientId, Broker sourceBroker, int socketTimeout, int socketBufferSize, int fetchSize, int fetcherBrokerId, int maxWait, int minBytes, boolean isInterruptible) {
@@ -70,11 +71,7 @@ public abstract class AbstractFetcherThread extends ShutdownableThread {
         metricId = new ClientIdAndBroker(clientId, brokerInfo);
         fetcherStats = new FetcherStats(metricId);
         fetcherLagStats = new FetcherLagStats(metricId);
-        fetchRequestBuilder = new FetchRequestBuilder().
-                clientId(clientId).
-                replicaId(fetcherBrokerId).
-                maxWait(maxWait).
-                minBytes(minBytes);
+        fetchRequestBuilder = new FetchRequestBuilder().clientId(clientId).replicaId(fetcherBrokerId).maxWait(maxWait).minBytes(minBytes);
     }
 
     private Map<TopicAndPartition, Long> partitionMap = Maps.newHashMap(); // a (topic, partition) -> offset map
@@ -91,8 +88,7 @@ public abstract class AbstractFetcherThread extends ShutdownableThread {
     /* callbacks to be defined in subclass */
 
     // process fetched data
-    public abstract void processPartitionData(TopicAndPartition topicAndPartition, long fetchOffset,
-                                              FetchResponsePartitionData partitionData);
+    public abstract void processPartitionData(TopicAndPartition topicAndPartition, long fetchOffset, FetchResponsePartitionData partitionData);
 
     // handle a partition whose offset is out of range and return a new fetch offset
     public abstract long handleOffsetOutOfRange(TopicAndPartition topicAndPartition);
@@ -117,8 +113,7 @@ public abstract class AbstractFetcherThread extends ShutdownableThread {
                 Utils.foreach(partitionMap, new Callable2<TopicAndPartition, Long>() {
                     @Override
                     public void apply(TopicAndPartition topicAndPartition, Long offset) {
-                        fetchRequestBuilder.addFetch(topicAndPartition.topic, topicAndPartition.partition,
-                                offset, fetchSize);
+                        fetchRequestBuilder.addFetch(topicAndPartition.topic, topicAndPartition.partition, offset, fetchSize);
                     }
                 });
                 return null;
@@ -180,16 +175,14 @@ public abstract class AbstractFetcherThread extends ShutdownableThread {
                                             //    should get fixed in the subsequent fetches
                                             logger.warn("Found invalid messages during fetch for partition [{},{}] offset {} error {}", topic, partitionId, currentOffset, ime.getMessage());
                                         } catch (Throwable ex) {
-                                            throw new KafkaException(ex, "error processing data for partition [%s,%d] offset %d",
-                                                    topic, partitionId, currentOffset);
+                                            throw new KafkaException(ex, "error processing data for partition [%s,%d] offset %d", topic, partitionId, currentOffset);
                                         }
                                         break;
                                     case ErrorMapping.OffsetOutOfRangeCode:
                                         try {
                                             long newOffset = handleOffsetOutOfRange(topicAndPartition);
                                             partitionMap.put(topicAndPartition, newOffset);
-                                            logger.warn("Current offset {} for partition [{},{}] out of range; reset offset to {}",
-                                                    currentOffset, topic, partitionId, newOffset);
+                                            logger.warn("Current offset {} for partition [{},{}] out of range; reset offset to {}", currentOffset, topic, partitionId, newOffset);
                                         } catch (Throwable e) {
                                             logger.warn("Error getting offset for partition [{},{}] to broker {}", topic, partitionId, sourceBroker.id, e);
                                             partitionsWithError.add(topicAndPartition);
@@ -197,8 +190,7 @@ public abstract class AbstractFetcherThread extends ShutdownableThread {
                                         break;
                                     default:
                                         if (isRunning.get()) {
-                                            logger.warn("Error for partition [{},{}] to broker {}:{}", topic, partitionId, sourceBroker.id,
-                                                    ErrorMapping.exceptionFor(partitionData.error).getClass());
+                                            logger.warn("Error for partition [{},{}] to broker {}:{}", topic, partitionId, sourceBroker.id, ErrorMapping.exceptionFor(partitionData.error).getClass());
                                             partitionsWithError.add(topicAndPartition);
                                         }
                                 }
@@ -224,8 +216,7 @@ public abstract class AbstractFetcherThread extends ShutdownableThread {
                 long offset = entry.getValue();
                 // If the partitionMap already has the topic/partition, then do not update the map with the old offset
                 if (!partitionMap.containsKey(topicAndPartition))
-                    partitionMap.put(topicAndPartition,
-                            PartitionTopicInfo.isOffsetInvalid(offset) ? handleOffsetOutOfRange(topicAndPartition) : offset);
+                    partitionMap.put(topicAndPartition, PartitionTopicInfo.isOffsetInvalid(offset) ? handleOffsetOutOfRange(topicAndPartition) : offset);
             }
             partitionMapCond.signalAll();
         } finally {
@@ -233,7 +224,7 @@ public abstract class AbstractFetcherThread extends ShutdownableThread {
         }
     }
 
-    public void removePartitions(Set<TopicAndPartition> topicAndPartitions)  {
+    public void removePartitions(Set<TopicAndPartition> topicAndPartitions) {
         Utils.lockInterruptibly(partitionMapLock);
         try {
             Utils.foreach(topicAndPartitions, new Callable1<TopicAndPartition>() {
@@ -247,7 +238,7 @@ public abstract class AbstractFetcherThread extends ShutdownableThread {
         }
     }
 
-    public int partitionCount()  {
+    public int partitionCount() {
         Utils.lockInterruptibly(partitionMapLock);
         try {
             return partitionMap.size();
@@ -255,7 +246,6 @@ public abstract class AbstractFetcherThread extends ShutdownableThread {
             partitionMapLock.unlock();
         }
     }
-
 
     static class FetcherStats extends KafkaMetricsGroup {
         public ClientIdAndBroker metricId;
@@ -291,25 +281,21 @@ public abstract class AbstractFetcherThread extends ShutdownableThread {
         }
     }
 
-
     static class FetcherLagMetrics extends KafkaMetricsGroup {
         public ClientIdBrokerTopicPartition metricId;
 
         FetcherLagMetrics(ClientIdBrokerTopicPartition metricId) {
             this.metricId = metricId;
 
-            newGauge(
-                    metricId + "-ConsumerLag",
-                    new Gauge<Long>() {
-                        @Override
-                        public Long value() {
-                            return lagVal.get();
-                        }
-                    });
+            newGauge(metricId + "-ConsumerLag", new Gauge<Long>() {
+                @Override
+                public Long value() {
+                    return lagVal.get();
+                }
+            });
         }
 
         public AtomicLong lagVal = new AtomicLong(-1L);
-
 
         public void lag(long newLag) {
             lagVal.set(newLag);
@@ -319,7 +305,6 @@ public abstract class AbstractFetcherThread extends ShutdownableThread {
             return lagVal.get();
         }
     }
-
 
     static class ClientIdBrokerTopicPartition {
         public String clientId, brokerInfo, topic;
@@ -339,15 +324,21 @@ public abstract class AbstractFetcherThread extends ShutdownableThread {
 
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
+            if (this == o)
+                return true;
+            if (o == null || getClass() != o.getClass())
+                return false;
 
             ClientIdBrokerTopicPartition that = (ClientIdBrokerTopicPartition) o;
 
-            if (partitionId != that.partitionId) return false;
-            if (brokerInfo != null ? !brokerInfo.equals(that.brokerInfo) : that.brokerInfo != null) return false;
-            if (clientId != null ? !clientId.equals(that.clientId) : that.clientId != null) return false;
-            if (topic != null ? !topic.equals(that.topic) : that.topic != null) return false;
+            if (partitionId != that.partitionId)
+                return false;
+            if (brokerInfo != null ? !brokerInfo.equals(that.brokerInfo) : that.brokerInfo != null)
+                return false;
+            if (clientId != null ? !clientId.equals(that.clientId) : that.clientId != null)
+                return false;
+            if (topic != null ? !topic.equals(that.topic) : that.topic != null)
+                return false;
 
             return true;
         }

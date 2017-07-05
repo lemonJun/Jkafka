@@ -30,37 +30,14 @@ public class ControllerContext {
     public Set<String> allTopics;
     public Multimap<TopicAndPartition, Integer> partitionReplicaAssignment;
     public Map<TopicAndPartition, LeaderIsrAndControllerEpoch> partitionLeadershipInfo;
-    public Map<TopicAndPartition, ReassignedPartitionsContext>  partitionsBeingReassigned;
+    public Map<TopicAndPartition, ReassignedPartitionsContext> partitionsBeingReassigned;
     public Set<TopicAndPartition> partitionsUndergoingPreferredReplicaElection;
 
-    public ControllerContext(ZkClient zkClient,
-                             int zkSessionTimeout) {
-        this(zkClient, zkSessionTimeout, null, new Object(),
-                Sets.<Integer>newHashSet(), new Object(),
-                KafkaControllers.InitialControllerEpoch - 1,
-                KafkaControllers.InitialControllerEpochZkVersion - 1,
-                new AtomicInteger(0),
-                Sets.<String>newHashSet(),
-                HashMultimap.<TopicAndPartition, Integer>create(),
-                Maps.<TopicAndPartition, LeaderIsrAndControllerEpoch>newHashMap(),
-                Maps.<TopicAndPartition, ReassignedPartitionsContext>newHashMap(),
-                Sets.<TopicAndPartition>newHashSet());
+    public ControllerContext(ZkClient zkClient, int zkSessionTimeout) {
+        this(zkClient, zkSessionTimeout, null, new Object(), Sets.<Integer> newHashSet(), new Object(), KafkaControllers.InitialControllerEpoch - 1, KafkaControllers.InitialControllerEpochZkVersion - 1, new AtomicInteger(0), Sets.<String> newHashSet(), HashMultimap.<TopicAndPartition, Integer> create(), Maps.<TopicAndPartition, LeaderIsrAndControllerEpoch> newHashMap(), Maps.<TopicAndPartition, ReassignedPartitionsContext> newHashMap(), Sets.<TopicAndPartition> newHashSet());
     }
 
-    public ControllerContext(ZkClient zkClient,
-                             int zkSessionTimeout,
-                             ControllerChannelManager controllerChannelManager,
-                             Object controllerLock,
-                             Set<Integer> shuttingDownBrokerIds,
-                             Object brokerShutdownLock,
-                             int epoch,
-                             int epochZkVersion,
-                             AtomicInteger correlationId,
-                             Set<String> allTopics,
-                             Multimap<TopicAndPartition, Integer> partitionReplicaAssignment,
-                             Map<TopicAndPartition, LeaderIsrAndControllerEpoch> partitionLeadershipInfo,
-                             Map<TopicAndPartition, ReassignedPartitionsContext> partitionsBeingReassigned,
-                             Set<TopicAndPartition> partitionsUndergoingPreferredReplicaElection) {
+    public ControllerContext(ZkClient zkClient, int zkSessionTimeout, ControllerChannelManager controllerChannelManager, Object controllerLock, Set<Integer> shuttingDownBrokerIds, Object brokerShutdownLock, int epoch, int epochZkVersion, AtomicInteger correlationId, Set<String> allTopics, Multimap<TopicAndPartition, Integer> partitionReplicaAssignment, Map<TopicAndPartition, LeaderIsrAndControllerEpoch> partitionLeadershipInfo, Map<TopicAndPartition, ReassignedPartitionsContext> partitionsBeingReassigned, Set<TopicAndPartition> partitionsUndergoingPreferredReplicaElection) {
         this.zkClient = zkClient;
         this.zkSessionTimeout = zkSessionTimeout;
         this.controllerChannelManager = controllerChannelManager;
@@ -93,7 +70,7 @@ public class ControllerContext {
 
     // getter
     public Set<Broker> liveBrokers() {
-        return Utils.filterSet(liveBrokersUnderlying, new Predicate<Broker>(){
+        return Utils.filterSet(liveBrokersUnderlying, new Predicate<Broker>() {
             @Override
             public boolean apply(Broker broker) {
                 return !shuttingDownBrokerIds.contains(broker.id);

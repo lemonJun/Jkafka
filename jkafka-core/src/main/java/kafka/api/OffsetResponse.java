@@ -44,8 +44,7 @@ public class OffsetResponse extends RequestOrResponse {
                             }
                         });
 
-                        return Tuple2.make(new TopicAndPartition(topic, partition),
-                                new PartitionOffsetsResponse(error, offsets));
+                        return Tuple2.make(new TopicAndPartition(topic, partition), new PartitionOffsetsResponse(error, offsets));
                     }
                 });
             }
@@ -56,8 +55,7 @@ public class OffsetResponse extends RequestOrResponse {
 
     public Map<TopicAndPartition, PartitionOffsetsResponse> partitionErrorAndOffsets;
 
-    public OffsetResponse(int correlationId,
-                          Map<TopicAndPartition, PartitionOffsetsResponse> partitionOffsetResponseMap) {
+    public OffsetResponse(int correlationId, Map<TopicAndPartition, PartitionOffsetsResponse> partitionOffsetResponseMap) {
         super(correlationId);
         this.partitionErrorAndOffsets = partitionOffsetResponseMap;
 
@@ -83,25 +81,23 @@ public class OffsetResponse extends RequestOrResponse {
     @Override
     public int sizeInBytes() {
         return 4 + /* correlation id */
-                4  /* topic count */
-                + Utils.foldLeft(offsetsGroupedByTopic, 0, new Function3<Integer, String, Map<TopicAndPartition, PartitionOffsetsResponse>, Integer>() {
-            @Override
-            public Integer apply(Integer foldedTopics, String topic, Map<TopicAndPartition, PartitionOffsetsResponse> errorAndOffsetsMap) {
-                return foldedTopics + shortStringLength(topic) +
-                        4  /* partition count */
-                        + Utils.foldLeft(errorAndOffsetsMap, 0, new Function3<Integer, TopicAndPartition, PartitionOffsetsResponse, Integer>() {
-                    @Override
-                    public Integer apply(Integer foldedPartitions, TopicAndPartition arg2, PartitionOffsetsResponse arg3) {
-                        return foldedPartitions +
-                                4 + /* partition id */
-                                2 + /* partition error */
-                                4 + /* offset array length */
-                                arg3.offsets.size() * 8 /* offset */
-                                ;
-                    }
-                });
-            }
-        });
+                        4 /* topic count */
+                        + Utils.foldLeft(offsetsGroupedByTopic, 0, new Function3<Integer, String, Map<TopicAndPartition, PartitionOffsetsResponse>, Integer>() {
+                            @Override
+                            public Integer apply(Integer foldedTopics, String topic, Map<TopicAndPartition, PartitionOffsetsResponse> errorAndOffsetsMap) {
+                                return foldedTopics + shortStringLength(topic) + 4 /* partition count */
+                                                + Utils.foldLeft(errorAndOffsetsMap, 0, new Function3<Integer, TopicAndPartition, PartitionOffsetsResponse, Integer>() {
+                                                    @Override
+                                                    public Integer apply(Integer foldedPartitions, TopicAndPartition arg2, PartitionOffsetsResponse arg3) {
+                                                        return foldedPartitions + 4 + /* partition id */
+                                                        2 + /* partition error */
+                                                        4 + /* offset array length */
+                                                        arg3.offsets.size() * 8 /* offset */
+                                                        ;
+                                                    }
+                                                });
+                            }
+                        });
     }
 
     @Override
@@ -109,7 +105,7 @@ public class OffsetResponse extends RequestOrResponse {
         buffer.putInt(correlationId);
         buffer.putInt(offsetsGroupedByTopic.size()); // topic count
 
-        Utils.foreach(offsetsGroupedByTopic, new Callable2<String, Map<TopicAndPartition,PartitionOffsetsResponse>>() {
+        Utils.foreach(offsetsGroupedByTopic, new Callable2<String, Map<TopicAndPartition, PartitionOffsetsResponse>>() {
             @Override
             public void apply(String topic, Map<TopicAndPartition, PartitionOffsetsResponse> errorAndOffsetsMap) {
                 writeShortString(buffer, topic);

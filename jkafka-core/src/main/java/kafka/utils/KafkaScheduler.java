@@ -31,6 +31,7 @@ public class KafkaScheduler extends Scheduler {
     public KafkaScheduler(int threads, String threadNamePrefix) {
         this(threads, threadNamePrefix, true);
     }
+
     public KafkaScheduler(int threads) {
         this(threads, "kafka-scheduler-", true);
     }
@@ -73,8 +74,7 @@ public class KafkaScheduler extends Scheduler {
 
     @Override
     public void schedule(final String name, final Runnable fun, long delay, long period, TimeUnit unit) {
-        logger.debug("Scheduling task {} with initial delay {} ms and period {} ms.",
-                name, TimeUnit.MILLISECONDS.convert(delay, unit), TimeUnit.MILLISECONDS.convert(period, unit));
+        logger.debug("Scheduling task {} with initial delay {} ms and period {} ms.", name, TimeUnit.MILLISECONDS.convert(delay, unit), TimeUnit.MILLISECONDS.convert(period, unit));
         ensureStarted();
         Runnable runnable = new Runnable() {
             public void run() {

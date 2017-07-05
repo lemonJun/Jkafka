@@ -24,18 +24,11 @@ public class Request {
     public final long startTimeMs;
     public final SocketAddress remoteAddress /*= new InetSocketAddress(0)*/;
 
-    public Request(int processor,
-                   Object requestKey,
-                   ByteBuffer buffer,
-                   long startTimeMs) {
+    public Request(int processor, Object requestKey, ByteBuffer buffer, long startTimeMs) {
         this(processor, requestKey, buffer, startTimeMs, new InetSocketAddress(0));
     }
 
-    public Request(int processor,
-                   Object requestKey,
-                   ByteBuffer buffer,
-                   long startTimeMs,
-                   SocketAddress remoteAddress) {
+    public Request(int processor, Object requestKey, ByteBuffer buffer, long startTimeMs, SocketAddress remoteAddress) {
         this.processor = processor;
         this.requestKey = requestKey;
         this.buffer = buffer;
@@ -83,9 +76,7 @@ public class Request {
         List<RequestMetrics> metricsList = Lists.newArrayList(requestMetrics);
         if (requestId == RequestKeys.FetchKey) {
             boolean isFromFollower = ((FetchRequest) requestObj).isFromFollower();
-            metricsList.add(isFromFollower
-                    ? RequestMetrics.metricsMap.get(RequestMetrics.followFetchMetricName)
-                    : RequestMetrics.metricsMap.get(RequestMetrics.consumerFetchMetricName));
+            metricsList.add(isFromFollower ? RequestMetrics.metricsMap.get(RequestMetrics.followFetchMetricName) : RequestMetrics.metricsMap.get(RequestMetrics.consumerFetchMetricName));
         }
 
         for (RequestMetrics m : metricsList) {
@@ -97,7 +88,6 @@ public class Request {
             m.responseSendTimeHist.update(responseSendTime);
             m.totalTimeHist.update(totalTime);
         }
-        requestLogger.trace("Completed request:{} from client {};totalTime:{},requestQueueTime:{},localTime:{},remoteTime:{},responseQueueTime:{},sendTime:{}",
-                requestObj, remoteAddress, totalTime, requestQueueTime, apiLocalTime, apiRemoteTime, responseQueueTime, responseSendTime);
+        requestLogger.trace("Completed request:{} from client {};totalTime:{},requestQueueTime:{},localTime:{},remoteTime:{},responseQueueTime:{},sendTime:{}", requestObj, remoteAddress, totalTime, requestQueueTime, apiLocalTime, apiRemoteTime, responseQueueTime, responseSendTime);
     }
 }

@@ -9,6 +9,7 @@ package kafka.metrics;
  */
 public interface KafkaMetricsReporterMBean {
     void startReporter(long pollingPeriodInSeconds);
+
     void stopReporter();
 
     /**

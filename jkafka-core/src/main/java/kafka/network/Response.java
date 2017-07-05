@@ -17,10 +17,8 @@ public class Response {
         request.responseCompleteTimeMs = SystemTime.instance.milliseconds();
     }
 
-
     public Response(int processor, Request request, Send responseSend) {
-        this(processor, request, responseSend,
-                responseSend == null ? ResponseAction.NoOpAction : ResponseAction.SendAction);
+        this(processor, request, responseSend, responseSend == null ? ResponseAction.NoOpAction : ResponseAction.SendAction);
     }
 
     public Response(Request request, Send send) {

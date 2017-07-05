@@ -41,15 +41,11 @@ public class OffsetRequestReader implements RequestReader {
                         long time = buffer.getLong();
                         int maxNumOffsets = buffer.getInt();
 
-                        return Tuple2.make(
-                                new TopicAndPartition(topic, partitionId),
-                                new PartitionOffsetRequestInfo(time, maxNumOffsets)
-                        );
+                        return Tuple2.make(new TopicAndPartition(topic, partitionId), new PartitionOffsetRequestInfo(time, maxNumOffsets));
                     }
                 });
             }
         });
-
 
         return new OffsetRequest(pairs, versionId, correlationId, clientId, replicaId);
 

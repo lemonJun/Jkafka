@@ -21,7 +21,6 @@ public class PartitionStateInfos {
             }
         });
 
-
         int zkVersion = buffer.getInt();
         int replicationFactor = buffer.getInt();
         Set<Integer> replicas = Utils.flatSet(0, replicationFactor, new Function1<Integer, Integer>() {
@@ -31,10 +30,6 @@ public class PartitionStateInfos {
             }
         });
 
-
-        return new PartitionStateInfo(
-                new LeaderIsrAndControllerEpoch(
-                        new LeaderAndIsr(leader, leaderEpoch, isr, zkVersion), controllerEpoch),
-                replicas);
+        return new PartitionStateInfo(new LeaderIsrAndControllerEpoch(new LeaderAndIsr(leader, leaderEpoch, isr, zkVersion), controllerEpoch), replicas);
     }
 }

@@ -20,8 +20,7 @@ public class KafkaStream<K, V> implements Iterable<MessageAndMetadata<K, V>> {
         this.valueDecoder = valueDecoder;
         this.clientId = clientId;
 
-        iter =
-                new ConsumerIterator<K, V>(queue, consumerTimeoutMs, keyDecoder, valueDecoder, clientId);
+        iter = new ConsumerIterator<K, V>(queue, consumerTimeoutMs, keyDecoder, valueDecoder, clientId);
     }
 
     private ConsumerIterator<K, V> iter;

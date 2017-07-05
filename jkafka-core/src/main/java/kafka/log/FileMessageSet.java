@@ -25,7 +25,7 @@ import kafka.utils.NonThreadSafe;
 import kafka.utils.Utils;
 
 @NonThreadSafe
-public class FileMessageSet extends MessageSet implements Closeable{
+public class FileMessageSet extends MessageSet implements Closeable {
     public volatile File file;
     FileChannel channel;
     private final int start;
@@ -55,12 +55,10 @@ public class FileMessageSet extends MessageSet implements Closeable{
     /* the size of the message set in bytes */
     private AtomicInteger _size;
 
-
     public void init() {
         try {
-            _size = (isSlice)
-                    ? new AtomicInteger(end - start) // don't check the file size if this is just a slice view
-                    : new AtomicInteger(Math.min((int) channel.size(), end) - start);
+            _size = (isSlice) ? new AtomicInteger(end - start) // don't check the file size if this is just a slice view
+                            : new AtomicInteger(Math.min((int) channel.size(), end) - start);
 
             /* if this is not a slice, update the file pointer to the end of the file */
             if (!isSlice)
@@ -82,7 +80,7 @@ public class FileMessageSet extends MessageSet implements Closeable{
      * Create a file message set with no slicing
      */
     public FileMessageSet(File file) {
-        this(file, Utils.openChannel(file,/* mutable = */true));
+        this(file, Utils.openChannel(file, /* mutable = */true));
     }
 
     /**
@@ -115,10 +113,7 @@ public class FileMessageSet extends MessageSet implements Closeable{
             throw new IllegalArgumentException("Invalid position: " + position);
         if (size < 0)
             throw new IllegalArgumentException("Invalid size: " + size);
-        return new FileMessageSet(file,
-                channel,
-                /*start = */this.start + position,
-                /*end = */Math.min(this.start + position + size, sizeInBytes()));
+        return new FileMessageSet(file, channel, /*start = */this.start + position, /*end = */Math.min(this.start + position + size, sizeInBytes()));
     }
 
     /**
@@ -137,9 +132,7 @@ public class FileMessageSet extends MessageSet implements Closeable{
                 buffer.rewind();
                 channel.read(buffer, position);
                 if (buffer.hasRemaining())
-                    throw new IllegalStateException(String.format(
-                            "Failed to read complete buffer for targetOffset %d startPosition %d in %s"
-                            , targetOffset, startingPosition, file.getAbsolutePath()));
+                    throw new IllegalStateException(String.format("Failed to read complete buffer for targetOffset %d startPosition %d in %s", targetOffset, startingPosition, file.getAbsolutePath()));
                 buffer.rewind();
                 long offset = buffer.getLong();
                 if (offset >= targetOffset)
@@ -171,13 +164,10 @@ public class FileMessageSet extends MessageSet implements Closeable{
             // Ensure that the underlying size has not changed.
             int newSize = (int) (Math.min(channel.size(), end) - start);
             if (newSize < _size.get()) {
-                throw new KafkaException(String.format(
-                        "Size of FileMessageSet %s has been truncated during write: old size %d, new size %d"
-                        , file.getAbsolutePath(), _size.get(), newSize));
+                throw new KafkaException(String.format("Size of FileMessageSet %s has been truncated during write: old size %d, new size %d", file.getAbsolutePath(), _size.get(), newSize));
             }
             int bytesTransferred = (int) channel.transferTo(start + writePosition, Math.min(size, sizeInBytes()), destChannel);
-            logger.trace("FileMessageSet {} : bytes transferred : {} bytes requested for transfer : {}",
-                    file.getAbsolutePath(), bytesTransferred, Math.min(size, sizeInBytes()));
+            logger.trace("FileMessageSet {} : bytes transferred : {} bytes requested for transfer : {}", file.getAbsolutePath(), bytesTransferred, Math.min(size, sizeInBytes()));
             return bytesTransferred;
         } catch (IOException e) {
             throw new KafkaException(e);
@@ -287,8 +277,7 @@ public class FileMessageSet extends MessageSet implements Closeable{
     public int truncateTo(int targetSize) {
         int originalSize = sizeInBytes();
         if (targetSize > originalSize || targetSize < 0)
-            throw new KafkaException("Attempt to truncate log segment to %d bytes failed, " +
-                    " size of this log segment is %d bytes.", targetSize, originalSize);
+            throw new KafkaException("Attempt to truncate log segment to %d bytes failed, " + " size of this log segment is %d bytes.", targetSize, originalSize);
         Utils.truncate(channel, targetSize);
         Utils.position(channel, targetSize);
         _size.set(targetSize);

@@ -34,7 +34,6 @@ public class ControlledShutdownResponse extends RequestOrResponse {
     public short errorCode; /* ErrorMapping.NoError,*/
     public Set<TopicAndPartition> partitionsRemaining;
 
-
     public ControlledShutdownResponse(int correlationId, Set<TopicAndPartition> partitionsRemaining) {
         this(correlationId, ErrorMapping.NoError, partitionsRemaining);
     }
@@ -49,16 +48,13 @@ public class ControlledShutdownResponse extends RequestOrResponse {
 
     @Override
     public int sizeInBytes() {
-        return 4 /* correlation id */ +
-                2 /* error code */ +
-                4 /* number of responses */
-                + Utils.foldLeft(partitionsRemaining, 0, new Function2<Integer, TopicAndPartition, Integer>() {
-            @Override
-            public Integer apply(Integer arg1, TopicAndPartition topicAndPartition) {
-                return arg1 + 2 + topicAndPartition.topic.length() /* topic */ +
-                        4 /* partition */;
-            }
-        });
+        return 4 /* correlation id */ + 2 /* error code */ + 4 /* number of responses */
+                        + Utils.foldLeft(partitionsRemaining, 0, new Function2<Integer, TopicAndPartition, Integer>() {
+                            @Override
+                            public Integer apply(Integer arg1, TopicAndPartition topicAndPartition) {
+                                return arg1 + 2 + topicAndPartition.topic.length() /* topic */ + 4 /* partition */;
+                            }
+                        });
     }
 
     @Override

@@ -1,6 +1,5 @@
 package kafka.message;
 
-
 public class NoCompressionCodec implements CompressionCodec {
     public static final CompressionCodec instance = new NoCompressionCodec();
 

@@ -1,6 +1,5 @@
 package kafka.controller;
 
-
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
@@ -48,20 +47,16 @@ public class ControlledShutdownLeaderSelector implements PartitionLeaderSelector
         List<Integer> newIsr = Utils.filter(currentLeaderAndIsr.isr, new Predicate<Integer>() {
             @Override
             public boolean apply(Integer brokerId) {
-                return brokerId != currentLeader &&
-                        !controllerContext.shuttingDownBrokerIds.contains(brokerId);
+                return brokerId != currentLeader && !controllerContext.shuttingDownBrokerIds.contains(brokerId);
             }
         });
 
         Integer newLeader = Utils.head(newIsr);
         if (newLeader != null) {
-            logger.debug("Partition {} : current leader = {}, new leader = {}",
-                    topicAndPartition, currentLeader, newLeader);
-            return Tuple2.make(new LeaderAndIsr(newLeader, currentLeaderEpoch + 1, newIsr, currentLeaderIsrZkPathVersion + 1),
-                    liveAssignedReplicas);
+            logger.debug("Partition {} : current leader = {}, new leader = {}", topicAndPartition, currentLeader, newLeader);
+            return Tuple2.make(new LeaderAndIsr(newLeader, currentLeaderEpoch + 1, newIsr, currentLeaderIsrZkPathVersion + 1), liveAssignedReplicas);
         }
 
-        throw new StateChangeFailedException("No other replicas in ISR %s for %s besides current leader %d and" +
-                " shutting down brokers %s", currentLeaderAndIsr.isr, topicAndPartition, currentLeader, controllerContext.shuttingDownBrokerIds);
+        throw new StateChangeFailedException("No other replicas in ISR %s for %s besides current leader %d and" + " shutting down brokers %s", currentLeaderAndIsr.isr, topicAndPartition, currentLeader, controllerContext.shuttingDownBrokerIds);
     }
 }

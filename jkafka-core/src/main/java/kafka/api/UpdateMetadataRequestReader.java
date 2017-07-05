@@ -31,7 +31,6 @@ public class UpdateMetadataRequestReader implements RequestReader {
         int controllerEpoch = buffer.getInt();
         int partitionStateInfosCount = buffer.getInt();
 
-
         Map<TopicAndPartition, PartitionStateInfo> partitionStateInfos = Utils.flatMap(0, partitionStateInfosCount, new Function0<Tuple2<TopicAndPartition, PartitionStateInfo>>() {
             @Override
             public Tuple2<TopicAndPartition, PartitionStateInfo> apply() {
@@ -43,7 +42,6 @@ public class UpdateMetadataRequestReader implements RequestReader {
             }
         });
 
-
         int numAliveBrokers = buffer.getInt();
         Set<Broker> aliveBrokers = Utils.flatSet(0, numAliveBrokers, new Function1<Integer, Broker>() {
             @Override
@@ -52,7 +50,6 @@ public class UpdateMetadataRequestReader implements RequestReader {
             }
         });
 
-        return new UpdateMetadataRequest(versionId, correlationId, clientId, controllerId, controllerEpoch,
-                partitionStateInfos, aliveBrokers);
+        return new UpdateMetadataRequest(versionId, correlationId, clientId, controllerId, controllerEpoch, partitionStateInfos, aliveBrokers);
     }
 }

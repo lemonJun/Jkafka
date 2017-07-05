@@ -15,7 +15,6 @@ import kafka.utils.Utils;
 public class FetchResponseSend extends Send {
     public FetchResponse fetchResponse;
 
-
     public static class FetchResponseDataSend extends MultiSend<TopicDataSend> {
         protected FetchResponseDataSend(FetchResponse fetchResponse, List<TopicDataSend> sends) {
             super(sends);
@@ -34,19 +33,17 @@ public class FetchResponseSend extends Send {
         buffer.putInt(fetchResponse.dataGroupedByTopic.size()); // topic count
         buffer.rewind();
 
-        sends = new FetchResponseDataSend(fetchResponse, Utils.mapList(fetchResponse.dataGroupedByTopic,
-                new Function2<String, Map<TopicAndPartition, FetchResponsePartitionData>, TopicDataSend>() {
+        sends = new FetchResponseDataSend(fetchResponse, Utils.mapList(fetchResponse.dataGroupedByTopic, new Function2<String, Map<TopicAndPartition, FetchResponsePartitionData>, TopicDataSend>() {
+            @Override
+            public TopicDataSend apply(String topic, Map<TopicAndPartition, FetchResponsePartitionData> data) {
+                return new TopicDataSend(new TopicData(topic, Utils.map(data, new Function2<TopicAndPartition, FetchResponsePartitionData, Tuple2<Integer, FetchResponsePartitionData>>() {
                     @Override
-                    public TopicDataSend apply(String topic, Map<TopicAndPartition, FetchResponsePartitionData> data) {
-                        return new TopicDataSend(new TopicData(topic, Utils.map(data, new Function2<TopicAndPartition, FetchResponsePartitionData, Tuple2<Integer, FetchResponsePartitionData>>() {
-                            @Override
-                            public Tuple2<Integer, FetchResponsePartitionData> apply(TopicAndPartition arg1, FetchResponsePartitionData arg2) {
-                                return Tuple2.make(arg1.partition, arg2);
-                            }
-                        })));
+                    public Tuple2<Integer, FetchResponsePartitionData> apply(TopicAndPartition arg1, FetchResponsePartitionData arg2) {
+                        return Tuple2.make(arg1.partition, arg2);
                     }
-                }
-        ));
+                })));
+            }
+        }));
     }
 
     private int size;
@@ -61,7 +58,6 @@ public class FetchResponseSend extends Send {
     }
 
     private ByteBuffer buffer;
-
 
     public MultiSend<TopicDataSend> sends;
 

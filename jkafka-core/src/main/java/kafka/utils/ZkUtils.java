@@ -97,14 +97,16 @@ public abstract class ZkUtils {
         List<String> brokerIds = ZkUtils.getChildrenParentMayNotExist(zkClient, ZkUtils.BrokerIdsPath);
 
         List<Broker> brokers = Lists.newArrayList();
-        if (brokerIds == null) return brokers;
+        if (brokerIds == null)
+            return brokers;
 
         Collections.sort(brokerIds);
 
         for (String brokerId : brokerIds) {
             int brokerInt = Integer.parseInt(brokerId);
             Broker brokerInfo = getBrokerInfo(zkClient, brokerInt);
-            if (brokerInfo != null) brokers.add(brokerInfo);
+            if (brokerInfo != null)
+                brokers.add(brokerInfo);
         }
 
         return brokers;
@@ -116,7 +118,8 @@ public abstract class ZkUtils {
         String leaderAndIsrStr = leaderAndIsrInfo._1;
         Stat stat = leaderAndIsrInfo._2;
 
-        if (leaderAndIsrStr == null) return null;
+        if (leaderAndIsrStr == null)
+            return null;
 
         return parseLeaderAndIsr(leaderAndIsrStr, topic, partition, stat);
     }
@@ -132,7 +135,8 @@ public abstract class ZkUtils {
 
     public static LeaderIsrAndControllerEpoch parseLeaderAndIsr(String leaderAndIsrStr, String topic, int partition, Stat stat) {
         JSONObject leaderIsrAndEpochInfo = Json.parseFull(leaderAndIsrStr);
-        if (leaderIsrAndEpochInfo == null) return null;
+        if (leaderIsrAndEpochInfo == null)
+            return null;
 
         int leader = leaderIsrAndEpochInfo.getIntValue("leader");
         int epoch = leaderIsrAndEpochInfo.getIntValue("leader_epoch");
@@ -140,18 +144,19 @@ public abstract class ZkUtils {
         List<Integer> isr = (List<Integer>) leaderIsrAndEpochInfo.get("isr");
         int controllerEpoch = leaderIsrAndEpochInfo.getIntValue("controller_epoch");
         int zkPathVersion = stat.getVersion();
-        logger.debug("Leader {}, Epoch {}, Isr {}, Zk path version {} for partition [{},{}]", leader, epoch,
-                isr.toString(), zkPathVersion, topic, partition);
+        logger.debug("Leader {}, Epoch {}, Isr {}, Zk path version {} for partition [{},{}]", leader, epoch, isr.toString(), zkPathVersion, topic, partition);
         return new LeaderIsrAndControllerEpoch(new LeaderAndIsr(leader, epoch, isr, zkPathVersion), controllerEpoch);
 
     }
 
     public static Integer getLeaderForPartition(ZkClient zkClient, String topic, int partition) {
         String leaderAndIsr = readDataMaybeNull(zkClient, getTopicPartitionLeaderAndIsrPath(topic, partition))._1;
-        if (leaderAndIsr == null) return null;
+        if (leaderAndIsr == null)
+            return null;
 
         JSONObject m = Json.parseFull(leaderAndIsr);
-        if (m == null) return null;
+        if (m == null)
+            return null;
 
         return m.getIntValue("leader");
     }
@@ -164,13 +169,11 @@ public abstract class ZkUtils {
     public static int getEpochForPartition(ZkClient zkClient, String topic, int partition) {
         String leaderAndIsr = readDataMaybeNull(zkClient, getTopicPartitionLeaderAndIsrPath(topic, partition))._1;
         if (leaderAndIsr == null)
-            throw new NoEpochForPartitionException("No epoch, ISR path for partition [%s,%d] is empty"
-                    , topic, partition);
+            throw new NoEpochForPartitionException("No epoch, ISR path for partition [%s,%d] is empty", topic, partition);
 
         JSONObject m = Json.parseFull(leaderAndIsr);
         if (m == null)
             throw new NoEpochForPartitionException("No epoch, leaderAndISR data for partition [%s,%d] is invalid", topic, partition);
-
 
         return m.getIntValue("leader_epoch");
     }
@@ -181,11 +184,12 @@ public abstract class ZkUtils {
     public static List<Integer> getInSyncReplicasForPartition(ZkClient zkClient, String topic, int partition) {
         String leaderAndIsr = readDataMaybeNull(zkClient, getTopicPartitionLeaderAndIsrPath(topic, partition))._1;
         List<Integer> isr = Lists.newArrayList();
-        if (leaderAndIsr == null) return isr;
-
+        if (leaderAndIsr == null)
+            return isr;
 
         JSONObject m = Json.parseFull(leaderAndIsr);
-        if (m == null) return isr;
+        if (m == null)
+            return isr;
 
         return (List<Integer>) m.get("isr");
     }
@@ -196,14 +200,16 @@ public abstract class ZkUtils {
     public static List<Integer> getReplicasForPartition(ZkClient zkClient, String topic, int partition) {
         String jsonPartitionMap = readDataMaybeNull(zkClient, getTopicPath(topic))._1;
         List<Integer> ar = Lists.newArrayList();
-        if (jsonPartitionMap == null) return ar;
-
+        if (jsonPartitionMap == null)
+            return ar;
 
         JSONObject m = Json.parseFull(jsonPartitionMap);
-        if (m == null) return ar;
+        if (m == null)
+            return ar;
 
         JSONObject replicaMap = m.getJSONObject("partitions");
-        if (replicaMap == null) return ar;
+        if (replicaMap == null)
+            return ar;
 
         return (List<Integer>) replicaMap.get("" + partition);
     }
@@ -221,19 +227,15 @@ public abstract class ZkUtils {
         Broker expectedBroker = new Broker(id, host, port);
 
         try {
-            createEphemeralPathExpectConflictHandleZKBug(zkClient, brokerIdPath, brokerInfo, expectedBroker,
-                    new Function2<String, Object, Boolean>() {
-                        @Override
-                        public Boolean apply(String brokerString, Object broker) {
-                            return Brokers.createBroker(((Broker) broker).id, brokerString).equals(broker);
-                        }
-                    }, timeout);
+            createEphemeralPathExpectConflictHandleZKBug(zkClient, brokerIdPath, brokerInfo, expectedBroker, new Function2<String, Object, Boolean>() {
+                @Override
+                public Boolean apply(String brokerString, Object broker) {
+                    return Brokers.createBroker(((Broker) broker).id, brokerString).equals(broker);
+                }
+            }, timeout);
 
         } catch (ZkNodeExistsException e) {
-            throw new RuntimeException("A broker is already registered on the path " + brokerIdPath
-                    + ". This probably " + "indicates that you either have configured a brokerid that is already in use, or "
-                    + "else you have shutdown this broker and restarted it faster than the zookeeper "
-                    + "timeout so it appears to be re-registering.");
+            throw new RuntimeException("A broker is already registered on the path " + brokerIdPath + ". This probably " + "indicates that you either have configured a brokerid that is already in use, or " + "else you have shutdown this broker and restarted it faster than the zookeeper " + "timeout so it appears to be re-registering.");
         }
         logger.info("Registered broker {} at path {} with address {}:{}.", id, brokerIdPath, host, port);
     }
@@ -243,10 +245,8 @@ public abstract class ZkUtils {
         return topicDirs.consumerOwnerDir() + "/" + partition;
     }
 
-
     public static String leaderAndIsrZkData(LeaderAndIsr leaderAndIsr, int controllerEpoch) {
-        return Json.encode(ImmutableMap.of("version", 1, "leader", leaderAndIsr.leader, "leader_epoch", leaderAndIsr.leaderEpoch,
-                "controller_epoch", controllerEpoch, "isr", leaderAndIsr.isr));
+        return Json.encode(ImmutableMap.of("version", 1, "leader", leaderAndIsr.leader, "leader_epoch", leaderAndIsr.leaderEpoch, "controller_epoch", controllerEpoch, "isr", leaderAndIsr.isr));
     }
 
     /**
@@ -322,10 +322,7 @@ public abstract class ZkUtils {
      * If the checker function returns true then the above bug might be encountered, back off and retry;
      * otherwise re-throw the exception
      */
-    public static void createEphemeralPathExpectConflictHandleZKBug(ZkClient zkClient, String path, String data,
-                                                                    Object expectedCallerData,
-                                                                    Function2<String, Object, Boolean> checker,
-                                                                    int backoffTime) {
+    public static void createEphemeralPathExpectConflictHandleZKBug(ZkClient zkClient, String path, String data, Object expectedCallerData, Function2<String, Object, Boolean> checker, int backoffTime) {
         while (true) {
             try {
                 createEphemeralPathExpectConflict(zkClient, path, data);
@@ -339,8 +336,7 @@ public abstract class ZkUtils {
                     // the node disappeared; retry creating the ephemeral node immediately
                 } else {
                     if (checker.apply(writtenData, expectedCallerData)) {
-                        logger.info("I wrote this conflicted ephemeral node [{}] at {} a while back in a different session, "
-                                + "hence I will backoff for this node to be deleted by Zookeeper and retry", data, path);
+                        logger.info("I wrote this conflicted ephemeral node [{}] at {} a while back in a different session, " + "hence I will backoff for this node to be deleted by Zookeeper and retry", data, path);
                         SystemTime.instance.sleep(backoffTime);
                     } else {
                         throw e;
@@ -399,12 +395,10 @@ public abstract class ZkUtils {
     public static Tuple2<Boolean, Integer> conditionalUpdatePersistentPath(ZkClient client, String path, String data, int expectVersion) {
         try {
             Stat stat = client.writeDataReturnStat(path, data, expectVersion);
-            logger.debug("Conditional update of path {} with value {} and expected version {} succeeded, returning the new version: {}"
-                    , path, data, expectVersion, stat.getVersion());
+            logger.debug("Conditional update of path {} with value {} and expected version {} succeeded, returning the new version: {}", path, data, expectVersion, stat.getVersion());
             return Tuple2.make(true, stat.getVersion());
         } catch (Exception e) {
-            logger.error("Conditional update of path {} with data {} and expected version {} failed due to {}", path, data,
-                    expectVersion, e.getMessage());
+            logger.error("Conditional update of path {} with data {} and expected version {} failed due to {}", path, data, expectVersion, e.getMessage());
             return Tuple2.make(false, -1);
         }
     }
@@ -416,14 +410,12 @@ public abstract class ZkUtils {
     public static Tuple2<Boolean, Integer> conditionalUpdatePersistentPathIfExists(ZkClient client, String path, String data, int expectVersion) {
         try {
             Stat stat = client.writeDataReturnStat(path, data, expectVersion);
-            logger.debug("Conditional update of path {} with value {} and expected version {} succeeded, returning the new version: {}"
-                    , path, data, expectVersion, stat.getVersion());
+            logger.debug("Conditional update of path {} with value {} and expected version {} succeeded, returning the new version: {}", path, data, expectVersion, stat.getVersion());
             return Tuple2.make(true, stat.getVersion());
         } catch (ZkNoNodeException nne) {
             throw nne;
         } catch (Exception e) {
-            logger.error("Conditional update of path {} with data {} and expected version {} failed due to {}", path, data,
-                    expectVersion, e.getMessage());
+            logger.error("Conditional update of path {} with data {} and expected version {} failed due to {}", path, data, expectVersion, e.getMessage());
             return Tuple2.make(false, -1);
         }
     }
@@ -521,12 +513,10 @@ public abstract class ZkUtils {
         return cluster;
     }
 
-    public static Map<TopicAndPartition, LeaderIsrAndControllerEpoch>
-    getPartitionLeaderAndIsrForTopics(ZkClient zkClient, Set<TopicAndPartition> topicAndPartitions) {
+    public static Map<TopicAndPartition, LeaderIsrAndControllerEpoch> getPartitionLeaderAndIsrForTopics(ZkClient zkClient, Set<TopicAndPartition> topicAndPartitions) {
         Map<TopicAndPartition, LeaderIsrAndControllerEpoch> ret = Maps.newHashMap();
         for (TopicAndPartition topicAndPartition : topicAndPartitions) {
-            LeaderIsrAndControllerEpoch leaderIsrAndControllerEpoch = ZkUtils.getLeaderIsrAndEpochForPartition(zkClient,
-                    topicAndPartition.topic, topicAndPartition.partition);
+            LeaderIsrAndControllerEpoch leaderIsrAndControllerEpoch = ZkUtils.getLeaderIsrAndEpochForPartition(zkClient, topicAndPartition.topic, topicAndPartition.partition);
             if (leaderIsrAndControllerEpoch != null)
                 ret.put(topicAndPartition, leaderIsrAndControllerEpoch);
         }
@@ -539,10 +529,12 @@ public abstract class ZkUtils {
 
         for (String topic : topics) {
             String jsonPartitionMap = readDataMaybeNull(zkClient, getTopicPath(topic))._1;
-            if (jsonPartitionMap == null) continue;
+            if (jsonPartitionMap == null)
+                continue;
 
             JSONObject m = Json.parseFull(jsonPartitionMap);
-            if (m == null) continue;
+            if (m == null)
+                continue;
 
             Map<String, Object> repl = (Map<String, Object>) m.get("partitions");
             for (Map.Entry<String, Object> entry : repl.entrySet()) {
@@ -570,8 +562,7 @@ public abstract class ZkUtils {
                 Map<String, Object> partitions = (Map<String, Object>) m.get("partitions");
                 if (partitions != null) {
                     for (Map.Entry<String, Object> entry : partitions.entrySet()) {
-                        partitionMap.putAll(Integer.parseInt(entry.getKey()),
-                                (List<Integer>) entry.getValue());
+                        partitionMap.putAll(Integer.parseInt(entry.getKey()), (List<Integer>) entry.getValue());
                     }
                 }
             }
@@ -582,8 +573,7 @@ public abstract class ZkUtils {
         return ret;
     }
 
-    public static Multimap<Tuple2<String, Integer>, Integer>
-    getReplicaAssignmentFromPartitionAssignment(Map<String, Multimap<Integer, Integer>> topicPartitionAssignment) {
+    public static Multimap<Tuple2<String, Integer>, Integer> getReplicaAssignmentFromPartitionAssignment(Map<String, Multimap<Integer, Integer>> topicPartitionAssignment) {
         Multimap<Tuple2<String, Integer>, Integer> ret = HashMultimap.create();
 
         for (String topic : topicPartitionAssignment.keySet()) {
@@ -613,11 +603,8 @@ public abstract class ZkUtils {
         return ret;
     }
 
-    public static List<Tuple2<String, Integer>> getPartitionsAssignedToBroker(ZkClient zkClient,
-                                                                              List<String> topics,
-                                                                              int brokerId) {
-        Map<String, Multimap<Integer, Integer>> topicsAndPartitions
-                = getPartitionAssignmentForTopics(zkClient, topics);
+    public static List<Tuple2<String, Integer>> getPartitionsAssignedToBroker(ZkClient zkClient, List<String> topics, int brokerId) {
+        Map<String, Multimap<Integer, Integer>> topicsAndPartitions = getPartitionAssignmentForTopics(zkClient, topics);
 
         List<Tuple2<String, Integer>> ret = Lists.newArrayList();
 
@@ -627,9 +614,9 @@ public abstract class ZkUtils {
 
             for (Integer partition : partitionMap.keySet()) {
                 Collection<Integer> brokerIds = partitionMap.get(partition);
-                if (brokerIds.contains(brokerId)) ret.add(Tuple2.make(topic, partition));
+                if (brokerIds.contains(brokerId))
+                    ret.add(Tuple2.make(topic, partition));
             }
-
 
         }
 
@@ -641,8 +628,8 @@ public abstract class ZkUtils {
         String jsonPartitionMap = readDataMaybeNull(zkClient, ReassignPartitionsPath)._1;
 
         Map<TopicAndPartition, ReassignedPartitionsContext> ret = Maps.newHashMap();
-        if (jsonPartitionMap == null) return ret;
-
+        if (jsonPartitionMap == null)
+            return ret;
 
         Multimap<TopicAndPartition, Integer> reassignedPartitions = parsePartitionReassignmentData(jsonPartitionMap);
         for (TopicAndPartition topicAndPartition : reassignedPartitions.keySet()) {
@@ -656,12 +643,13 @@ public abstract class ZkUtils {
     public static Multimap<TopicAndPartition, Integer> parsePartitionReassignmentData(String jsonData) {
         Multimap<TopicAndPartition, Integer> reassignedPartitions = HashMultimap.create();
 
-
         JSONObject m = Json.parseFull(jsonData);
-        if (m == null) return reassignedPartitions;
+        if (m == null)
+            return reassignedPartitions;
 
         List<Object> partitionsSeq = m.getJSONArray("partitions");
-        if (partitionsSeq == null) return reassignedPartitions;
+        if (partitionsSeq == null)
+            return reassignedPartitions;
 
         for (Object partitions : partitionsSeq) {
             JSONObject p = (JSONObject) partitions;
@@ -681,10 +669,12 @@ public abstract class ZkUtils {
         List<String> topics = Lists.newArrayList();
 
         JSONObject m = Json.parseFull(jsonData);
-        if (m == null) return topics;
+        if (m == null)
+            return topics;
 
         JSONArray topicsList = m.getJSONArray("topics");
-        if (topicsList == null) return topics;
+        if (topicsList == null)
+            return topics;
 
         for (Object topic : topicsList) {
             List<Map<String, Object>> mapPartitionSeq = (List<Map<String, Object>>) topic;
@@ -738,8 +728,7 @@ public abstract class ZkUtils {
         for (Integer brokerId : brokerIds) {
             // read all the partitions and their assigned replicas into a map organized by
             // { replica id -> partition 1, partition 2...
-            List<Tuple2<String, Integer>> partitionsAssignedToThisBroker
-                    = getPartitionsAssignedToBroker(zkClient, topics, brokerId);
+            List<Tuple2<String, Integer>> partitionsAssignedToThisBroker = getPartitionsAssignedToBroker(zkClient, topics, brokerId);
             if (partitionsAssignedToThisBroker.size() == 0)
                 logger.info("No state transitions triggered since no partitions are assigned to brokers {}", brokerIds);
 
@@ -758,7 +747,8 @@ public abstract class ZkUtils {
 
         Set<TopicAndPartition> ret = Sets.newHashSet();
 
-        if (jsonPartitionList == null) return ret;
+        if (jsonPartitionList == null)
+            return ret;
 
         return PreferredReplicaLeaderElectionCommand.parsePreferredReplicaElectionData(jsonPartitionList);
     }
@@ -801,7 +791,8 @@ public abstract class ZkUtils {
      */
     public static Broker getBrokerInfo(ZkClient zkClient, int brokerId) {
         String brokerInfo = ZkUtils.readDataMaybeNull(zkClient, ZkUtils.BrokerIdsPath + "/" + brokerId)._1;
-        if (brokerInfo == null) return null;
+        if (brokerInfo == null)
+            return null;
 
         return Brokers.createBroker(brokerId, brokerInfo);
     }
@@ -817,7 +808,8 @@ public abstract class ZkUtils {
     public static Set<TopicAndPartition> getAllPartitions(ZkClient zkClient) {
         List<String> topics = ZkUtils.getChildrenParentMayNotExist(zkClient, BrokerTopicsPath);
         Set<TopicAndPartition> ret = Sets.newHashSet();
-        if (topics == null) return ret;
+        if (topics == null)
+            return ret;
 
         for (String topic : topics) {
             List<String> partitions = getChildren(zkClient, getTopicPartitionsPath(topic));

@@ -21,16 +21,7 @@ public class ConsumerFetcherThread extends AbstractFetcherThread {
     public ConsumerFetcherManager consumerFetcherManager;
 
     public ConsumerFetcherThread(String name, ConsumerConfig config, Broker sourceBroker, Map<TopicAndPartition, PartitionTopicInfo> partitionMap, ConsumerFetcherManager consumerFetcherManager) {
-        super(/*name =*/ name,
-               /* clientId = */config.clientId + "-" + name,
-                /*sourceBroker =*/ sourceBroker,
-               /* socketTimeout =*/ config.socketTimeoutMs,
-               /* socketBufferSize = */config.socketReceiveBufferBytes,
-                /*fetchSize =*/ config.fetchMessageMaxBytes,
-               /* fetcherBrokerId =*/ Requests.OrdinaryConsumerId,
-               /* maxWait = */config.fetchWaitMaxMs,
-                /*minBytes = */config.fetchMinBytes,
-               /* isInterruptible =*/ true);
+        super(/*name =*/ name, /* clientId = */config.clientId + "-" + name, /*sourceBroker =*/ sourceBroker, /* socketTimeout =*/ config.socketTimeoutMs, /* socketBufferSize = */config.socketReceiveBufferBytes, /*fetchSize =*/ config.fetchMessageMaxBytes, /* fetcherBrokerId =*/ Requests.OrdinaryConsumerId, /* maxWait = */config.fetchWaitMaxMs, /*minBytes = */config.fetchMinBytes, /* isInterruptible =*/ true);
         this.name = name;
         this.config = config;
         this.sourceBroker = sourceBroker;
@@ -43,8 +34,7 @@ public class ConsumerFetcherThread extends AbstractFetcherThread {
     public void processPartitionData(TopicAndPartition topicAndPartition, long fetchOffset, FetchResponsePartitionData partitionData) {
         PartitionTopicInfo pti = partitionMap.get(topicAndPartition);
         if (pti.getFetchOffset() != fetchOffset)
-            throw new KafkaException("Offset doesn't match for partition [%s,%d] pti offset: %d fetch offset: %d",
-                    topicAndPartition.topic, topicAndPartition.partition, pti.getFetchOffset(), fetchOffset);
+            throw new KafkaException("Offset doesn't match for partition [%s,%d] pti offset: %d fetch offset: %d", topicAndPartition.topic, topicAndPartition.partition, pti.getFetchOffset(), fetchOffset);
         pti.enqueue((ByteBufferMessageSet) partitionData.messages);
     }
 

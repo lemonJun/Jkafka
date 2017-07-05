@@ -27,13 +27,7 @@ public class PartitionTopicInfo {
     private AtomicInteger fetchSize;
     private String clientId;
 
-    public PartitionTopicInfo(String topic,
-                              int partitionId,
-                              BlockingQueue<FetchedDataChunk> chunkQueue,
-                              AtomicLong consumedOffset,
-                              AtomicLong fetchedOffset,
-                              AtomicInteger fetchSize,
-                              String clientId) {
+    public PartitionTopicInfo(String topic, int partitionId, BlockingQueue<FetchedDataChunk> chunkQueue, AtomicLong consumedOffset, AtomicLong fetchedOffset, AtomicInteger fetchSize, String clientId) {
         this.topic = topic;
         this.partitionId = partitionId;
         this.chunkQueue = chunkQueue;
@@ -48,7 +42,6 @@ public class PartitionTopicInfo {
     }
 
     Logger logger = LoggerFactory.getLogger(PartitionTopicInfo.class);
-
 
     private ConsumerTopicStatsRegistry.ConsumerTopicStats consumerTopicStats;
 
@@ -90,7 +83,6 @@ public class PartitionTopicInfo {
 
     @Override
     public String toString() {
-        return topic + ":" + partitionId + ": fetched offset = " + fetchedOffset.get() +
-                ": consumed offset = " + consumedOffset.get();
+        return topic + ":" + partitionId + ": fetched offset = " + fetchedOffset.get() + ": consumed offset = " + consumedOffset.get();
     }
 }

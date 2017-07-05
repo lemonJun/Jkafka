@@ -36,50 +36,45 @@ public abstract class AbstractFetcherManager extends KafkaMetricsGroup {
     private void init() {
         logger = LoggerFactory.getLogger(AbstractFetcherManager.class + "[" + name + "] ");
 
-        newGauge(
-                metricPrefix + "-MaxLag",
-                new Gauge<Long>() {
-                    // current max lag across all fetchers/topics/partitions
+        newGauge(metricPrefix + "-MaxLag", new Gauge<Long>() {
+            // current max lag across all fetchers/topics/partitions
+            @Override
+            public Long value() {
+                return Utils.foldLeft(fetcherThreadMap, 0L, new Function3<Long, BrokerAndFetcherId, AbstractFetcherThread, Long>() {
                     @Override
-                    public Long value() {
-                        return Utils.foldLeft(fetcherThreadMap, 0L, new Function3<Long, BrokerAndFetcherId, AbstractFetcherThread, Long>() {
+                    public Long apply(Long curMaxAll, BrokerAndFetcherId arg2, AbstractFetcherThread arg3) {
+                        return Math.max(Utils.foldLeft(arg3.fetcherLagStats.stats, 0L, new Function2<Long, Map.Entry<AbstractFetcherThread.ClientIdBrokerTopicPartition, AbstractFetcherThread.FetcherLagMetrics>, Long>() {
                             @Override
-                            public Long apply(Long curMaxAll, BrokerAndFetcherId arg2, AbstractFetcherThread arg3) {
-                                return Math.max(Utils.foldLeft(arg3.fetcherLagStats.stats, 0L, new Function2<Long, Map.Entry<AbstractFetcherThread.ClientIdBrokerTopicPartition, AbstractFetcherThread.FetcherLagMetrics>, Long>() {
-                                    @Override
-                                    public Long apply(Long curMaxThread, Map.Entry<AbstractFetcherThread.ClientIdBrokerTopicPartition, AbstractFetcherThread.FetcherLagMetrics> fetcherLagStatsEntry) {
-                                        return Math.max(curMaxThread, fetcherLagStatsEntry.getValue().lag());
-                                    }
-                                }), curMaxAll);
+                            public Long apply(Long curMaxThread, Map.Entry<AbstractFetcherThread.ClientIdBrokerTopicPartition, AbstractFetcherThread.FetcherLagMetrics> fetcherLagStatsEntry) {
+                                return Math.max(curMaxThread, fetcherLagStatsEntry.getValue().lag());
                             }
-                        });
+                        }), curMaxAll);
                     }
                 });
+            }
+        });
 
-        newGauge(
-                metricPrefix + "-MinFetchRate",
-                new Gauge<Double>() {
+        newGauge(metricPrefix + "-MinFetchRate", new Gauge<Double>() {
+            @Override
+            public Double value() {
+                Tuple2<BrokerAndFetcherId, AbstractFetcherThread> head = Utils.head(fetcherThreadMap);
+                Double headRate = head != null ? head._2.fetcherStats.requestRate.oneMinuteRate() : 0;
+
+                return Utils.foldLeft(fetcherThreadMap, headRate, new Function3<Double, BrokerAndFetcherId, AbstractFetcherThread, Double>() {
                     @Override
-                    public Double value() {
-                        Tuple2<BrokerAndFetcherId, AbstractFetcherThread> head = Utils.head(fetcherThreadMap);
-                        Double headRate = head != null ? head._2.fetcherStats.requestRate.oneMinuteRate() : 0;
-
-                        return Utils.foldLeft(fetcherThreadMap, headRate, new Function3<Double, BrokerAndFetcherId, AbstractFetcherThread, Double>() {
-                            @Override
-                            public Double apply(Double curMinAll, BrokerAndFetcherId arg2, AbstractFetcherThread _2) {
-                                return Math.min(_2.fetcherStats.requestRate.oneMinuteRate(), curMinAll);
-                            }
-                        });
+                    public Double apply(Double curMinAll, BrokerAndFetcherId arg2, AbstractFetcherThread _2) {
+                        return Math.min(_2.fetcherStats.requestRate.oneMinuteRate(), curMinAll);
                     }
-
                 });
+            }
+
+        });
     }
 
     // map of (source broker_id, fetcher_id per source broker) => fetcher
     private Map<BrokerAndFetcherId, AbstractFetcherThread> fetcherThreadMap = Maps.newHashMap();
     private Object mapLock = new Object();
     Logger logger;
-
 
     private int getFetcherId(String topic, int partitionId) {
         return Utils.abs(31 * topic.hashCode() + partitionId) % numFetchers;
@@ -184,13 +179,17 @@ public abstract class AbstractFetcherManager extends KafkaMetricsGroup {
 
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
+            if (this == o)
+                return true;
+            if (o == null || getClass() != o.getClass())
+                return false;
 
             BrokerAndFetcherId that = (BrokerAndFetcherId) o;
 
-            if (fetcherId != that.fetcherId) return false;
-            if (broker != null ? !broker.equals(that.broker) : that.broker != null) return false;
+            if (fetcherId != that.fetcherId)
+                return false;
+            if (broker != null ? !broker.equals(that.broker) : that.broker != null)
+                return false;
 
             return true;
         }
@@ -204,10 +203,7 @@ public abstract class AbstractFetcherManager extends KafkaMetricsGroup {
 
         @Override
         public String toString() {
-            return "BrokerAndFetcherId{" +
-                    "broker=" + broker +
-                    ", fetcherId=" + fetcherId +
-                    '}';
+            return "BrokerAndFetcherId{" + "broker=" + broker + ", fetcherId=" + fetcherId + '}';
         }
     }
 
@@ -222,13 +218,17 @@ public abstract class AbstractFetcherManager extends KafkaMetricsGroup {
 
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
+            if (this == o)
+                return true;
+            if (o == null || getClass() != o.getClass())
+                return false;
 
             BrokerAndInitialOffset that = (BrokerAndInitialOffset) o;
 
-            if (initOffset != that.initOffset) return false;
-            if (broker != null ? !broker.equals(that.broker) : that.broker != null) return false;
+            if (initOffset != that.initOffset)
+                return false;
+            if (broker != null ? !broker.equals(that.broker) : that.broker != null)
+                return false;
 
             return true;
         }
@@ -242,10 +242,7 @@ public abstract class AbstractFetcherManager extends KafkaMetricsGroup {
 
         @Override
         public String toString() {
-            return "BrokerAndInitialOffset{" +
-                    "broker=" + broker +
-                    ", initOffset=" + initOffset +
-                    '}';
+            return "BrokerAndInitialOffset{" + "broker=" + broker + ", initOffset=" + initOffset + '}';
         }
     }
 }

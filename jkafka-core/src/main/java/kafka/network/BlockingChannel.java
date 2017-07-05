@@ -22,7 +22,6 @@ import kafka.utils.Utils;
 public class BlockingChannel {
     public static final int UseDefaultBufferSize = -1;
 
-
     public String host;
     public int port;
     public int readBufferSize;
@@ -47,7 +46,8 @@ public class BlockingChannel {
 
     public void connect() {
         synchronized (lock) {
-            if (connected) return;
+            if (connected)
+                return;
 
             try {
                 channel = SocketChannel.open();
@@ -66,12 +66,7 @@ public class BlockingChannel {
                 connected = true;
                 // settings may not match what we requested above
                 String msg = "Created socket with SO_TIMEOUT = {} (requested {}), SO_RCVBUF = {} (requested {}), SO_SNDBUF = {} (requested {}).";
-                logger.debug(msg, channel.socket().getSoTimeout(),
-                        readTimeoutMs,
-                        channel.socket().getReceiveBufferSize(),
-                        readBufferSize,
-                        channel.socket().getSendBufferSize(),
-                        writeBufferSize);
+                logger.debug(msg, channel.socket().getSoTimeout(), readTimeoutMs, channel.socket().getReceiveBufferSize(), readBufferSize, channel.socket().getSendBufferSize(), writeBufferSize);
             } catch (IOException e) {
                 throw new KafkaException(e);
             }

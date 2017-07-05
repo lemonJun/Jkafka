@@ -21,7 +21,6 @@ public class TopicMetadataRequest extends RequestOrResponse {
     public final String clientId;
     public final List<String> topics;
 
-
     public TopicMetadataRequest(short versionId, int correlationId, String clientId, List<String> topics) {
         super(RequestKeys.MetadataKey, correlationId);
 
@@ -35,19 +34,18 @@ public class TopicMetadataRequest extends RequestOrResponse {
         this(TopicMetadataRequestReader.CurrentVersion, correlationId, TopicMetadataRequestReader.DefaultClientId, topics);
     }
 
-
     @Override
     public int sizeInBytes() {
-        return 2 +  /* version id */
-                4 + /* correlation id */
-                shortStringLength(clientId) + /* client id */
-                4  /* number of topics */
-                + Utils.foldLeft(topics, 0, new Function2<Integer, String, Integer>() {
-            @Override
-            public Integer apply(Integer arg1, String topic) {
-                return arg1 + shortStringLength(topic);
-            }
-        });
+        return 2 + /* version id */
+                        4 + /* correlation id */
+                        shortStringLength(clientId) + /* client id */
+                        4 /* number of topics */
+                        + Utils.foldLeft(topics, 0, new Function2<Integer, String, Integer>() {
+                            @Override
+                            public Integer apply(Integer arg1, String topic) {
+                                return arg1 + shortStringLength(topic);
+                            }
+                        });
     }
 
     @Override

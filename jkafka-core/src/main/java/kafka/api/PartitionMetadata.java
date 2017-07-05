@@ -23,7 +23,7 @@ public class PartitionMetadata {
         int leaderId = buffer.getInt();
         Broker leader = brokers.get(leaderId);
 
-    /* list of all replicas */
+        /* list of all replicas */
         int numReplicas = readIntInRange(buffer, "number of all replicas", Range.make(0, Integer.MAX_VALUE));
 
         List<Integer> replicaIds = Utils.flatList(0, numReplicas, new Function1<Integer, Integer>() {
@@ -34,7 +34,7 @@ public class PartitionMetadata {
         });
         List<Broker> replicas = Utils.mapList(replicaIds, brokers);
 
-    /* list of in-sync replicas */
+        /* list of in-sync replicas */
         int numIsr = readIntInRange(buffer, "number of in-sync replicas", Range.make(0, Integer.MAX_VALUE));
         List<Integer> isrIds = Utils.flatList(0, numIsr, new Function1<Integer, Integer>() {
             @Override
@@ -55,7 +55,7 @@ public class PartitionMetadata {
     public short errorCode;
 
     public PartitionMetadata(int partitionId, Broker leader, List<Broker> replicas) {
-        this(partitionId, leader, replicas, Lists.<Broker>newArrayList(), ErrorMapping.NoError);
+        this(partitionId, leader, replicas, Lists.<Broker> newArrayList(), ErrorMapping.NoError);
     }
 
     public PartitionMetadata(int partitionId, Broker leader, List<Broker> replicas, List<Broker> isr, short errorCode) {
@@ -67,22 +67,18 @@ public class PartitionMetadata {
     }
 
     public int sizeInBytes() {
-        return 2 /* error code */ +
-                4 /* partition id */ +
-                4 /* leader */ +
-                4 + 4 * replicas.size() /* replica array */ +
-                4 + 4 * isr.size(); /* isr array */
+        return 2 /* error code */ + 4 /* partition id */ + 4 /* leader */ + 4 + 4 * replicas.size() /* replica array */ + 4 + 4 * isr.size(); /* isr array */
     }
 
     public void writeTo(final ByteBuffer buffer) {
         buffer.putShort(errorCode);
         buffer.putInt(partitionId);
 
-    /* leader */
+        /* leader */
         int leaderId = leader != null ? leader.id : TopicMetadata.NoLeaderNodeId;
         buffer.putInt(leaderId);
 
-    /* number of replicas */
+        /* number of replicas */
         buffer.putInt(replicas.size());
         Utils.foreach(replicas, new Callable1<Broker>() {
             @Override
@@ -91,7 +87,7 @@ public class PartitionMetadata {
             }
         });
 
-    /* number of in-sync replicas */
+        /* number of in-sync replicas */
         buffer.putInt(isr.size());
         Utils.foreach(isr, new Callable1<Broker>() {
             @Override

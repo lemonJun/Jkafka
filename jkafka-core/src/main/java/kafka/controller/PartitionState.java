@@ -6,23 +6,25 @@ public enum PartitionState {
         public byte state() {
             return 0;
         }
-    }, OnlinePartition {
+    },
+    OnlinePartition {
         @Override
         public byte state() {
             return 1;
         }
-    }, OfflinePartition {
+    },
+    OfflinePartition {
         @Override
         public byte state() {
             return 2;
         }
-    }, NonExistentPartition {
+    },
+    NonExistentPartition {
         @Override
         public byte state() {
             return 3;
         }
     };
-
 
     public abstract byte state();
 }

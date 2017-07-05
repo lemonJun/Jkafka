@@ -26,7 +26,6 @@ public class SyncProducer {
     public static short RequestKey = 0;
     public static Random randomGenerator = new Random();
 
-
     public SyncProducerConfig config;
 
     public SyncProducer(SyncProducerConfig config) {
@@ -36,8 +35,7 @@ public class SyncProducer {
     }
 
     private void init() {
-        blockingChannel = new BlockingChannel(config.host, config.port, BlockingChannel.UseDefaultBufferSize,
-                config.sendBufferBytes, config.requestTimeoutMs);
+        blockingChannel = new BlockingChannel(config.host, config.port, BlockingChannel.UseDefaultBufferSize, config.sendBufferBytes, config.requestTimeoutMs);
         brokerInfo = String.format("host_%s-port_%s", config.host, config.port);
         producerRequestStats = ProducerRequestStats.ProducerRequestStatsRegistry.getProducerRequestStats(config.clientId);
         logger.trace("Instantiating Scala Sync Producer");
@@ -50,7 +48,6 @@ public class SyncProducer {
     private BlockingChannel blockingChannel;
     public String brokerInfo;
     public ProducerRequestStats producerRequestStats;
-
 
     private void verifyRequest(RequestOrResponse request) {
         /**
@@ -108,7 +105,7 @@ public class SyncProducer {
         producerRequestStats.getProducerRequestStats(brokerInfo).requestSizeHist.update(requestSize);
         producerRequestStats.getProducerRequestAllBrokersStats().requestSizeHist.update(requestSize);
 
-        final Receive[] response = {null};
+        final Receive[] response = { null };
         final KafkaTimer specificTimer = producerRequestStats.getProducerRequestStats(brokerInfo).requestTimer;
         KafkaTimer aggregateTimer = producerRequestStats.getProducerRequestAllBrokersStats().requestTimer;
         aggregateTimer.time(new Function0<Object>() {

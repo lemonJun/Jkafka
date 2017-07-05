@@ -5,16 +5,16 @@ import java.util.Properties;
 import kafka.cluster.LogConfigs;
 
 public class LogConfig implements Cloneable {
-    public int segmentSize = 1024*1024;
+    public int segmentSize = 1024 * 1024;
     public long segmentMs = Long.MAX_VALUE;
     public long flushInterval = Long.MAX_VALUE;
     public long flushMs = Long.MAX_VALUE;
     public long retentionSize = Long.MAX_VALUE;
     public long retentionMs = Long.MAX_VALUE;
     public int maxMessageSize = Integer.MAX_VALUE;
-    public int maxIndexSize = 1024*1024;
+    public int maxIndexSize = 1024 * 1024;
     public int indexInterval = 4096;
-    public long fileDeleteDelayMs = 60*1000;
+    public long fileDeleteDelayMs = 60 * 1000;
     public long deleteRetentionMs = 24 * 60 * 60 * 1000L;
     public double minCleanableRatio = 0.5;
     public boolean dedupe = false;
@@ -34,19 +34,7 @@ public class LogConfig implements Cloneable {
      * @param minCleanableRatio The ratio of bytes that are available for cleaning to the bytes already cleaned
      * @param dedupe Should old segments in this log be deleted or deduplicated?
      */
-    public LogConfig(int segmentSize,
-                     long segmentMs,
-                     long flushInterval,
-                     long flushMs,
-                     long retentionSize,
-                     long retentionMs,
-                     int maxMessageSize,
-                     int maxIndexSize,
-                     int indexInterval,
-                     long fileDeleteDelayMs,
-                     long deleteRetentionMs,
-                     double minCleanableRatio,
-                     boolean dedupe) {
+    public LogConfig(int segmentSize, long segmentMs, long flushInterval, long flushMs, long retentionSize, long retentionMs, int maxMessageSize, int maxIndexSize, int indexInterval, long fileDeleteDelayMs, long deleteRetentionMs, double minCleanableRatio, boolean dedupe) {
         this.segmentSize = segmentSize;
         this.segmentMs = segmentMs;
         this.flushInterval = flushInterval;
@@ -66,7 +54,7 @@ public class LogConfig implements Cloneable {
 
     }
 
-    public Properties toProps()  {
+    public Properties toProps() {
         Properties props = new Properties();
         props.put(LogConfigs.SegmentBytesProp, segmentSize + "");
         props.put(LogConfigs.SegmentMsProp, segmentMs + "");
@@ -85,7 +73,7 @@ public class LogConfig implements Cloneable {
     }
 
     @Override
-    protected LogConfig clone()  {
+    protected LogConfig clone() {
         try {
             return (LogConfig) super.clone();
         } catch (CloneNotSupportedException e) {

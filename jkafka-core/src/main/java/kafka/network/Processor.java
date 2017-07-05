@@ -171,8 +171,7 @@ public class Processor extends AbstractServerThread {
         if (read < 0) {
             close(key);
         } else if (receive.complete()) {
-            Request req = new Request(/*processor =*/ id,/* requestKey =*/ key, /*buffer = */receive.buffer(),
-                      /*startTimeMs =*/ time.milliseconds(), /*remoteAddress = */address);
+            Request req = new Request(/*processor =*/ id, /* requestKey =*/ key, /*buffer = */receive.buffer(), /*startTimeMs =*/ time.milliseconds(), /*remoteAddress = */address);
             requestChannel.sendRequest(req);
             key.attach(null);
             // explicitly reset interest ops to not READ, no need to wake up the selector just yet

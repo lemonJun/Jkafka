@@ -28,25 +28,11 @@ public class FetchRequest extends RequestOrResponse {
     public int minBytes; /*FetchRequest.DefaultMinBytes,*/
     public Map<TopicAndPartition, PartitionFetchInfo> requestInfo;
 
-
     public FetchRequest(Map<TopicAndPartition, PartitionFetchInfo> requestInfo) {
-        this(FetchRequestReader.CurrentVersion,
-                FetchRequestReader.DefaultCorrelationId,
-                ConsumerConfigs.DefaultClientId,
-                Requests.OrdinaryConsumerId,
-                FetchRequestReader.DefaultMaxWait,
-                FetchRequestReader.DefaultMinBytes,
-                requestInfo
-        );
+        this(FetchRequestReader.CurrentVersion, FetchRequestReader.DefaultCorrelationId, ConsumerConfigs.DefaultClientId, Requests.OrdinaryConsumerId, FetchRequestReader.DefaultMaxWait, FetchRequestReader.DefaultMinBytes, requestInfo);
     }
 
-    public FetchRequest(short versionId,
-                        int correlationId,
-                        String clientId,
-                        int replicaId,
-                        int maxWait,
-                        int minBytes,
-                        Map<TopicAndPartition, PartitionFetchInfo> requestInfo) {
+    public FetchRequest(short versionId, int correlationId, String clientId, int replicaId, int maxWait, int minBytes, Map<TopicAndPartition, PartitionFetchInfo> requestInfo) {
         super(RequestKeys.FetchKey, correlationId);
         this.versionId = versionId;
         this.clientId = clientId;
@@ -72,18 +58,8 @@ public class FetchRequest extends RequestOrResponse {
     /**
      * Public constructor for the clients
      */
-    public FetchRequest(int correlationId,
-                        String clientId,
-                        int maxWait,
-                        int minBytes,
-                        Map<TopicAndPartition, PartitionFetchInfo> requestInfo) {
-        this(FetchRequestReader.CurrentVersion,
-                correlationId,
-                clientId,
-                Requests.OrdinaryConsumerId,
-                maxWait,
-                minBytes,
-                requestInfo);
+    public FetchRequest(int correlationId, String clientId, int maxWait, int minBytes, Map<TopicAndPartition, PartitionFetchInfo> requestInfo) {
+        this(FetchRequestReader.CurrentVersion, correlationId, clientId, Requests.OrdinaryConsumerId, maxWait, minBytes, requestInfo);
     }
 
     public void writeTo(ByteBuffer buffer) {
@@ -114,24 +90,21 @@ public class FetchRequest extends RequestOrResponse {
 
     public int sizeInBytes() {
         return 2 + /* versionId */
-                4 + /* correlationId */
-                shortStringLength(clientId) +
-                4 + /* replicaId */
-                4 + /* maxWait */
-                4 + /* minBytes */
-                4 + /* topic count */
-                +compute();
+                        4 + /* correlationId */
+                        shortStringLength(clientId) + 4 + /* replicaId */
+                        4 + /* maxWait */
+                        4 + /* minBytes */
+                        4 + /* topic count */
+                        +compute();
     }
 
     private int compute() {
         int total = 0;
         for (String topic : requestInfoGroupedByTopic.rowKeySet()) {
-            Map<TopicAndPartition, PartitionFetchInfo>
-                    partitionFetchInfos = requestInfoGroupedByTopic.row(topic);
+            Map<TopicAndPartition, PartitionFetchInfo> partitionFetchInfos = requestInfoGroupedByTopic.row(topic);
             total += shortStringLength(topic);
-            total += 4;  /* partition count */
-            total += partitionFetchInfos.size() * (
-                    4 + /* partition id */
+            total += 4; /* partition count */
+            total += partitionFetchInfos.size() * (4 + /* partition id */
                             8 + /* offset */
                             4 /* fetch size */
             );
@@ -171,14 +144,12 @@ public class FetchRequest extends RequestOrResponse {
 
     @Override
     public void handleError(final Throwable e, RequestChannel requestChannel, Request request) {
-        Map<TopicAndPartition, FetchResponsePartitionData>
-                fetchResponsePartitionData = Utils.map(requestInfo,
-                new Function2<TopicAndPartition, PartitionFetchInfo, Tuple2<TopicAndPartition, FetchResponsePartitionData>>() {
-                    @Override
-                    public Tuple2<TopicAndPartition, FetchResponsePartitionData> apply(TopicAndPartition arg1, PartitionFetchInfo arg2) {
-                        return Tuple2.make(arg1, new FetchResponsePartitionData(ErrorMapping.codeFor(e.getClass()), -1, MessageSets.Empty));
-                    }
-                });
+        Map<TopicAndPartition, FetchResponsePartitionData> fetchResponsePartitionData = Utils.map(requestInfo, new Function2<TopicAndPartition, PartitionFetchInfo, Tuple2<TopicAndPartition, FetchResponsePartitionData>>() {
+            @Override
+            public Tuple2<TopicAndPartition, FetchResponsePartitionData> apply(TopicAndPartition arg1, PartitionFetchInfo arg2) {
+                return Tuple2.make(arg1, new FetchResponsePartitionData(ErrorMapping.codeFor(e.getClass()), -1, MessageSets.Empty));
+            }
+        });
 
         FetchResponse errorResponse = new FetchResponse(correlationId, fetchResponsePartitionData);
         requestChannel.sendResponse(new Response(request, new FetchResponseSend(errorResponse)));

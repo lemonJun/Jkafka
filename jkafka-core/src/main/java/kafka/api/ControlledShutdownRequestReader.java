@@ -2,7 +2,7 @@ package kafka.api;
 
 import java.nio.ByteBuffer;
 
-public class ControlledShutdownRequestReader implements RequestReader{
+public class ControlledShutdownRequestReader implements RequestReader {
     public static final RequestReader instance = new ControlledShutdownRequestReader();
 
     public static final short CurrentVersion = 0;

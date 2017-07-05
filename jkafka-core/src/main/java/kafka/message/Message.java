@@ -34,13 +34,7 @@ public class Message {
      * @param payloadSize   The size of the payload to use
      */
     public Message(byte[] bytes, byte[] key, CompressionCodec codec, int payloadOffset, int payloadSize) {
-        this(ByteBuffer.allocate(Messages.CrcLength +
-                Messages.MagicLength +
-                Messages.AttributesLength +
-                Messages.KeySizeLength +
-                (key == null ? 0 : key.length) +
-                Messages.ValueSizeLength +
-                (bytes == null ? 0 : (payloadSize >= 0 ? payloadSize : bytes.length - payloadOffset))));
+        this(ByteBuffer.allocate(Messages.CrcLength + Messages.MagicLength + Messages.AttributesLength + Messages.KeySizeLength + (key == null ? 0 : key.length) + Messages.ValueSizeLength + (bytes == null ? 0 : (payloadSize >= 0 ? payloadSize : bytes.length - payloadOffset))));
 
         // skip crc, we will fill that in at the end
         buffer.position(Messages.MagicOffset);
@@ -55,9 +49,7 @@ public class Message {
             buffer.putInt(key.length);
             buffer.put(key, 0, key.length);
         }
-        final int size = (bytes == null) ? -1 :
-                (payloadSize >= 0 ? payloadSize
-                        : bytes.length - payloadOffset);
+        final int size = (bytes == null) ? -1 : (payloadSize >= 0 ? payloadSize : bytes.length - payloadOffset);
 
         buffer.putInt(size);
         if (bytes != null)
@@ -88,8 +80,7 @@ public class Message {
      * Compute the checksum of the message from the message contents
      */
     public long computeChecksum() {
-        return Utils.crc32(buffer.array(), buffer.arrayOffset() + Messages.MagicOffset,
-                buffer.limit() - Messages.MagicOffset);
+        return Utils.crc32(buffer.array(), buffer.arrayOffset() + Messages.MagicOffset, buffer.limit() - Messages.MagicOffset);
     }
 
     /**
@@ -111,8 +102,7 @@ public class Message {
      */
     public void ensureValid() {
         if (!isValid())
-            throw new InvalidMessageException(
-                    "Message is corrupt (stored crc = %d, computed crc = %d)", checksum(), computeChecksum());
+            throw new InvalidMessageException("Message is corrupt (stored crc = %d, computed crc = %d)", checksum(), computeChecksum());
     }
 
     /**
@@ -210,9 +200,7 @@ public class Message {
     }
 
     public String toString() {
-        return String.format(
-                "Message(magic = %d, attributes = %d, crc = %d, key = %s, payload = %s)",
-                magic(), attributes(), checksum(), key(), payload());
+        return String.format("Message(magic = %d, attributes = %d, crc = %d, key = %s, payload = %s)", magic(), attributes(), checksum(), key(), payload());
     }
 
     @Override

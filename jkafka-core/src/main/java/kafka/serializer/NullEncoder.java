@@ -12,6 +12,7 @@ public class NullEncoder<T> implements Encoder<T> {
     public NullEncoder(VerifiableProperties props) {
         this.props = props;
     }
+
     @Override
     public byte[] toBytes(T t) {
         return null;

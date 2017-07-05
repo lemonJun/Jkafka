@@ -24,7 +24,6 @@ import kafka.utils.Throttler;
 import kafka.utils.Time;
 import kafka.utils.Utils;
 
-
 public class Cleaner {
     public int id;
     public OffsetMap offsetMap;
@@ -43,13 +42,7 @@ public class Cleaner {
      * @param throttler    The throttler instance to use for limiting I/O rate.
      * @param time         The time instance
      */
-    public Cleaner(int id,
-                   OffsetMap offsetMap,
-                   int ioBufferSize,
-                   int maxIoBufferSize,
-                   double dupBufferLoadFactor,
-                   Throttler throttler,
-                   Time time) {
+    public Cleaner(int id, OffsetMap offsetMap, int ioBufferSize, int maxIoBufferSize, double dupBufferLoadFactor, Throttler throttler, Time time) {
         this.id = id;
         this.offsetMap = offsetMap;
         this.ioBufferSize = ioBufferSize;
@@ -95,8 +88,7 @@ public class Cleaner {
 
         // figure out the timestamp below which it is safe to remove delete tombstones
         // this position is defined to be a configurable time beneath the last modified time of the last clean segment
-        LogSegment seg =
-                Utils.lastOption(log.logSegments(0, cleanable.firstDirtyOffset));
+        LogSegment seg = Utils.lastOption(log.logSegments(0, cleanable.firstDirtyOffset));
         long deleteHorizonMs = seg == null ? 0L : (seg.lastModified() - log.config.deleteRetentionMs);
 
         // group the segments and clean the groups
@@ -117,11 +109,7 @@ public class Cleaner {
      * @param expectedTruncateCount A count used to check if the log is being truncated and rewritten under our feet
      * @param deleteHorizonMs       The time to retain delete tombstones
      */
-    void cleanSegments(Log log,
-                       List<LogSegment> segments,
-                       OffsetMap map,
-                       int expectedTruncateCount,
-                       long deleteHorizonMs) throws InterruptedException {
+    void cleanSegments(Log log, List<LogSegment> segments, OffsetMap map, int expectedTruncateCount, long deleteHorizonMs) throws InterruptedException {
         // create a new segment with the suffix .cleaned appended to both the log and index name
         File logFile = new File(Utils.head(segments).log.file.getPath() + Logs.CleanedFileSuffix);
         logFile.delete();
@@ -134,8 +122,7 @@ public class Cleaner {
         // clean segments into the new destination segment
         for (LogSegment old : segments) {
             boolean retainDeletes = old.lastModified() > deleteHorizonMs;
-            logger.info("Cleaning segment {} in log {} (last modified {}) into {}, {} deletes.",
-                    old.baseOffset, log.name(), new Date(old.lastModified()), cleaned.baseOffset, (retainDeletes ? "retaining" : "discarding"));
+            logger.info("Cleaning segment {} in log {} (last modified {}) into {}, {} deletes.", old.baseOffset, log.name(), new Date(old.lastModified()), cleaned.baseOffset, (retainDeletes ? "retaining" : "discarding"));
             cleanInto(old, cleaned, map, retainDeletes);
         }
 
@@ -194,10 +181,10 @@ public class Cleaner {
                 ByteBuffer key = entry.message.key();
                 checkState(key != null, String.format("Found null key in log segment %s which is marked as dedupe.", source.log.file.getAbsolutePath()));
                 long foundOffset = map.get(key);
-        /* two cases in which we can get rid of a message:
-         *   1) if there exists a message with the same key but higher offset
-         *   2) if the message is a delete "tombstone" marker and enough time has passed
-         */
+                /* two cases in which we can get rid of a message:
+                 *   1) if there exists a message with the same key but higher offset
+                 *   2) if the message is a delete "tombstone" marker and enough time has passed
+                 */
                 boolean redundant = foundOffset >= 0 && entry.offset < foundOffset;
                 boolean obsoleteDelete = !retainDeletes && entry.message.isNull();
                 if (!redundant && !obsoleteDelete) {
@@ -260,9 +247,7 @@ public class Cleaner {
             long logSize = Utils.head(segs).size();
             int indexSize = Utils.head(segs).index.sizeInBytes();
             segs = Utils.tail(segs);
-            while (!segs.isEmpty() &&
-                    logSize + Utils.head(segs).size() < maxSize &&
-                    indexSize + Utils.head(segs).index.sizeInBytes() < maxIndexSize) {
+            while (!segs.isEmpty() && logSize + Utils.head(segs).size() < maxSize && indexSize + Utils.head(segs).index.sizeInBytes() < maxIndexSize) {
                 group.add(Utils.head(segs));
                 logSize += Utils.head(segs).size();
                 indexSize += Utils.head(segs).index.sizeInBytes();

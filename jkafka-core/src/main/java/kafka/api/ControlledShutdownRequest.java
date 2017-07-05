@@ -33,9 +33,9 @@ public class ControlledShutdownRequest extends RequestOrResponse {
     }
 
     public int sizeInBytes() {
-        return 2 +  /* version id */
-                4 + /* correlation id */
-                4 /* broker id */;
+        return 2 + /* version id */
+                        4 + /* correlation id */
+                        4 /* broker id */;
     }
 
     @Override
@@ -50,8 +50,7 @@ public class ControlledShutdownRequest extends RequestOrResponse {
 
     @Override
     public void handleError(Throwable e, RequestChannel requestChannel, Request request) {
-        ControlledShutdownResponse errorResponse =
-                new ControlledShutdownResponse(correlationId, ErrorMapping.codeFor(e.getClass()), Sets.<TopicAndPartition>newHashSet());
+        ControlledShutdownResponse errorResponse = new ControlledShutdownResponse(correlationId, ErrorMapping.codeFor(e.getClass()), Sets.<TopicAndPartition> newHashSet());
         requestChannel.sendResponse(new Response(request, new BoundedByteBufferSend(errorResponse)));
     }
 }

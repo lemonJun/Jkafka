@@ -14,9 +14,12 @@ import kafka.common.KafkaException;
 public abstract class CompressionFactory {
     public static OutputStream apply(CompressionCodec compressionCodec, OutputStream stream) {
         try {
-            if (compressionCodec == DefaultCompressionCodec.instance) return new GZIPOutputStream(stream);
-            if (compressionCodec == GZIPCompressionCodec.instance) return new GZIPOutputStream(stream);
-            if (compressionCodec == SnappyCompressionCodec.instance) return new SnappyOutputStream(stream);
+            if (compressionCodec == DefaultCompressionCodec.instance)
+                return new GZIPOutputStream(stream);
+            if (compressionCodec == GZIPCompressionCodec.instance)
+                return new GZIPOutputStream(stream);
+            if (compressionCodec == SnappyCompressionCodec.instance)
+                return new SnappyOutputStream(stream);
         } catch (IOException e) {
             throw new KafkaException(e);
         }
@@ -25,9 +28,12 @@ public abstract class CompressionFactory {
 
     public static InputStream apply(CompressionCodec compressionCodec, InputStream stream) {
         try {
-            if (compressionCodec == DefaultCompressionCodec.instance) return new GZIPInputStream(stream);
-            if (compressionCodec == GZIPCompressionCodec.instance) return new GZIPInputStream(stream);
-            if (compressionCodec == SnappyCompressionCodec.instance) return new SnappyInputStream(stream);
+            if (compressionCodec == DefaultCompressionCodec.instance)
+                return new GZIPInputStream(stream);
+            if (compressionCodec == GZIPCompressionCodec.instance)
+                return new GZIPInputStream(stream);
+            if (compressionCodec == SnappyCompressionCodec.instance)
+                return new SnappyInputStream(stream);
         } catch (IOException e) {
             throw new KafkaException(e);
         }

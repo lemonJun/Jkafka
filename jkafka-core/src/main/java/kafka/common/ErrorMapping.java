@@ -65,7 +65,8 @@ public abstract class ErrorMapping {
 
     public static KafkaException exceptionFor(Short code) {
         Class<? extends Throwable> throwable = exceptionToCode.inverse().get(code);
-        if (throwable == null) return null;
+        if (throwable == null)
+            return null;
 
         try {
             return (KafkaException) throwable.newInstance();

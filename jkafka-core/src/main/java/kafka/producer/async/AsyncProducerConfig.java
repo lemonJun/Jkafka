@@ -19,7 +19,6 @@ public abstract class AsyncProducerConfig extends SyncProducerConfig {
         keySerializerClass = props.getString("key.serializer.class", serializerClass);
     }
 
-
     /* maximum time, in milliseconds, for buffering data on the producer queue */
     public int queueBufferingMaxMs;
 

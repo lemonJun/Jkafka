@@ -16,21 +16,22 @@ public class OffsetPosition {
 
     @Override
     public String toString() {
-        return "OffsetPosition{" +
-                "offset=" + offset +
-                ", position=" + position +
-                '}';
+        return "OffsetPosition{" + "offset=" + offset + ", position=" + position + '}';
     }
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
 
         OffsetPosition that = (OffsetPosition) o;
 
-        if (offset != that.offset) return false;
-        if (position != that.position) return false;
+        if (offset != that.offset)
+            return false;
+        if (position != that.position)
+            return false;
 
         return true;
     }

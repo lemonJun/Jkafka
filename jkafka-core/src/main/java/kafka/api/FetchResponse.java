@@ -16,8 +16,7 @@ import kafka.utils.Tuple2;
 import kafka.utils.Utils;
 
 public class FetchResponse {
-    public static final int headerSize =
-            4 + /* correlationId */
+    public static final int headerSize = 4 + /* correlationId */
                     4 /* topic count */;
 
     public static FetchResponse readFrom(ByteBuffer buffer) {
@@ -58,30 +57,27 @@ public class FetchResponse {
     Table<String, TopicAndPartition, FetchResponsePartitionData> dataGroupedByTopic;
 
     public int sizeInBytes() {
-        return FetchResponse.headerSize +
-                Utils.foldLeft(dataGroupedByTopic, 0,
-                        new Function3<Integer, String, Map<TopicAndPartition, FetchResponsePartitionData>, Integer>() {
-                            @Override
-                            public Integer apply(Integer folded, String topic, Map<TopicAndPartition, FetchResponsePartitionData> arg3) {
-                                TopicData topicData = new TopicData(topic, Utils.map(arg3, new Function2<TopicAndPartition, FetchResponsePartitionData, Tuple2<Integer, FetchResponsePartitionData>>() {
-                                    @Override
-                                    public Tuple2<Integer, FetchResponsePartitionData> apply(TopicAndPartition arg1, FetchResponsePartitionData arg2) {
-                                        return Tuple2.make(arg1.partition, arg2);
-                                    }
-                                }));
-                                return folded + topicData.sizeInBytes();
-                            }
-                        });
+        return FetchResponse.headerSize + Utils.foldLeft(dataGroupedByTopic, 0, new Function3<Integer, String, Map<TopicAndPartition, FetchResponsePartitionData>, Integer>() {
+            @Override
+            public Integer apply(Integer folded, String topic, Map<TopicAndPartition, FetchResponsePartitionData> arg3) {
+                TopicData topicData = new TopicData(topic, Utils.map(arg3, new Function2<TopicAndPartition, FetchResponsePartitionData, Tuple2<Integer, FetchResponsePartitionData>>() {
+                    @Override
+                    public Tuple2<Integer, FetchResponsePartitionData> apply(TopicAndPartition arg1, FetchResponsePartitionData arg2) {
+                        return Tuple2.make(arg1.partition, arg2);
+                    }
+                }));
+                return folded + topicData.sizeInBytes();
+            }
+        });
     }
 
     private FetchResponsePartitionData partitionDataFor(String topic, int partition) {
         TopicAndPartition topicAndPartition = new TopicAndPartition(topic, partition);
         FetchResponsePartitionData fetchResponsePartitionData = data.get(topicAndPartition);
-        if (fetchResponsePartitionData != null) return fetchResponsePartitionData;
+        if (fetchResponsePartitionData != null)
+            return fetchResponsePartitionData;
 
-
-        throw new IllegalArgumentException(
-                String.format("No partition %s in fetch response %s", topicAndPartition, this.toString()));
+        throw new IllegalArgumentException(String.format("No partition %s in fetch response %s", topicAndPartition, this.toString()));
     }
 
     public ByteBufferMessageSet messageSet(String topic, int partition) {

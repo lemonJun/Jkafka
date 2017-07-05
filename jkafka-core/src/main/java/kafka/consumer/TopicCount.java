@@ -13,8 +13,7 @@ public abstract class TopicCount {
 
     public abstract String pattern();
 
-    protected Map<String, Set<String>> makeConsumerThreadIdsPerTopic(String consumerIdString,
-                                                                     Map<String, Integer> topicCountMap) {
+    protected Map<String, Set<String>> makeConsumerThreadIdsPerTopic(String consumerIdString, Map<String, Integer> topicCountMap) {
         Map<String, Set<String>> consumerThreadIdsPerTopicMap = Maps.newHashMap();
         for (Map.Entry<String, Integer> entry : topicCountMap.entrySet()) {
             String topic = entry.getKey();

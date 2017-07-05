@@ -22,8 +22,7 @@ public class KafkaTimer {
         TimerContext ctx = metric.time();
         try {
             return f.apply();
-        }
-        finally {
+        } finally {
             ctx.stop();
         }
     }

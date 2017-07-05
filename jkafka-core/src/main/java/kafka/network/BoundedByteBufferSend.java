@@ -21,8 +21,7 @@ public class BoundedByteBufferSend extends Send {
     private void init() {
         // Avoid possibility of overflow for 2GB-4 byte buffer
         if (buffer.remaining() > Integer.MAX_VALUE - sizeBuffer.limit())
-            throw new IllegalStateException("Attempt to create a bounded buffer of " + buffer.remaining() + " bytes, but the maximum " +
-                    "allowable size for a bounded buffer is " + (Integer.MAX_VALUE - sizeBuffer.limit()) + ".");
+            throw new IllegalStateException("Attempt to create a bounded buffer of " + buffer.remaining() + " bytes, but the maximum " + "allowable size for a bounded buffer is " + (Integer.MAX_VALUE - sizeBuffer.limit()) + ".");
         sizeBuffer.putInt(buffer.limit());
         sizeBuffer.rewind();
 
@@ -48,10 +47,9 @@ public class BoundedByteBufferSend extends Send {
         buffer.rewind();
     }
 
-
     public int writeTo(GatheringByteChannel channel) {
         expectIncomplete();
-        long written = Utils.write(channel, new ByteBuffer[]{sizeBuffer, buffer});
+        long written = Utils.write(channel, new ByteBuffer[] { sizeBuffer, buffer });
         // if we are done, mark it off
         if (!buffer.hasRemaining())
             complete = true;

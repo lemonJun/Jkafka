@@ -25,11 +25,7 @@ public class OffsetCommitRequest extends RequestOrResponse {
     public short versionId;
     public String clientId;
 
-    public OffsetCommitRequest(String groupId,
-                               Map<TopicAndPartition, OffsetMetadataAndError> requestInfo,
-                               short versionId,
-                               int correlationId,
-                               String clientId) {
+    public OffsetCommitRequest(String groupId, Map<TopicAndPartition, OffsetMetadataAndError> requestInfo, short versionId, int correlationId, String clientId) {
         super(RequestKeys.OffsetCommitKey, correlationId);
         this.groupId = groupId;
         this.requestInfo = requestInfo;
@@ -59,19 +55,19 @@ public class OffsetCommitRequest extends RequestOrResponse {
         writeShortString(buffer, clientId);
 
         // Write OffsetCommitRequest
-        writeShortString(buffer, groupId);             // consumer group
+        writeShortString(buffer, groupId); // consumer group
         buffer.putInt(requestInfoGroupedByTopic.size()); // number of topics
-        Utils.foreach(requestInfoGroupedByTopic, new Callable2<String, Map<TopicAndPartition,OffsetMetadataAndError>>() {
+        Utils.foreach(requestInfoGroupedByTopic, new Callable2<String, Map<TopicAndPartition, OffsetMetadataAndError>>() {
             @Override
             public void apply(String topic, Map<TopicAndPartition, OffsetMetadataAndError> arg2) {
                 writeShortString(buffer, topic); // topic
-                buffer.putInt(arg2.size());       // number of partitions for this topic
+                buffer.putInt(arg2.size()); // number of partitions for this topic
 
                 Utils.foreach(arg2, new Callable2<TopicAndPartition, OffsetMetadataAndError>() {
                     @Override
                     public void apply(TopicAndPartition a1, OffsetMetadataAndError a2) {
-                        buffer.putInt(a1.partition);  // partition
-                        buffer.putLong(a2.offset);    // offset
+                        buffer.putInt(a1.partition); // partition
+                        buffer.putLong(a2.offset); // offset
                         writeShortString(buffer, a2.metadata); // metadata
                     }
                 });

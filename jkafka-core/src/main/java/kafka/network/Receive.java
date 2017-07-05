@@ -16,7 +16,6 @@ public abstract class Receive extends Transmission {
 
     public abstract int readFrom(ReadableByteChannel channel);
 
-
     public int readCompletely(ReadableByteChannel channel) {
         int totalRead = 0;
         while (!complete()) {

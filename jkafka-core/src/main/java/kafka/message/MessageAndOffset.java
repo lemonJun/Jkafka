@@ -18,21 +18,22 @@ public class MessageAndOffset {
 
     @Override
     public String toString() {
-        return "MessageAndOffset{" +
-                "message=" + message +
-                ", offset=" + offset +
-                '}';
+        return "MessageAndOffset{" + "message=" + message + ", offset=" + offset + '}';
     }
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
 
         MessageAndOffset that = (MessageAndOffset) o;
 
-        if (offset != that.offset) return false;
-        if (!message.equals(that.message)) return false;
+        if (offset != that.offset)
+            return false;
+        if (!message.equals(that.message))
+            return false;
 
         return true;
     }

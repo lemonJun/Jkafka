@@ -11,7 +11,7 @@ import com.google.common.collect.Maps;
 
 import kafka.common.KafkaException;
 
-public class Pool<K, V> implements Iterable<Map.Entry<K,V>> {
+public class Pool<K, V> implements Iterable<Map.Entry<K, V>> {
     public Function<K, V> valueFactory;
 
     public Pool() {
@@ -52,12 +52,14 @@ public class Pool<K, V> implements Iterable<Map.Entry<K,V>> {
      *         put a value.
      */
     public V getAndMaybePut(K key) {
-        if (valueFactory == null) throw new KafkaException("Empty value factory in pool.");
+        if (valueFactory == null)
+            throw new KafkaException("Empty value factory in pool.");
 
         V curr = pool.get(key);
-        if (curr != null) return curr;
+        if (curr != null)
+            return curr;
 
-        synchronized(createLock)  {
+        synchronized (createLock) {
             curr = pool.get(key);
             if (curr == null)
                 pool.put(key, valueFactory.apply(key));
@@ -82,7 +84,7 @@ public class Pool<K, V> implements Iterable<Map.Entry<K,V>> {
     }
 
     public Collection<V> values() {
-           return pool.values();
+        return pool.values();
     }
 
     public void clear() {

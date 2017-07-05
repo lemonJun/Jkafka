@@ -41,17 +41,14 @@ public class ReassignedPartitionLeaderSelector implements PartitionLeaderSelecto
         Integer newLeader = Utils.head(aliveReassignedInSyncReplicas);
         if (newLeader != null) {
             List<Integer> t2 = Lists.newArrayList(reassignedInSyncReplicas);
-            return Tuple2.make(new LeaderAndIsr(newLeader, currentLeaderEpoch + 1, currentLeaderAndIsr.isr,
-                    currentLeaderIsrZkPathVersion + 1), t2);
+            return Tuple2.make(new LeaderAndIsr(newLeader, currentLeaderEpoch + 1, currentLeaderAndIsr.isr, currentLeaderIsrZkPathVersion + 1), t2);
         }
 
         switch (reassignedInSyncReplicas.size()) {
             case 0:
-                throw new StateChangeFailedException("List of reassigned replicas for partition " +
-                        " %s is empty. Current leader and ISR: [%s]", topicAndPartition, currentLeaderAndIsr);
+                throw new StateChangeFailedException("List of reassigned replicas for partition " + " %s is empty. Current leader and ISR: [%s]", topicAndPartition, currentLeaderAndIsr);
             default:
-                throw new StateChangeFailedException("None of the reassigned replicas for partition " +
-                        "%s are alive. Current leader and ISR: [%s]", topicAndPartition, currentLeaderAndIsr);
+                throw new StateChangeFailedException("None of the reassigned replicas for partition " + "%s are alive. Current leader and ISR: [%s]", topicAndPartition, currentLeaderAndIsr);
         }
     }
 }

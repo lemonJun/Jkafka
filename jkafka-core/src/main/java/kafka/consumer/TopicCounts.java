@@ -34,13 +34,14 @@ public class TopicCounts {
                 throw new KafkaException("error constructing TopicCount : " + topicCountString);
 
             String pattern = consumerRegistrationMap.getString("pattern");
-            if (pattern == null) throw new KafkaException("error constructing TopicCount : " + topicCountString);
+            if (pattern == null)
+                throw new KafkaException("error constructing TopicCount : " + topicCountString);
 
             subscriptionPattern = pattern;
 
-
             topMap = (Map<String, Integer>) consumerRegistrationMap.get("subscription");
-            if (topMap == null) throw new KafkaException("error constructing TopicCount : " + topicCountString);
+            if (topMap == null)
+                throw new KafkaException("error constructing TopicCount : " + topicCountString);
 
         } catch (Throwable e) {
             logger.error("error parsing consumer json string {}", topicCountString, e);
@@ -65,8 +66,7 @@ public class TopicCounts {
         return new StaticTopicCount(consumerIdString, topicCount);
     }
 
-    public static TopicCount constructTopicCount(String consumerIdString, TopicFilter filter,
-                                                 int numStreams, ZkClient zkClient) {
+    public static TopicCount constructTopicCount(String consumerIdString, TopicFilter filter, int numStreams, ZkClient zkClient) {
         return new WildcardTopicCount(zkClient, consumerIdString, filter, numStreams);
     }
 }

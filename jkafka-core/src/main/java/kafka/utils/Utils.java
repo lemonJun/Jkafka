@@ -188,8 +188,7 @@ public abstract class Utils {
      */
     public static FileChannel openChannel(File file, boolean mutable) {
         try {
-            return mutable ? new RandomAccessFile(file, "rw").getChannel()
-                    : new FileInputStream(file).getChannel();
+            return mutable ? new RandomAccessFile(file, "rw").getChannel() : new FileInputStream(file).getChannel();
         } catch (FileNotFoundException e) {
             throw new KafkaException(e, "try to openChannel %s error", file, e);
         }
@@ -209,7 +208,6 @@ public abstract class Utils {
         }
     }
 
-
     public static void swallow(Runnable action) {
         try {
             action.run();
@@ -225,10 +223,13 @@ public abstract class Utils {
     public static boolean equal(ByteBuffer b1, ByteBuffer b2) {
         // two byte buffers are equal if their position is the same,
         // their remaining bytes are the same, and their contents are the same
-        if (b1.position() != b2.position()) return false;
-        if (b1.remaining() != b2.remaining()) return false;
+        if (b1.position() != b2.position())
+            return false;
+        if (b1.remaining() != b2.remaining())
+            return false;
         for (int i = 0, ii = b1.remaining(); i < ii; ++i)
-            if (b1.get(i) != b2.get(i)) return false;
+            if (b1.get(i) != b2.get(i))
+                return false;
         return true;
     }
 
@@ -282,7 +283,8 @@ public abstract class Utils {
      * @param files sequence of files to be deleted
      */
     public static void rm(List<String> files) {
-        for (String f : files) rm(new File(f));
+        for (String f : files)
+            rm(new File(f));
     }
 
     /**
@@ -499,8 +501,8 @@ public abstract class Utils {
      */
     public static Map<String, String> parseCsvMap(String str) {
         Map<String, String> map = new HashMap<String, String>();
-        if ("".equals(str)) return map;
-
+        if ("".equals(str))
+            return map;
 
         String[] split = str.split("\\s*,\\s*");
         for (String kvStr : split) {
@@ -517,11 +519,13 @@ public abstract class Utils {
      */
     public static List<String> parseCsvList(String csvList) {
         List<String> list = new ArrayList<String>();
-        if (csvList == null || csvList.isEmpty()) return list;
+        if (csvList == null || csvList.isEmpty())
+            return list;
 
         String[] split = csvList.split("\\s*,\\s*");
         for (String v : split) {
-            if (!v.equals("")) list.add(v);
+            if (!v.equals(""))
+                list.add(v);
         }
 
         return list;
@@ -599,8 +603,7 @@ public abstract class Utils {
      */
     public static String replaceSuffix(String s, String oldSuffix, String newSuffix) {
         if (!s.endsWith(oldSuffix))
-            throw new IllegalArgumentException(String.format(
-                    "Expected string to end with '%s' but string is '%s'", oldSuffix, s));
+            throw new IllegalArgumentException(String.format("Expected string to end with '%s' but string is '%s'", oldSuffix, s));
 
         return s.substring(0, s.length() - oldSuffix.length()) + newSuffix;
     }
@@ -658,10 +661,7 @@ public abstract class Utils {
      * Read a big-endian integer from a byte array
      */
     public static int readInt(byte[] bytes, int offset) {
-        return ((bytes[offset] & 0xFF) << 24) |
-                ((bytes[offset + 1] & 0xFF) << 16) |
-                ((bytes[offset + 2] & 0xFF) << 8) |
-                (bytes[offset + 3] & 0xFF);
+        return ((bytes[offset] & 0xFF) << 24) | ((bytes[offset + 1] & 0xFF) << 16) | ((bytes[offset + 2] & 0xFF) << 8) | (bytes[offset + 3] & 0xFF);
     }
 
     /**
@@ -740,16 +740,16 @@ public abstract class Utils {
         return null;
     }
 
-
     public static <S> List<S> tail(List<S> current) {
-        return current != null && current.size() > 1 ? current.subList(1, current.size()) : Lists.<S>newArrayList();
+        return current != null && current.size() > 1 ? current.subList(1, current.size()) : Lists.<S> newArrayList();
     }
 
     public static <S> List<S> tail(Iterable<S> current) {
         List<S> tail = Lists.newArrayList();
         int i = 0;
         for (S s : current) {
-            if (i > 0) tail.add(s);
+            if (i > 0)
+                tail.add(s);
             i++;
         }
 
@@ -783,7 +783,6 @@ public abstract class Utils {
 
         return result;
     }
-
 
     public static <K, V> Multimap<K, V> groupBy(Iterable<V> set, Function1<V, Tuple2<K, V>> function) {
         Multimap<K, V> result = HashMultimap.create();
@@ -838,7 +837,8 @@ public abstract class Utils {
 
     public static <T> boolean exists(Collection<T> values, Function1<T, Boolean> existsFunc) {
         for (T value : values) {
-            if (existsFunc.apply(value)) return true;
+            if (existsFunc.apply(value))
+                return true;
         }
 
         return false;
@@ -855,17 +855,17 @@ public abstract class Utils {
         return mm;
     }
 
-//    public static <K, V, K1, V1> Multimap<K1, V1> map(Multimap<K, V> map, Function2<K, V, Tuple2<K1, V1>> func) {
-//        Multimap<K1, V1> mm = HashMultimap.create();
-//
-//        for (Map.Entry<K, V> entry : map.entries()) {
-//            Tuple2<K1, V1> apply = func.apply(entry.getKey(), entry.getValue());
-//            mm.put(apply._1, apply._2);
-//        }
-//
-//
-//        return mm;
-//    }
+    //    public static <K, V, K1, V1> Multimap<K1, V1> map(Multimap<K, V> map, Function2<K, V, Tuple2<K1, V1>> func) {
+    //        Multimap<K1, V1> mm = HashMultimap.create();
+    //
+    //        for (Map.Entry<K, V> entry : map.entries()) {
+    //            Tuple2<K1, V1> apply = func.apply(entry.getKey(), entry.getValue());
+    //            mm.put(apply._1, apply._2);
+    //        }
+    //
+    //
+    //        return mm;
+    //    }
 
     public static <K, V, K1, V1> Map<K1, V1> map(Map<K, V> map, Function2<K, V, Tuple2<K1, V1>> func) {
         Map<K1, V1> ret = Maps.newHashMap();
@@ -957,7 +957,6 @@ public abstract class Utils {
         return v1s;
     }
 
-
     public static <V, V1> List<V1> mapLists(Collection<V> coll, Function1<V, Collection<V1>> func) {
         List<V1> v1s = Lists.newArrayList();
         for (V v : coll) {
@@ -966,7 +965,6 @@ public abstract class Utils {
         }
         return v1s;
     }
-
 
     public static <V, V1> List<V1> mapList(Collection<V> coll, Map<V, V1> map) {
         List<V1> v1s = Lists.newArrayList();
@@ -1051,7 +1049,6 @@ public abstract class Utils {
         }
     }
 
-
     public static List<Integer> flatList(int from, int count) {
         return flatList(from, count, 1);
     }
@@ -1118,7 +1115,8 @@ public abstract class Utils {
     public static <K, V> Multimap<K, V> filter(Multimap<K, V> coll, Predicate<Map.Entry<K, V>> predicate) {
         Multimap<K, V> map = HashMultimap.create();
         for (Map.Entry<K, V> s : coll.entries()) {
-            if (predicate.apply(s)) map.put(s.getKey(), s.getValue());
+            if (predicate.apply(s))
+                map.put(s.getKey(), s.getValue());
         }
         return map;
     }
@@ -1126,7 +1124,8 @@ public abstract class Utils {
     public static <K, V> Map<K, V> filter(Map<K, V> coll, Predicate<Map.Entry<K, V>> predicate) {
         Map<K, V> map = Maps.newHashMap();
         for (Map.Entry<K, V> s : coll.entrySet()) {
-            if (predicate.apply(s)) map.put(s.getKey(), s.getValue());
+            if (predicate.apply(s))
+                map.put(s.getKey(), s.getValue());
         }
         return map;
     }
@@ -1134,7 +1133,8 @@ public abstract class Utils {
     public static <K, V> Map<K, V> filter(Map<K, V> coll, Predicate2<K, V> predicate) {
         Map<K, V> map = Maps.newHashMap();
         for (Map.Entry<K, V> s : coll.entrySet()) {
-            if (predicate.apply(s.getKey(), s.getValue())) map.put(s.getKey(), s.getValue());
+            if (predicate.apply(s.getKey(), s.getValue()))
+                map.put(s.getKey(), s.getValue());
         }
         return map;
     }
@@ -1143,7 +1143,8 @@ public abstract class Utils {
         Multimap<K, V> map = HashMultimap.create();
         for (K k : coll.keySet()) {
             Collection<V> vs = coll.get(k);
-            if (predicate.apply(k, vs)) map.putAll(k, vs);
+            if (predicate.apply(k, vs))
+                map.putAll(k, vs);
         }
         return map;
     }
@@ -1151,7 +1152,8 @@ public abstract class Utils {
     public static <S> List<S> filter(Iterable<S> coll, Predicate<S> predicate) {
         List<S> list = Lists.newArrayList();
         for (S s : coll) {
-            if (predicate.apply(s)) list.add(s);
+            if (predicate.apply(s))
+                list.add(s);
         }
         return list;
     }
@@ -1162,7 +1164,8 @@ public abstract class Utils {
     }
 
     public static <S> S last(List<S> list) {
-        if (list.size() > 0) return list.get(list.size() - 1);
+        if (list.size() > 0)
+            return list.get(list.size() - 1);
 
         throw new KafkaException("list is empty, last is not available");
     }
@@ -1194,7 +1197,8 @@ public abstract class Utils {
         List<T> list = Lists.newArrayList();
         int num = 0;
         for (T s : items) {
-            if (++num > n) break;
+            if (++num > n)
+                break;
             list.add(s);
         }
         return list;
@@ -1213,10 +1217,10 @@ public abstract class Utils {
         return list;
     }
 
-
     public static boolean forall(int from, int size, int step, Predicate<Integer> predicate) {
         for (int i = from; i < from + size; i += step) {
-            if (!predicate.apply(i)) return false;
+            if (!predicate.apply(i))
+                return false;
         }
 
         return true;
@@ -1225,7 +1229,8 @@ public abstract class Utils {
 
     public static <T> boolean forall(Iterable<T> coll, Predicate<T> predicate) {
         for (T t : coll) {
-            if (!predicate.apply(t)) return false;
+            if (!predicate.apply(t))
+                return false;
         }
 
         return true;
@@ -1235,7 +1240,8 @@ public abstract class Utils {
         int i = -1;
         for (T t : coll) {
             ++i;
-            if (predicate.apply(i)) return i;
+            if (predicate.apply(i))
+                return i;
         }
 
         return -1;
@@ -1247,7 +1253,8 @@ public abstract class Utils {
         int i = 0;
         int size = list.size();
         for (T t : list) {
-            if (i + n <= size) break;
+            if (i + n <= size)
+                break;
             ret.add(t);
         }
 
@@ -1285,7 +1292,8 @@ public abstract class Utils {
         Set<T> ret = Sets.newHashSet();
 
         for (T t : sets) {
-            if (predicate.apply(t)) ret.add(t);
+            if (predicate.apply(t))
+                ret.add(t);
         }
 
         return ret;
@@ -1299,12 +1307,12 @@ public abstract class Utils {
             throw new KafkaException(e);
         }
 
-
     }
 
     public static <K, V> V getOrElseUpdate(Map<K, V> map, K k, V v) {
         V v1 = map.get(k);
-        if (v1 != null) return v1;
+        if (v1 != null)
+            return v1;
 
         map.put(k, v);
         return v;
@@ -1335,7 +1343,6 @@ public abstract class Utils {
         for (Map.Entry<K, V1> entry : map.entrySet()) {
             m.putAll(entry.getKey(), function1.apply(entry.getValue()));
         }
-
 
         return m;
     }
@@ -1409,7 +1416,8 @@ public abstract class Utils {
     public static <T> int count(Iterable<T> iterable, Predicate<T> predicate) {
         int count = 0;
         for (T t : iterable) {
-            if (predicate.apply(t)) ++count;
+            if (predicate.apply(t))
+                ++count;
         }
 
         return count;

@@ -17,11 +17,9 @@ public class FetchResponsePartitionData {
         return new FetchResponsePartitionData(error, hw, new ByteBufferMessageSet(messageSetBuffer));
     }
 
-    public static final int headerSize =
-            2 + /* error code */
+    public static final int headerSize = 2 + /* error code */
                     8 + /* high watermark */
                     4 /* messageSetSize */;
-
 
     public short error /*= ErrorMapping.NoError*/;
     public long hw /*= -1*/;

@@ -40,8 +40,7 @@ public class FetchRequestReader implements RequestReader {
                         int partitionId = buffer.getInt();
                         long offset = buffer.getLong();
                         int fetchSize = buffer.getInt();
-                        return Tuple2.make(new TopicAndPartition(topic, partitionId),
-                                new PartitionFetchInfo(offset, fetchSize));
+                        return Tuple2.make(new TopicAndPartition(topic, partitionId), new PartitionFetchInfo(offset, fetchSize));
                     }
                 });
             }

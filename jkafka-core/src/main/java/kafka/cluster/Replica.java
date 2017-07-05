@@ -18,16 +18,11 @@ public class Replica {
     public final long initialHighWatermarkValue /* = 0L*/;
     public Log log;
 
-    public Replica(int brokerId,
-                   Partition partition) {
+    public Replica(int brokerId, Partition partition) {
         this(brokerId, partition, SystemTime.instance, 0L, null);
     }
 
-    public Replica(int brokerId,
-                   Partition partition,
-                   Time time,
-                   long initialHighWatermarkValue,
-                   Log log) {
+    public Replica(int brokerId, Partition partition, Time time, long initialHighWatermarkValue, Log log) {
         this.brokerId = brokerId;
         this.partition = partition;
         this.time = time;
@@ -56,11 +51,9 @@ public class Replica {
         if (!isLocal()) {
             logEndOffsetValue.set(newLogEndOffset);
             logEndOffsetUpdateTimeMsValue.set(time.milliseconds());
-            logger.trace("Setting log end offset for replica {} for partition [{},{}] to {}",
-                    brokerId, topic, partitionId, logEndOffsetValue.get());
+            logger.trace("Setting log end offset for replica {} for partition [{},{}] to {}", brokerId, topic, partitionId, logEndOffsetValue.get());
         } else
-            throw new KafkaException("Shouldn't set logEndOffset for replica %d partition [%s,%d] since it's local",
-                    brokerId, topic, partitionId);
+            throw new KafkaException("Shouldn't set logEndOffset for replica %d partition [%s,%d] since it's local", brokerId, topic, partitionId);
 
     }
 
@@ -81,26 +74,25 @@ public class Replica {
 
     public void highWatermark(long newHighWatermark) {
         if (isLocal()) {
-            logger.trace("Setting hw for replica {} partition [{},{}] on broker {} to {}"
-                    , brokerId, topic, partitionId, brokerId, newHighWatermark);
+            logger.trace("Setting hw for replica {} partition [{},{}] on broker {} to {}", brokerId, topic, partitionId, brokerId, newHighWatermark);
             highWatermarkValue.set(newHighWatermark);
         } else
-            throw new KafkaException("Unable to set highwatermark for replica %d partition [%s,%d] since it's not local",
-                    brokerId, topic, partitionId);
+            throw new KafkaException("Unable to set highwatermark for replica %d partition [%s,%d] since it's not local", brokerId, topic, partitionId);
     }
 
     public long highWatermark() {
         if (isLocal())
             return highWatermarkValue.get();
 
-        throw new KafkaException("Unable to get highwatermark for replica %d partition [%s,%d] since it's not local",
-                brokerId, topic, partitionId);
+        throw new KafkaException("Unable to get highwatermark for replica %d partition [%s,%d] since it's not local", brokerId, topic, partitionId);
     }
 
     @Override
     public boolean equals(Object that) {
-        if (this == that) return true;
-        if (!(that instanceof Replica)) return false;
+        if (this == that)
+            return true;
+        if (!(that instanceof Replica))
+            return false;
 
         Replica other = (Replica) that;
         return (topic.equals(other.topic) && brokerId == other.brokerId && partition.equals(other.partition));
@@ -111,7 +103,6 @@ public class Replica {
         return 31 + topic.hashCode() + 17 * brokerId + partition.hashCode();
     }
 
-
     @Override
     public String toString() {
         StringBuilder replicaString = new StringBuilder();
@@ -119,7 +110,8 @@ public class Replica {
         replicaString.append("; Topic: " + topic);
         replicaString.append("; Partition: " + partition.partitionId);
         replicaString.append("; isLocal: " + isLocal());
-        if (isLocal()) replicaString.append("; Highwatermark: " + highWatermark());
+        if (isLocal())
+            replicaString.append("; Highwatermark: " + highWatermark());
         return replicaString.toString();
     }
 

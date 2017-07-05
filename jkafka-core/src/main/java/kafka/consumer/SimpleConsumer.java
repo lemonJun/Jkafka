@@ -29,7 +29,6 @@ import kafka.utils.Function0;
 import kafka.utils.ThreadSafe;
 import kafka.utils.Utils;
 
-
 /**
  * A consumer of kafka messages
  */
@@ -123,7 +122,7 @@ public class SimpleConsumer {
      * @return a set of fetched messages
      */
     public FetchResponse fetch(final FetchRequest request) {
-        final Receive[] response = {null};
+        final Receive[] response = { null };
         final KafkaTimer specificTimer = fetchRequestAndResponseStats.getFetchRequestAndResponseStats(brokerInfo).requestTimer;
         KafkaTimer aggregateTimer = fetchRequestAndResponseStats.getFetchRequestAndResponseAllBrokersStats().requestTimer;
         aggregateTimer.time(new Function0<Object>() {
@@ -195,9 +194,7 @@ public class SimpleConsumer {
     public long earliestOrLatestOffset(final TopicAndPartition topicAndPartition, final long earliestOrLatest, int consumerId) {
         Map<TopicAndPartition, PartitionOffsetRequestInfo> requestInfo = Maps.newHashMap();
         requestInfo.put(topicAndPartition, new PartitionOffsetRequestInfo(earliestOrLatest, 1));
-        OffsetRequest request = new OffsetRequest(requestInfo,
-                /*clientId = */clientId,
-                /*replicaId = */consumerId);
+        OffsetRequest request = new OffsetRequest(requestInfo, /*clientId = */clientId, /*replicaId = */consumerId);
         PartitionOffsetsResponse partitionErrorAndOffset = getOffsetsBefore(request).partitionErrorAndOffsets.get(topicAndPartition);
         if (partitionErrorAndOffset.error == ErrorMapping.NoError) {
             return Utils.head(partitionErrorAndOffset.offsets);

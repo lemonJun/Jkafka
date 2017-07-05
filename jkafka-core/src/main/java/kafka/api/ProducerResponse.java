@@ -24,24 +24,22 @@ public class ProducerResponse extends RequestOrResponse {
         int correlationId = buffer.getInt();
         int topicCount = buffer.getInt();
 
-        Map<TopicAndPartition, ProducerResponseStatus> status =
-                Utils.flatMaps(1, topicCount, new Function0<Map<TopicAndPartition, ProducerResponseStatus>>() {
+        Map<TopicAndPartition, ProducerResponseStatus> status = Utils.flatMaps(1, topicCount, new Function0<Map<TopicAndPartition, ProducerResponseStatus>>() {
+            @Override
+            public Map<TopicAndPartition, ProducerResponseStatus> apply() {
+                final String topic = readShortString(buffer);
+                int partitionCount = buffer.getInt();
+                return Utils.map(1, partitionCount, new Function0<Tuple2<TopicAndPartition, ProducerResponseStatus>>() {
                     @Override
-                    public Map<TopicAndPartition, ProducerResponseStatus> apply() {
-                        final String topic = readShortString(buffer);
-                        int partitionCount = buffer.getInt();
-                        return Utils.map(1, partitionCount, new Function0<Tuple2<TopicAndPartition, ProducerResponseStatus>>() {
-                            @Override
-                            public Tuple2<TopicAndPartition, ProducerResponseStatus> apply() {
-                                int partition = buffer.getInt();
-                                short error = buffer.getShort();
-                                long offset = buffer.getLong();
-                                return Tuple2.make(new TopicAndPartition(topic, partition),
-                                        new ProducerResponseStatus(error, offset));
-                            }
-                        });
+                    public Tuple2<TopicAndPartition, ProducerResponseStatus> apply() {
+                        int partition = buffer.getInt();
+                        short error = buffer.getShort();
+                        long offset = buffer.getLong();
+                        return Tuple2.make(new TopicAndPartition(topic, partition), new ProducerResponseStatus(error, offset));
                     }
                 });
+            }
+        });
 
         return new ProducerResponse(correlationId, status);
     }
@@ -77,28 +75,25 @@ public class ProducerResponse extends RequestOrResponse {
     public int sizeInBytes() {
         Table<String, TopicAndPartition, ProducerResponseStatus> groupedStatus = statusGroupedByTopic;
         return 4 + /* correlation id */
-                4 + /* topic count */
-                Utils.foldLeft(groupedStatus, 0, new Function3<Integer, String, Map<TopicAndPartition, ProducerResponseStatus>, Integer>() {
-                    @Override
-                    public Integer apply(Integer arg1, String topic, Map<TopicAndPartition, ProducerResponseStatus> arg3) {
-                        return arg1 + shortStringLength(topic) +
-                                4 + /* partition count for this topic */
-                                arg3.size() * (
-                                        4 + /* partition id */
-                                                2 + /* error code */
-                                                8 /* offset */
+                        4 + /* topic count */
+                        Utils.foldLeft(groupedStatus, 0, new Function3<Integer, String, Map<TopicAndPartition, ProducerResponseStatus>, Integer>() {
+                            @Override
+                            public Integer apply(Integer arg1, String topic, Map<TopicAndPartition, ProducerResponseStatus> arg3) {
+                                return arg1 + shortStringLength(topic) + 4 + /* partition count for this topic */
+                                arg3.size() * (4 + /* partition id */
+                                2 + /* error code */
+                                8 /* offset */
                                 );
-                    }
-                });
+                            }
+                        });
     }
-
 
     public void writeTo(final ByteBuffer buffer) {
         Table<String, TopicAndPartition, ProducerResponseStatus> groupedStatus = statusGroupedByTopic;
         buffer.putInt(correlationId);
         buffer.putInt(groupedStatus.size()); // topic count
 
-        Utils.foreach(groupedStatus, new Callable2<String, Map<TopicAndPartition,ProducerResponseStatus>>() {
+        Utils.foreach(groupedStatus, new Callable2<String, Map<TopicAndPartition, ProducerResponseStatus>>() {
             @Override
             public void apply(String topic, Map<TopicAndPartition, ProducerResponseStatus> errorsAndOffsets) {
                 writeShortString(buffer, topic);

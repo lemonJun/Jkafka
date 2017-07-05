@@ -6,7 +6,6 @@ import kafka.common.ErrorMapping;
 
 public class UpdateMetadataResponse extends RequestOrResponse {
 
-
     public static UpdateMetadataResponse readFrom(ByteBuffer buffer) {
         int correlationId = buffer.getInt();
         short errorCode = buffer.getShort();
@@ -26,7 +25,7 @@ public class UpdateMetadataResponse extends RequestOrResponse {
 
     @Override
     public int sizeInBytes() {
-        return  4 /* correlation id */ + 2 /* error code */;
+        return 4 /* correlation id */ + 2 /* error code */;
     }
 
     @Override

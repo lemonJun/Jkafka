@@ -57,10 +57,10 @@ public class ConsumerConfig extends ZKConfig {
         /** backoff time to refresh the leader of a partition after it loses the current leader */
         refreshLeaderBackoffMs = props.getInt("refresh.leader.backoff.ms", ConsumerConfigs.RefreshMetadataBackoffMs);
 
-  /* what to do if an offset is out of range.
-     smallest : automatically reset the offset to the smallest offset
-     largest : automatically reset the offset to the largest offset
-     anything else: throw exception to the consumer */
+        /* what to do if an offset is out of range.
+           smallest : automatically reset the offset to the smallest offset
+           largest : automatically reset the offset to the largest offset
+           anything else: throw exception to the consumer */
         autoOffsetReset = props.getString("auto.offset.reset", ConsumerConfigs.AutoOffsetReset);
 
         /** throw a timeout exception to the consumer if no message is available for consumption after the specified inter*/

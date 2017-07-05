@@ -25,8 +25,7 @@ public class ControllerChannelManager {
         this.controllerContext = controllerContext;
         this.config = config;
 
-        logger = LoggerFactory.getLogger(ControllerChannelManager.class
-                + "[Channel manager on controller " + config.brokerId + "]: ");
+        logger = LoggerFactory.getLogger(ControllerChannelManager.class + "[Channel manager on controller " + config.brokerId + "]: ");
         Utils.foreach(controllerContext.liveBrokers(), new Callable1<Broker>() {
             @Override
             public void apply(Broker _) {
@@ -38,7 +37,6 @@ public class ControllerChannelManager {
     private HashMap<Integer, ControllerBrokerStateInfo> brokerStateInfo = Maps.newHashMap();
     private Object brokerLock = new Object();
     Logger logger;
-
 
     public void startup() {
         synchronized (brokerLock) {
@@ -94,13 +92,9 @@ public class ControllerChannelManager {
     }
 
     private void addNewBroker(Broker broker) {
-        LinkedBlockingQueue<Tuple2<RequestOrResponse, Callable1<RequestOrResponse>>>
-                messageQueue = new LinkedBlockingQueue<Tuple2<RequestOrResponse, Callable1<RequestOrResponse>>>(config.controllerMessageQueueSize);
+        LinkedBlockingQueue<Tuple2<RequestOrResponse, Callable1<RequestOrResponse>>> messageQueue = new LinkedBlockingQueue<Tuple2<RequestOrResponse, Callable1<RequestOrResponse>>>(config.controllerMessageQueueSize);
         logger.debug("Controller {} trying to connect to broker {}", config.brokerId, broker.id);
-        BlockingChannel channel = new BlockingChannel(broker.host, broker.port,
-                BlockingChannel.UseDefaultBufferSize,
-                BlockingChannel.UseDefaultBufferSize,
-                config.controllerSocketTimeoutMs);
+        BlockingChannel channel = new BlockingChannel(broker.host, broker.port, BlockingChannel.UseDefaultBufferSize, BlockingChannel.UseDefaultBufferSize, config.controllerSocketTimeoutMs);
         channel.connect();
         RequestSendThread requestThread = new RequestSendThread(config.brokerId, controllerContext, broker.id, messageQueue, channel);
         requestThread.setDaemon(false);

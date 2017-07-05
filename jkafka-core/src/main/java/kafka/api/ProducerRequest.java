@@ -28,12 +28,7 @@ public class ProducerRequest extends RequestOrResponse {
     public int ackTimeoutMs;
     public Map<TopicAndPartition, ByteBufferMessageSet> data;
 
-    public ProducerRequest(short versionId,
-                           int correlationId,
-                           String clientId,
-                           short requiredAcks,
-                           int ackTimeoutMs,
-                           Map<TopicAndPartition, ByteBufferMessageSet> data) {
+    public ProducerRequest(short versionId, int correlationId, String clientId, short requiredAcks, int ackTimeoutMs, Map<TopicAndPartition, ByteBufferMessageSet> data) {
         super(RequestKeys.ProduceKey, correlationId);
 
         this.versionId = versionId;
@@ -57,18 +52,13 @@ public class ProducerRequest extends RequestOrResponse {
         });
     }
 
-
     /**
      * Partitions the data into a map of maps (one for each topic).
      */
     private Table<String, TopicAndPartition, ByteBufferMessageSet> dataGroupedByTopic;
     public Map<TopicAndPartition, Integer> topicPartitionMessageSizeMap;
 
-    public ProducerRequest(int correlationId,
-                           String clientId,
-                           Short requiredAcks,
-                           int ackTimeoutMs,
-                           Map<TopicAndPartition, ByteBufferMessageSet> data) {
+    public ProducerRequest(int correlationId, String clientId, Short requiredAcks, int ackTimeoutMs, Map<TopicAndPartition, ByteBufferMessageSet> data) {
         this(ProducerRequestReader.CurrentVersion, correlationId, clientId, requiredAcks, ackTimeoutMs, data);
     }
 
@@ -82,7 +72,7 @@ public class ProducerRequest extends RequestOrResponse {
         //save the topic structure
         buffer.putInt(dataGroupedByTopic.size()); //the number of topics
 
-        Utils.foreach(dataGroupedByTopic, new Callable2<String, Map<TopicAndPartition,ByteBufferMessageSet>>() {
+        Utils.foreach(dataGroupedByTopic, new Callable2<String, Map<TopicAndPartition, ByteBufferMessageSet>>() {
             @Override
             public void apply(String topic, Map<TopicAndPartition, ByteBufferMessageSet> topicAndPartitionData) {
                 writeShortString(buffer, topic); //write the topic
@@ -105,26 +95,23 @@ public class ProducerRequest extends RequestOrResponse {
 
     public int sizeInBytes() {
         return 2 + /* versionId */
-                4 + /* correlationId */
-                shortStringLength(clientId) + /* client id */
-                2 + /* requiredAcks */
-                4 + /* ackTimeoutMs */
-                4 + /* number of topics */
-                Utils.foldLeft(dataGroupedByTopic, 0,
-                        new Function3<Integer, String, Map<TopicAndPartition, ByteBufferMessageSet>, Integer>() {
+                        4 + /* correlationId */
+                        shortStringLength(clientId) + /* client id */
+                        2 + /* requiredAcks */
+                        4 + /* ackTimeoutMs */
+                        4 + /* number of topics */
+                        Utils.foldLeft(dataGroupedByTopic, 0, new Function3<Integer, String, Map<TopicAndPartition, ByteBufferMessageSet>, Integer>() {
                             @Override
                             public Integer apply(Integer folded, String topic, Map<TopicAndPartition, ByteBufferMessageSet> currTopic) {
-                                return folded + shortStringLength(topic)
-                                        + 4 /* the number of partitions */
-                                        + Utils.foldLeft(currTopic, 0, new Function3<Integer, TopicAndPartition, ByteBufferMessageSet, Integer>() {
-                                    @Override
-                                    public Integer apply(Integer arg1, TopicAndPartition arg2, ByteBufferMessageSet arg3) {
-                                        return arg1 +
-                                                4 + /* partition id */
-                                                4 + /* byte-length of serialized messages */
-                                                arg3.sizeInBytes();
-                                    }
-                                });
+                                return folded + shortStringLength(topic) + 4 /* the number of partitions */
+                                                + Utils.foldLeft(currTopic, 0, new Function3<Integer, TopicAndPartition, ByteBufferMessageSet, Integer>() {
+                                                    @Override
+                                                    public Integer apply(Integer arg1, TopicAndPartition arg2, ByteBufferMessageSet arg3) {
+                                                        return arg1 + 4 + /* partition id */
+                                                        4 + /* byte-length of serialized messages */
+                                                        arg3.sizeInBytes();
+                                                    }
+                                                });
                             }
                         });
 

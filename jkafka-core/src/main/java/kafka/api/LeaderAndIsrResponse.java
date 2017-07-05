@@ -46,17 +46,12 @@ public class LeaderAndIsrResponse extends RequestOrResponse {
 
     @Override
     public int sizeInBytes() {
-        return 4 /* correlation id */ +
-                2 /* error code */ +
-                4 /* number of responses */ +
-                Utils.foldLeft(responseMap, 0, new Function3<Integer, Tuple2<String, Integer>, Short, Integer>() {
-                    @Override
-                    public Integer apply(Integer arg1, Tuple2<String, Integer> key, Short arg3) {
-                        return arg1 + 2 + key._1.length() /* topic */ +
-                                4 /* partition */ +
-                                2 /* error code for this partition */;
-                    }
-                });
+        return 4 /* correlation id */ + 2 /* error code */ + 4 /* number of responses */ + Utils.foldLeft(responseMap, 0, new Function3<Integer, Tuple2<String, Integer>, Short, Integer>() {
+            @Override
+            public Integer apply(Integer arg1, Tuple2<String, Integer> key, Short arg3) {
+                return arg1 + 2 + key._1.length() /* topic */ + 4 /* partition */ + 2 /* error code for this partition */;
+            }
+        });
     }
 
     @Override
@@ -65,7 +60,7 @@ public class LeaderAndIsrResponse extends RequestOrResponse {
         buffer.putShort(errorCode);
         buffer.putInt(responseMap.size());
 
-        Utils.foreach(responseMap, new Callable2<Tuple2<String,Integer>, Short>() {
+        Utils.foreach(responseMap, new Callable2<Tuple2<String, Integer>, Short>() {
             @Override
             public void apply(Tuple2<String, Integer> key, Short value) {
                 writeShortString(buffer, key._1);

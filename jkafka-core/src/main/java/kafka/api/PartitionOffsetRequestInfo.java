@@ -11,21 +11,22 @@ public class PartitionOffsetRequestInfo {
 
     @Override
     public String toString() {
-        return "PartitionOffsetRequestInfo{" +
-                "time=" + time +
-                ", maxNumOffsets=" + maxNumOffsets +
-                '}';
+        return "PartitionOffsetRequestInfo{" + "time=" + time + ", maxNumOffsets=" + maxNumOffsets + '}';
     }
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
 
         PartitionOffsetRequestInfo that = (PartitionOffsetRequestInfo) o;
 
-        if (maxNumOffsets != that.maxNumOffsets) return false;
-        if (time != that.time) return false;
+        if (maxNumOffsets != that.maxNumOffsets)
+            return false;
+        if (time != that.time)
+            return false;
 
         return true;
     }

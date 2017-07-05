@@ -9,7 +9,6 @@ public class OffsetMetadataAndError {
     public static final long InvalidOffset = -1L;
     public static final String NoMetadata = "";
 
-
     public long offset;
     public String metadata;
     public short error;
@@ -21,6 +20,7 @@ public class OffsetMetadataAndError {
     public OffsetMetadataAndError(long offset, String metadata) {
         this(offset, metadata, ErrorMapping.NoError);
     }
+
     public OffsetMetadataAndError(long offset, String metadata, short error) {
         this.offset = offset;
         this.metadata = metadata;

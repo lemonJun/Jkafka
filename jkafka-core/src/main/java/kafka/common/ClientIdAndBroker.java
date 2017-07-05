@@ -20,13 +20,17 @@ public class ClientIdAndBroker {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
 
         ClientIdAndBroker that = (ClientIdAndBroker) o;
 
-        if (brokerInfo != null ? !brokerInfo.equals(that.brokerInfo) : that.brokerInfo != null) return false;
-        if (clientId != null ? !clientId.equals(that.clientId) : that.clientId != null) return false;
+        if (brokerInfo != null ? !brokerInfo.equals(that.brokerInfo) : that.brokerInfo != null)
+            return false;
+        if (clientId != null ? !clientId.equals(that.clientId) : that.clientId != null)
+            return false;
 
         return true;
     }

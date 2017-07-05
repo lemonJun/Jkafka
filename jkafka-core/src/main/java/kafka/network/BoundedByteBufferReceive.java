@@ -37,7 +37,6 @@ public class BoundedByteBufferReceive extends Receive {
         return contentBuffer;
     }
 
-
     /**
      * Read the bytes in this response from the given channel
      */
@@ -55,8 +54,7 @@ public class BoundedByteBufferReceive extends Receive {
             if (size <= 0)
                 throw new InvalidRequestException(size + " is not a valid request size.");
             if (size > maxSize)
-                throw new InvalidRequestException(String.format(
-                        "Request of length %d is not valid, it is larger than the maximum size of %d bytes.", size, maxSize));
+                throw new InvalidRequestException(String.format("Request of length %d is not valid, it is larger than the maximum size of %d bytes.", size, maxSize));
             contentBuffer = byteBufferAllocate(size);
         }
         // if we have a buffer read some stuff into it

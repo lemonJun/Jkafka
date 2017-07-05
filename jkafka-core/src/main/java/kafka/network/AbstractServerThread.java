@@ -24,7 +24,6 @@ public abstract class AbstractServerThread implements Runnable {
         }
     }
 
-
     /**
      * Initiates a graceful shutdown by signaling to stop and waiting for the shutdown to complete
      */

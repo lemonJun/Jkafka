@@ -60,12 +60,9 @@ public class ConsumerFetcherManager extends AbstractFetcherManager {
     private AtomicInteger correlationId = new AtomicInteger(0);
     Logger logger = LoggerFactory.getLogger(ConsumerFetcherManager.class);
 
-
     @Override
     public AbstractFetcherThread createFetcherThread(int fetcherId, Broker sourceBroker) {
-        return new ConsumerFetcherThread(
-                "ConsumerFetcherThread-%s-%d-%d".format(consumerIdString, fetcherId, sourceBroker.id),
-                config, sourceBroker, partitionMap, this);
+        return new ConsumerFetcherThread("ConsumerFetcherThread-%s-%d-%d".format(consumerIdString, fetcherId, sourceBroker.id), config, sourceBroker, partitionMap, this);
     }
 
     public class LeaderFinderThread extends ShutdownableThread {
@@ -91,11 +88,7 @@ public class ConsumerFetcherManager extends AbstractFetcherManager {
                     public String apply(TopicAndPartition m) {
                         return m.topic;
                     }
-                }),
-                        brokers,
-                        config.clientId,
-                        config.socketTimeoutMs,
-                        correlationId.getAndIncrement()).topicsMetadata;
+                }), brokers, config.clientId, config.socketTimeoutMs, correlationId.getAndIncrement()).topicsMetadata;
                 if (logger.isDebugEnabled()) {
                     Utils.foreach(topicsMetadata, new Callable1<TopicMetadata>() {
                         @Override
@@ -183,11 +176,11 @@ public class ConsumerFetcherManager extends AbstractFetcherManager {
     }
 
     public void stopConnections() {
-    /*
-     * Stop the leader finder thread first before stopping fetchers. Otherwise, if there are more partitions without
-     * leader, then the leader finder thread will process these partitions (before shutting down) and add fetchers for
-     * these partitions.
-     */
+        /*
+         * Stop the leader finder thread first before stopping fetchers. Otherwise, if there are more partitions without
+         * leader, then the leader finder thread will process these partitions (before shutting down) and add fetchers for
+         * these partitions.
+         */
         logger.info("Stopping leader finder thread");
         if (leaderFinderThread != null) {
             leaderFinderThread.shutdown();

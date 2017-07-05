@@ -31,13 +31,12 @@ public class TopicDataSend extends Send {
         buffer.putInt(topicData.partitionData.size());
         buffer.rewind();
 
-        List<PartitionDataSend> sendData = Utils.mapList(topicData.partitionData,
-                new Function2<Integer, FetchResponsePartitionData, PartitionDataSend>() {
-                    @Override
-                    public PartitionDataSend apply(Integer arg1, FetchResponsePartitionData arg2) {
-                        return new PartitionDataSend(arg1, arg2);
-                    }
-                });
+        List<PartitionDataSend> sendData = Utils.mapList(topicData.partitionData, new Function2<Integer, FetchResponsePartitionData, PartitionDataSend>() {
+            @Override
+            public PartitionDataSend apply(Integer arg1, FetchResponsePartitionData arg2) {
+                return new PartitionDataSend(arg1, arg2);
+            }
+        });
         sends = new TopicDataMultiSend(topicData, sendData);
     }
 
@@ -56,7 +55,8 @@ public class TopicDataSend extends Send {
     public int writeTo(GatheringByteChannel channel) {
         expectIncomplete();
         int written = 0;
-        if (buffer.hasRemaining()) ;
+        if (buffer.hasRemaining())
+            ;
         written += Utils.write(channel, buffer);
         if (!buffer.hasRemaining() && !sends.complete()) {
             written += sends.writeTo(channel);

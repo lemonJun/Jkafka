@@ -10,7 +10,7 @@ import kafka.utils.Function1;
 import kafka.utils.Tuple2;
 import kafka.utils.Utils;
 
-public class StopReplicaRequestReader implements RequestReader{
+public class StopReplicaRequestReader implements RequestReader {
     public static final RequestReader instance = new StopReplicaRequestReader();
 
     public static final short CurrentVersion = 0;
@@ -38,9 +38,7 @@ public class StopReplicaRequestReader implements RequestReader{
             }
         });
 
-        return new StopReplicaRequest(versionId, correlationId, clientId, controllerId, controllerEpoch,
-                deletePartitions, topicPartitionPairSet);
+        return new StopReplicaRequest(versionId, correlationId, clientId, controllerId, controllerEpoch, deletePartitions, topicPartitionPairSet);
     }
-
 
 }

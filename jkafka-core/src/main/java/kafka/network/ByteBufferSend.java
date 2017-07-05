@@ -7,7 +7,7 @@ import kafka.utils.NonThreadSafe;
 import kafka.utils.Utils;
 
 @NonThreadSafe
-public class ByteBufferSend extends Send{
+public class ByteBufferSend extends Send {
     public ByteBuffer buffer;
 
     public ByteBufferSend(ByteBuffer buffer) {
@@ -25,7 +25,7 @@ public class ByteBufferSend extends Send{
         expectIncomplete();
         int written = 0;
         written += Utils.write(channel, buffer);
-        if(!buffer.hasRemaining())
+        if (!buffer.hasRemaining())
             complete = true;
         return written;
     }

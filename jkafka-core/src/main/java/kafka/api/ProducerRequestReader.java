@@ -16,7 +16,6 @@ public class ProducerRequestReader implements RequestReader {
 
     public final static short CurrentVersion = 0;
 
-
     @Override
     public RequestOrResponse readFrom(final ByteBuffer buffer) {
         final short versionId = buffer.getShort();
@@ -27,30 +26,28 @@ public class ProducerRequestReader implements RequestReader {
         //build the topic structure
         int topicCount = buffer.getInt();
 
-        final Map<TopicAndPartition, ByteBufferMessageSet> partitionData =
-                Utils.flatMaps(1, topicCount, new Function0<Map<TopicAndPartition, ByteBufferMessageSet>>() {
+        final Map<TopicAndPartition, ByteBufferMessageSet> partitionData = Utils.flatMaps(1, topicCount, new Function0<Map<TopicAndPartition, ByteBufferMessageSet>>() {
+
+            @Override
+            public Map<TopicAndPartition, ByteBufferMessageSet> apply() {
+                // process topic
+                final String topic = readShortString(buffer);
+                int partitionCount = buffer.getInt();
+
+                return Utils.map(1, partitionCount, new Function0<Tuple2<TopicAndPartition, ByteBufferMessageSet>>() {
 
                     @Override
-                    public Map<TopicAndPartition, ByteBufferMessageSet> apply() {
-                        // process topic
-                        final String topic = readShortString(buffer);
-                        int partitionCount = buffer.getInt();
+                    public Tuple2<TopicAndPartition, ByteBufferMessageSet> apply() {
+                        int partition = buffer.getInt();
+                        int messageSetSize = buffer.getInt();
+                        byte[] messageSetBuffer = new byte[messageSetSize];
+                        buffer.get(messageSetBuffer, 0, messageSetSize);
 
-                        return Utils.map(1, partitionCount, new Function0<Tuple2<TopicAndPartition, ByteBufferMessageSet>>() {
-
-                            @Override
-                            public Tuple2<TopicAndPartition, ByteBufferMessageSet> apply() {
-                                int partition = buffer.getInt();
-                                int messageSetSize = buffer.getInt();
-                                byte[] messageSetBuffer = new byte[messageSetSize];
-                                buffer.get(messageSetBuffer, 0, messageSetSize);
-
-                                return Tuple2.make(new TopicAndPartition(topic, partition),
-                                        new ByteBufferMessageSet(ByteBuffer.wrap(messageSetBuffer)));
-                            }
-                        });
+                        return Tuple2.make(new TopicAndPartition(topic, partition), new ByteBufferMessageSet(ByteBuffer.wrap(messageSetBuffer)));
                     }
                 });
+            }
+        });
 
         return new ProducerRequest(versionId, correlationId, clientId, requiredAcks, ackTimeoutMs, partitionData);
     }

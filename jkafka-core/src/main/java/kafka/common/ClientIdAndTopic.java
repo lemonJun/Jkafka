@@ -15,21 +15,22 @@ public class ClientIdAndTopic {
 
     @Override
     public String toString() {
-        return "ClientIdAndTopic{" +
-                "clientId='" + clientId + '\'' +
-                ", topic='" + topic + '\'' +
-                '}';
+        return "ClientIdAndTopic{" + "clientId='" + clientId + '\'' + ", topic='" + topic + '\'' + '}';
     }
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
 
         ClientIdAndTopic that = (ClientIdAndTopic) o;
 
-        if (clientId != null ? !clientId.equals(that.clientId) : that.clientId != null) return false;
-        if (topic != null ? !topic.equals(that.topic) : that.topic != null) return false;
+        if (clientId != null ? !clientId.equals(that.clientId) : that.clientId != null)
+            return false;
+        if (topic != null ? !topic.equals(that.topic) : that.topic != null)
+            return false;
 
         return true;
     }

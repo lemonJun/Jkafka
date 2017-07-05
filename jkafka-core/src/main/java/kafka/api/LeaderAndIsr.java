@@ -30,15 +30,21 @@ public class LeaderAndIsr {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
 
         LeaderAndIsr that = (LeaderAndIsr) o;
 
-        if (leader != that.leader) return false;
-        if (leaderEpoch != that.leaderEpoch) return false;
-        if (zkVersion != that.zkVersion) return false;
-        if (isr != null ? !isr.equals(that.isr) : that.isr != null) return false;
+        if (leader != that.leader)
+            return false;
+        if (leaderEpoch != that.leaderEpoch)
+            return false;
+        if (zkVersion != that.zkVersion)
+            return false;
+        if (isr != null ? !isr.equals(that.isr) : that.isr != null)
+            return false;
 
         return true;
     }

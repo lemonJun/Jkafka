@@ -4,7 +4,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public abstract class Config {
-    public  static  void validateChars(String prop, String value) {
+    public static void validateChars(String prop, String value) {
         String legalChars = "[a-zA-Z0-9\\._\\-]";
         Pattern rgx = Pattern.compile(legalChars + "*");
 

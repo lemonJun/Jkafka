@@ -128,8 +128,7 @@ public class TopicCommand {
                     System.out.println(String.format("Updated config for topic \"%s\".", topic));
                 }
                 if (opts.options.has(opts.partitionsOpt)) {
-                    System.out.println("WARNING: If partitions are increased for a topic that has a key, the partition " +
-                            "logic or ordering of the messages will be affected");
+                    System.out.println("WARNING: If partitions are increased for a topic that has a key, the partition " + "logic or ordering of the messages will be affected");
                     int nPartitions = opts.options.valueOf(opts.partitionsOpt).intValue();
                     String replicaAssignmentStr = opts.options.valueOf(opts.replicaAssignmentOpt);
                     AdminUtils.addPartitions(zkClient, topic, nPartitions, replicaAssignmentStr);
@@ -165,8 +164,7 @@ public class TopicCommand {
                         Multimap<TopicAndPartition, Integer> replicaAssignment = ZkUtils.getReplicaAssignmentForTopics(zkClient, Lists.newArrayList(topic));
                         int numPartitions = replicaAssignment.size();
                         int replicationFactor = Utils.head(replicaAssignment)._2.size();
-                        System.out.println(String.format("\nTopic:%s\tPartitionCount:%d\tReplicationFactor:%d\tConfigs:%s", topic, numPartitions,
-                                replicationFactor, configs));
+                        System.out.println(String.format("\nTopic:%s\tPartitionCount:%d\tReplicationFactor:%d\tConfigs:%s", topic, numPartitions, replicationFactor, configs));
                     }
                 }
             });
@@ -203,8 +201,10 @@ public class TopicCommand {
             Collections.sort(sortedPartitions, new Comparator<Tuple2<Integer, Collection<Integer>>>() {
                 @Override
                 public int compare(Tuple2<Integer, Collection<Integer>> m1, Tuple2<Integer, Collection<Integer>> m2) {
-                    if (m1._1 < m2._1) return -1;
-                    if (m1._1 > m2._1) return 1;
+                    if (m1._1 < m2._1)
+                        return -1;
+                    if (m1._1 > m2._1)
+                        return 1;
                     return 0;
                 }
             });
@@ -218,12 +218,9 @@ public class TopicCommand {
                 Integer partitionId = tuple2._1;
                 Collection<Integer> assignedReplicas = tuple2._2;
 
-
                 List<Integer> inSyncReplicas = ZkUtils.getInSyncReplicasForPartition(zkClient, topic, partitionId);
                 Integer leader = ZkUtils.getLeaderForPartition(zkClient, topic, partitionId);
-                if ((!reportUnderReplicatedPartitions && !reportUnavailablePartitions) ||
-                        (reportUnderReplicatedPartitions && inSyncReplicas.size() < assignedReplicas.size()) ||
-                        (reportUnavailablePartitions && (leader != null || !liveBrokers.contains(leader)))) {
+                if ((!reportUnderReplicatedPartitions && !reportUnavailablePartitions) || (reportUnderReplicatedPartitions && inSyncReplicas.size() < assignedReplicas.size()) || (reportUnavailablePartitions && (leader != null || !liveBrokers.contains(leader)))) {
                     System.out.print("\t\ttopic: " + topic);
                     System.out.print("\tpartition: " + partitionId);
                     System.out.print("\tleader: " + ((leader != null) ? leader : "none"));
@@ -241,8 +238,7 @@ public class TopicCommand {
             @Override
             public Tuple2<String, String> apply(String arg) {
                 String[] config = arg.split("\\s*=\\s*");
-                checkState(config.length == 2,
-                        "Invalid topic config: all configs to be added must be in the format \"key=val\".");
+                checkState(config.length == 2, "Invalid topic config: all configs to be added must be in the format \"key=val\".");
                 return Tuple2.make(config[0].trim(), config[1].trim());
             }
         });
@@ -267,8 +263,7 @@ public class TopicCommand {
         Utils.foreach(configsToBeDeleted, new Callable1<String[]>() {
             @Override
             public void apply(String[] config) {
-                checkState(config.length == 1,
-                        "Invalid topic config: all configs to be deleted must be in the format \"key\".");
+                checkState(config.length == 1, "Invalid topic config: all configs to be deleted must be in the format \"key\".");
             }
         });
 
@@ -304,7 +299,6 @@ public class TopicCommand {
                 throw new AdminOperationException("Partition " + i + " has different replication factor: " + brokerList);
         }
 
-
         return ret;
     }
 
@@ -339,51 +333,22 @@ public class TopicCommand {
         private void init() {
 
             parser = new OptionParser();
-            zkConnectOpt = parser.accepts("zookeeper", "REQUIRED: The connection string for the zookeeper connection in the form host:port. " +
-                    "Multiple URLS can be given to allow fail-over.")
-                    .withRequiredArg()
-                    .describedAs("urls")
-                    .ofType(String.class);
+            zkConnectOpt = parser.accepts("zookeeper", "REQUIRED: The connection string for the zookeeper connection in the form host:port. " + "Multiple URLS can be given to allow fail-over.").withRequiredArg().describedAs("urls").ofType(String.class);
             listOpt = parser.accepts("list", "List all available topics.");
             createOpt = parser.accepts("create", "Create a new topic.");
             alterOpt = parser.accepts("alter", "Alter the configuration for the topic.");
             deleteOpt = parser.accepts("delete", "Delete the topic.");
             describeOpt = parser.accepts("describe", "List details for the given topics.");
             helpOpt = parser.accepts("help", "Print usage information.");
-            topicOpt = parser.accepts("topic", "The topic to be create, alter, delete, or describe. Can also accept a regular " +
-                    "expression except for --create option")
-                    .withRequiredArg()
-                    .describedAs("topic")
-                    .ofType(String.class);
-            configOpt = parser.accepts("config", "A topic configuration override for the topic being created or altered.")
-                    .withRequiredArg()
-                    .describedAs("name=value")
-                    .ofType(String.class);
-            deleteConfigOpt = parser.accepts("deleteConfig", "A topic configuration override to be removed for an existing topic")
-                    .withRequiredArg()
-                    .describedAs("name")
-                    .ofType(String.class);
-            partitionsOpt = parser.accepts("partitions", "The number of partitions for the topic being created or " +
-                    "altered (WARNING: If partitions are increased for a topic that has a key, the partition logic or ordering of the messages will be affected")
-                    .withRequiredArg()
-                    .describedAs("# of partitions")
-                    .ofType(Integer.class);
-            replicationFactorOpt = parser.accepts("replication-factor", "The replication factor for each partition in the topic being created.")
-                    .withRequiredArg()
-                    .describedAs("replication factor")
-                    .ofType(Integer.class);
-            replicaAssignmentOpt = parser.accepts("replica-assignment", "A list of manual partition-to-broker assignments for the topic being created.")
-                    .withRequiredArg()
-                    .describedAs("broker_id_for_part1_replica1 : broker_id_for_part1_replica2 , " +
-                            "broker_id_for_part2_replica1 : broker_id_for_part2_replica2 , ...")
-                    .ofType(String.class);
-            reportUnderReplicatedPartitionsOpt = parser.accepts("under-replicated-partitions",
-                    "if set when describing topics, only show under replicated partitions");
-            reportUnavailablePartitionsOpt = parser.accepts("unavailable-partitions",
-                    "if set when describing topics, only show partitions whose leader is not available");
-            topicsWithOverridesOpt = parser.accepts("topics-with-overrides",
-                    "if set when listing topics, only show topics that have overridden configs");
-
+            topicOpt = parser.accepts("topic", "The topic to be create, alter, delete, or describe. Can also accept a regular " + "expression except for --create option").withRequiredArg().describedAs("topic").ofType(String.class);
+            configOpt = parser.accepts("config", "A topic configuration override for the topic being created or altered.").withRequiredArg().describedAs("name=value").ofType(String.class);
+            deleteConfigOpt = parser.accepts("deleteConfig", "A topic configuration override to be removed for an existing topic").withRequiredArg().describedAs("name").ofType(String.class);
+            partitionsOpt = parser.accepts("partitions", "The number of partitions for the topic being created or " + "altered (WARNING: If partitions are increased for a topic that has a key, the partition logic or ordering of the messages will be affected").withRequiredArg().describedAs("# of partitions").ofType(Integer.class);
+            replicationFactorOpt = parser.accepts("replication-factor", "The replication factor for each partition in the topic being created.").withRequiredArg().describedAs("replication factor").ofType(Integer.class);
+            replicaAssignmentOpt = parser.accepts("replica-assignment", "A list of manual partition-to-broker assignments for the topic being created.").withRequiredArg().describedAs("broker_id_for_part1_replica1 : broker_id_for_part1_replica2 , " + "broker_id_for_part2_replica1 : broker_id_for_part2_replica2 , ...").ofType(String.class);
+            reportUnderReplicatedPartitionsOpt = parser.accepts("under-replicated-partitions", "if set when describing topics, only show under replicated partitions");
+            reportUnavailablePartitionsOpt = parser.accepts("unavailable-partitions", "if set when describing topics, only show partitions whose leader is not available");
+            topicsWithOverridesOpt = parser.accepts("topics-with-overrides", "if set when listing topics, only show topics that have overridden configs");
 
             options = parser.parse(args);
         }

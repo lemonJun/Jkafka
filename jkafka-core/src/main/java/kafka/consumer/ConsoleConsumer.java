@@ -36,97 +36,30 @@ import kafka.utils.ZkUtils;
 public class ConsoleConsumer {
     public static void main(String[] args) throws IOException, ClassNotFoundException {
         OptionParser parser = new OptionParser();
-        OptionSpec<String> topicIdOpt = parser.accepts("topic", "The topic id to consume on.")
-                .withRequiredArg()
-                .describedAs("topic")
-                .ofType(String.class);
-        OptionSpec<String> whitelistOpt = parser.accepts("whitelist", "Whitelist of topics to include for consumption.")
-                .withRequiredArg()
-                .describedAs("whitelist")
-                .ofType(String.class);
-        OptionSpec<String> blacklistOpt = parser.accepts("blacklist", "Blacklist of topics to exclude from consumption.")
-                .withRequiredArg()
-                .describedAs("blacklist")
-                .ofType(String.class);
-        final OptionSpec<String> zkConnectOpt = parser.accepts("zookeeper", "REQUIRED: The connection string for the zookeeper connection in the form host:port. " +
-                "Multiple URLS can be given to allow fail-over.")
-                .withRequiredArg()
-                .describedAs("urls")
-                .ofType(String.class);
-        final OptionSpec<String> groupIdOpt = parser.accepts("group", "The group id to consume on.")
-                .withRequiredArg()
-                .describedAs("gid")
-                .defaultsTo("console-consumer-" + new Random().nextInt(100000))
-                .ofType(String.class);
-        OptionSpec<Integer> fetchSizeOpt = parser.accepts("fetch-size", "The amount of data to fetch in a single request.")
-                .withRequiredArg()
-                .describedAs("size")
-                .ofType(Integer.class)
-                .defaultsTo(1024 * 1024);
-        OptionSpec<Integer> minFetchBytesOpt = parser.accepts("min-fetch-bytes", "The min number of bytes each fetch request waits for.")
-                .withRequiredArg()
-                .describedAs("bytes")
-                .ofType(Integer.class)
-                .defaultsTo(1);
-        OptionSpec<Integer> maxWaitMsOpt = parser.accepts("max-wait-ms", "The max amount of time each fetch request waits.")
-                .withRequiredArg()
-                .describedAs("ms")
-                .ofType(Integer.class)
-                .defaultsTo(100);
-        OptionSpec<Integer> socketBufferSizeOpt = parser.accepts("socket-buffer-size", "The size of the tcp RECV size.")
-                .withRequiredArg()
-                .describedAs("size")
-                .ofType(Integer.class)
-                .defaultsTo(2 * 1024 * 1024);
-        OptionSpec<Integer> socketTimeoutMsOpt = parser.accepts("socket-timeout-ms", "The socket timeout used for the connection to the broker")
-                .withRequiredArg()
-                .describedAs("ms")
-                .ofType(Integer.class)
-                .defaultsTo(ConsumerConfigs.SocketTimeout);
-        OptionSpec<Integer> refreshMetadataBackoffMsOpt = parser.accepts("refresh-leader-backoff-ms", "Backoff time before refreshing metadata")
-                .withRequiredArg()
-                .describedAs("ms")
-                .ofType(Integer.class)
-                .defaultsTo(ConsumerConfigs.RefreshMetadataBackoffMs);
-        OptionSpec<Integer> consumerTimeoutMsOpt = parser.accepts("consumer-timeout-ms", "consumer throws timeout exception after waiting this much " +
-                "of time without incoming messages")
-                .withRequiredArg()
-                .describedAs("prop")
-                .ofType(Integer.class)
-                .defaultsTo(-1);
-        OptionSpec<String> messageFormatterOpt = parser.accepts("formatter", "The name of a class to use for formatting kafka messages for display.")
-                .withRequiredArg()
-                .describedAs("class")
-                .ofType(String.class)
-                .defaultsTo(DefaultMessageFormatter.class.getName());
-        OptionSpec<String> messageFormatterArgOpt = parser.accepts("property")
-                .withRequiredArg()
-                .describedAs("prop")
-                .ofType(String.class);
-        OptionSpec<?> resetBeginningOpt = parser.accepts("from-beginning", "If the consumer does not already have an established offset to consume from, " +
-                "start with the earliest message present in the log rather than the latest message.");
-        OptionSpec<Integer> autoCommitIntervalOpt = parser.accepts("autocommit.interval.ms", "The time interval at which to save the current offset in ms")
-                .withRequiredArg()
-                .describedAs("ms")
-                .ofType(Integer.class)
-                .defaultsTo(ConsumerConfigs.AutoCommitInterval);
-        OptionSpec<Integer> maxMessagesOpt = parser.accepts("max-messages", "The maximum number of messages to consume before exiting. If not set, consumption is continual.")
-                .withRequiredArg()
-                .describedAs("num_messages")
-                .ofType(Integer.class);
-        OptionSpec<?> skipMessageOnErrorOpt = parser.accepts("skip-message-on-error", "If there is an error when processing a message, " +
-                "skip it instead of halt.");
+        OptionSpec<String> topicIdOpt = parser.accepts("topic", "The topic id to consume on.").withRequiredArg().describedAs("topic").ofType(String.class);
+        OptionSpec<String> whitelistOpt = parser.accepts("whitelist", "Whitelist of topics to include for consumption.").withRequiredArg().describedAs("whitelist").ofType(String.class);
+        OptionSpec<String> blacklistOpt = parser.accepts("blacklist", "Blacklist of topics to exclude from consumption.").withRequiredArg().describedAs("blacklist").ofType(String.class);
+        final OptionSpec<String> zkConnectOpt = parser.accepts("zookeeper", "REQUIRED: The connection string for the zookeeper connection in the form host:port. " + "Multiple URLS can be given to allow fail-over.").withRequiredArg().describedAs("urls").ofType(String.class);
+        final OptionSpec<String> groupIdOpt = parser.accepts("group", "The group id to consume on.").withRequiredArg().describedAs("gid").defaultsTo("console-consumer-" + new Random().nextInt(100000)).ofType(String.class);
+        OptionSpec<Integer> fetchSizeOpt = parser.accepts("fetch-size", "The amount of data to fetch in a single request.").withRequiredArg().describedAs("size").ofType(Integer.class).defaultsTo(1024 * 1024);
+        OptionSpec<Integer> minFetchBytesOpt = parser.accepts("min-fetch-bytes", "The min number of bytes each fetch request waits for.").withRequiredArg().describedAs("bytes").ofType(Integer.class).defaultsTo(1);
+        OptionSpec<Integer> maxWaitMsOpt = parser.accepts("max-wait-ms", "The max amount of time each fetch request waits.").withRequiredArg().describedAs("ms").ofType(Integer.class).defaultsTo(100);
+        OptionSpec<Integer> socketBufferSizeOpt = parser.accepts("socket-buffer-size", "The size of the tcp RECV size.").withRequiredArg().describedAs("size").ofType(Integer.class).defaultsTo(2 * 1024 * 1024);
+        OptionSpec<Integer> socketTimeoutMsOpt = parser.accepts("socket-timeout-ms", "The socket timeout used for the connection to the broker").withRequiredArg().describedAs("ms").ofType(Integer.class).defaultsTo(ConsumerConfigs.SocketTimeout);
+        OptionSpec<Integer> refreshMetadataBackoffMsOpt = parser.accepts("refresh-leader-backoff-ms", "Backoff time before refreshing metadata").withRequiredArg().describedAs("ms").ofType(Integer.class).defaultsTo(ConsumerConfigs.RefreshMetadataBackoffMs);
+        OptionSpec<Integer> consumerTimeoutMsOpt = parser.accepts("consumer-timeout-ms", "consumer throws timeout exception after waiting this much " + "of time without incoming messages").withRequiredArg().describedAs("prop").ofType(Integer.class).defaultsTo(-1);
+        OptionSpec<String> messageFormatterOpt = parser.accepts("formatter", "The name of a class to use for formatting kafka messages for display.").withRequiredArg().describedAs("class").ofType(String.class).defaultsTo(DefaultMessageFormatter.class.getName());
+        OptionSpec<String> messageFormatterArgOpt = parser.accepts("property").withRequiredArg().describedAs("prop").ofType(String.class);
+        OptionSpec<?> resetBeginningOpt = parser.accepts("from-beginning", "If the consumer does not already have an established offset to consume from, " + "start with the earliest message present in the log rather than the latest message.");
+        OptionSpec<Integer> autoCommitIntervalOpt = parser.accepts("autocommit.interval.ms", "The time interval at which to save the current offset in ms").withRequiredArg().describedAs("ms").ofType(Integer.class).defaultsTo(ConsumerConfigs.AutoCommitInterval);
+        OptionSpec<Integer> maxMessagesOpt = parser.accepts("max-messages", "The maximum number of messages to consume before exiting. If not set, consumption is continual.").withRequiredArg().describedAs("num_messages").ofType(Integer.class);
+        OptionSpec<?> skipMessageOnErrorOpt = parser.accepts("skip-message-on-error", "If there is an error when processing a message, " + "skip it instead of halt.");
         OptionSpec<?> csvMetricsReporterEnabledOpt = parser.accepts("csv-reporter-enabled", "If set, the CSV metrics reporter will be enabled");
-        OptionSpec<String> metricsDirectoryOpt = parser.accepts("metrics-dir", "If csv-reporter-enable is set, and this parameter is" +
-                "set, the csv metrics will be outputed here")
-                .withRequiredArg()
-                .describedAs("metrics dictory")
-                .ofType(String.class);
-
+        OptionSpec<String> metricsDirectoryOpt = parser.accepts("metrics-dir", "If csv-reporter-enable is set, and this parameter is" + "set, the csv metrics will be outputed here").withRequiredArg().describedAs("metrics dictory").ofType(String.class);
 
         final OptionSet options = tryParse(parser, args);
         CommandLineUtils.checkRequiredArgs(parser, options, zkConnectOpt);
-        List<OptionSpec<?>> topicOrFilterOpt = Utils.filter(Lists.<OptionSpec<?>>newArrayList(topicIdOpt, whitelistOpt, blacklistOpt), new Predicate<OptionSpec<?>>() {
+        List<OptionSpec<?>> topicOrFilterOpt = Utils.filter(Lists.<OptionSpec<?>> newArrayList(topicIdOpt, whitelistOpt, blacklistOpt), new Predicate<OptionSpec<?>>() {
             @Override
             public boolean apply(OptionSpec<?> _) {
                 return options.has(_);
@@ -171,8 +104,7 @@ public class ConsoleConsumer {
         ConsumerConfig config = new ConsumerConfig(props);
         boolean skipMessageOnError = (options.has(skipMessageOnErrorOpt));
 
-        Class<? extends MessageFormatter> messageFormatterClass = (Class<? extends MessageFormatter>)
-                Class.forName(options.valueOf(messageFormatterOpt));
+        Class<? extends MessageFormatter> messageFormatterClass = (Class<? extends MessageFormatter>) Class.forName(options.valueOf(messageFormatterOpt));
         Properties formatterArgs = MessageFormatter.tryParseFormatterArgs(options.valuesOf(messageFormatterArgOpt));
 
         int maxMessages = (options.has(maxMessagesOpt)) ? options.valueOf(maxMessagesOpt).intValue() : -1;
@@ -206,7 +138,6 @@ public class ConsoleConsumer {
                 }
             }
 
-
             for (MessageAndMetadata<byte[], byte[]> messageAndTopic : iter) {
                 try {
                     formatter.writeTo(messageAndTopic.key(), messageAndTopic.message(), System.out);
@@ -234,7 +165,6 @@ public class ConsoleConsumer {
         formatter.close();
         connector.shutdown();
     }
-
 
     static Logger logger = LoggerFactory.getLogger(ConsoleConsumer.class);
 

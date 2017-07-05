@@ -35,6 +35,7 @@ public abstract class KafkaMetricsGroup {
     public Histogram newHistogram(String name) {
         return newHistogram(name, true);
     }
+
     public Histogram newHistogram(String name, boolean biased/* = true*/) {
         return Metrics.defaultRegistry().newHistogram(metricName(name), biased);
     }

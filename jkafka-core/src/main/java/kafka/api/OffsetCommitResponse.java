@@ -24,7 +24,6 @@ public class OffsetCommitResponse extends RequestOrResponse {
         int correlationId = buffer.getInt();
         int topicCount = buffer.getInt();
 
-
         Map<TopicAndPartition, Short> pairs = Utils.flatMaps(1, topicCount, new Function0<Map<TopicAndPartition, Short>>() {
             @Override
             public Map<TopicAndPartition, Short> apply() {
@@ -44,7 +43,6 @@ public class OffsetCommitResponse extends RequestOrResponse {
 
         return new OffsetCommitResponse(pairs, correlationId);
     }
-
 
     public Map<TopicAndPartition, Short> requestInfo;
 
@@ -68,19 +66,18 @@ public class OffsetCommitResponse extends RequestOrResponse {
 
     @Override
     public int sizeInBytes() {
-        return 4  /* correlationId */
-                + 4  /* topic count */
-                + Utils.foldLeft(requestInfoGroupedByTopic, 0, new Function3<Integer, String, Map<TopicAndPartition, Short>, Integer>() {
-            @Override
-            public Integer apply(Integer count, String topic, Map<TopicAndPartition, Short> offsets) {
-                return count + shortStringLength(topic) + /* topic */
-                        4 + /* number of partitions */
-                        offsets.size() * (
-                                4 + /* partition */
-                                        2 /* error */
-                        );
-            }
-        });
+        return 4 /* correlationId */
+                        + 4 /* topic count */
+                        + Utils.foldLeft(requestInfoGroupedByTopic, 0, new Function3<Integer, String, Map<TopicAndPartition, Short>, Integer>() {
+                            @Override
+                            public Integer apply(Integer count, String topic, Map<TopicAndPartition, Short> offsets) {
+                                return count + shortStringLength(topic) + /* topic */
+                                4 + /* number of partitions */
+                                offsets.size() * (4 + /* partition */
+                                2 /* error */
+                                );
+                            }
+                        });
     }
 
     @Override
@@ -88,17 +85,17 @@ public class OffsetCommitResponse extends RequestOrResponse {
         buffer.putInt(correlationId);
         buffer.putInt(requestInfoGroupedByTopic.size()); // number of topics
 
-        Utils.foreach(requestInfoGroupedByTopic, new Callable2<String, Map<TopicAndPartition,Short>>() {
+        Utils.foreach(requestInfoGroupedByTopic, new Callable2<String, Map<TopicAndPartition, Short>>() {
             @Override
             public void apply(String topic, Map<TopicAndPartition, Short> arg2) {
                 writeShortString(buffer, topic); // topic
-                buffer.putInt(arg2.size());       // number of partitions for this topic
+                buffer.putInt(arg2.size()); // number of partitions for this topic
 
                 Utils.foreach(arg2, new Callable2<TopicAndPartition, Short>() {
                     @Override
                     public void apply(TopicAndPartition arg1, Short arg2) {
                         buffer.putInt(arg1.partition);
-                        buffer.putShort(arg2);  //error
+                        buffer.putShort(arg2); //error
                     }
                 });
             }

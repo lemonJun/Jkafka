@@ -31,10 +31,7 @@ public class ZookeeperLeaderElector implements LeaderElector {
     public Callable0 onBecomingLeader;
     public int brokerId;
 
-    public ZookeeperLeaderElector(ControllerContext controllerContext,
-                                  String electionPath,
-                                  Callable0 onBecomingLeader,
-                                  int brokerId) {
+    public ZookeeperLeaderElector(ControllerContext controllerContext, String electionPath, Callable0 onBecomingLeader, int brokerId) {
         this.controllerContext = controllerContext;
         this.electionPath = electionPath;
         this.onBecomingLeader = onBecomingLeader;
@@ -71,14 +68,12 @@ public class ZookeeperLeaderElector implements LeaderElector {
         String electString = JSON.toJSONString(ImmutableMap.of("version", 1, "brokerid", brokerId, "timestamp", timestamp));
 
         try {
-            ZkUtils.createEphemeralPathExpectConflictHandleZKBug(controllerContext.zkClient, electionPath, electString, brokerId,
-                    new Function2<String, Object, Boolean>() {
-                        @Override
-                        public Boolean apply(String controllerString, Object leaderId) {
-                            return KafkaControllers.parseControllerId(controllerString) == (int) leaderId;
-                        }
-                    },
-                    controllerContext.zkSessionTimeout);
+            ZkUtils.createEphemeralPathExpectConflictHandleZKBug(controllerContext.zkClient, electionPath, electString, brokerId, new Function2<String, Object, Boolean>() {
+                @Override
+                public Boolean apply(String controllerString, Object leaderId) {
+                    return KafkaControllers.parseControllerId(controllerString) == (int) leaderId;
+                }
+            }, controllerContext.zkSessionTimeout);
             logger.info("{} successfully elected as leader", brokerId);
             leaderId = brokerId;
             onBecomingLeader.apply();
@@ -138,8 +133,7 @@ public class ZookeeperLeaderElector implements LeaderElector {
         @Override
         public void handleDataDeleted(String dataPath) throws Exception {
             synchronized (controllerContext.controllerLock) {
-                logger.debug("{} leader change listener fired for path {} to handle data deleted: trying to elect as a leader",
-                        brokerId, dataPath);
+                logger.debug("{} leader change listener fired for path {} to handle data deleted: trying to elect as a leader", brokerId, dataPath);
                 elect();
             }
         }

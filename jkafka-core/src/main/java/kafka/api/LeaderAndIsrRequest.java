@@ -27,13 +27,7 @@ public class LeaderAndIsrRequest extends RequestOrResponse {
     public Map<Tuple2<String, Integer>, PartitionStateInfo> partitionStateInfos;
     public Set<Broker> leaders;
 
-    public LeaderAndIsrRequest(short versionId,
-                               int correlationId,
-                               String clientId,
-                               int controllerId,
-                               int controllerEpoch,
-                               Map<Tuple2<String, Integer>, PartitionStateInfo> partitionStateInfos,
-                               Set<Broker> leaders) {
+    public LeaderAndIsrRequest(short versionId, int correlationId, String clientId, int controllerId, int controllerEpoch, Map<Tuple2<String, Integer>, PartitionStateInfo> partitionStateInfos, Set<Broker> leaders) {
         super(RequestKeys.LeaderAndIsrKey, correlationId);
         this.versionId = versionId;
         this.clientId = clientId;
@@ -43,40 +37,26 @@ public class LeaderAndIsrRequest extends RequestOrResponse {
         this.leaders = leaders;
     }
 
-    public LeaderAndIsrRequest(Map<Tuple2<String, Integer>, PartitionStateInfo> partitionStateInfos,
-                               Set<Broker> leaders,
-                               int controllerId,
-                               int controllerEpoch,
-                               int correlationId,
-                               String clientId) {
-        this(LeaderAndIsrRequestReader.CurrentVersion, correlationId, clientId,
-                controllerId, controllerEpoch, partitionStateInfos, leaders);
+    public LeaderAndIsrRequest(Map<Tuple2<String, Integer>, PartitionStateInfo> partitionStateInfos, Set<Broker> leaders, int controllerId, int controllerEpoch, int correlationId, String clientId) {
+        this(LeaderAndIsrRequestReader.CurrentVersion, correlationId, clientId, controllerId, controllerEpoch, partitionStateInfos, leaders);
     }
-
 
     @Override
     public int sizeInBytes() {
-        return 2 /* version id */ +
-                4 /* correlation id */ +
-                (2 + clientId.length()) /* client id */ +
-                4 /* controller id */ +
-                4 /* controller epoch */ +
-                4 /* number of partitions */ +
-                Utils.foldLeft(partitionStateInfos, 0, new Function3<Integer, Tuple2<String, Integer>, PartitionStateInfo, Integer>() {
-                    @Override
-                    public Integer apply(Integer arg1, Tuple2<String, Integer> key, PartitionStateInfo value) {
-                        return arg1 + (2 + key._1.length()) /* topic */
+        return 2 /* version id */ + 4 /* correlation id */ + (2 + clientId.length()) /* client id */ + 4 /* controller id */ + 4 /* controller epoch */ + 4 /* number of partitions */ + Utils.foldLeft(partitionStateInfos, 0, new Function3<Integer, Tuple2<String, Integer>, PartitionStateInfo, Integer>() {
+            @Override
+            public Integer apply(Integer arg1, Tuple2<String, Integer> key, PartitionStateInfo value) {
+                return arg1 + (2 + key._1.length()) /* topic */
                                 + 4 /* partition */
                                 + value.sizeInBytes() /* partition state info */;
-                    }
-                })
-                + 4 /* number of leader brokers */
-                + Utils.foldLeft(leaders, 0, new Function2<Integer, Broker, Integer>() {
-            @Override
-            public Integer apply(Integer arg1, Broker broker) {
-                return arg1 + broker.sizeInBytes(); /* broker info */
             }
-        });
+        }) + 4 /* number of leader brokers */
+                        + Utils.foldLeft(leaders, 0, new Function2<Integer, Broker, Integer>() {
+                            @Override
+                            public Integer apply(Integer arg1, Broker broker) {
+                                return arg1 + broker.sizeInBytes(); /* broker info */
+                            }
+                        });
     }
 
     @Override
@@ -88,7 +68,7 @@ public class LeaderAndIsrRequest extends RequestOrResponse {
         buffer.putInt(controllerEpoch);
         buffer.putInt(partitionStateInfos.size());
 
-        Utils.foreach(partitionStateInfos, new Callable2<Tuple2<String,Integer>, PartitionStateInfo>() {
+        Utils.foreach(partitionStateInfos, new Callable2<Tuple2<String, Integer>, PartitionStateInfo>() {
             @Override
             public void apply(Tuple2<String, Integer> key, PartitionStateInfo value) {
                 writeShortString(buffer, key._1);
@@ -129,7 +109,7 @@ public class LeaderAndIsrRequest extends RequestOrResponse {
                 return Tuple2.make(arg1, ErrorMapping.codeFor(e.getClass()));
             }
         });
-        
+
         LeaderAndIsrResponse errorResponse = new LeaderAndIsrResponse(correlationId, responseMap);
         requestChannel.sendResponse(new Response(request, new BoundedByteBufferSend(errorResponse)));
     }

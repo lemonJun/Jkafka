@@ -15,7 +15,8 @@ public class PartitionDataSend extends Send {
         this.partitionData = partitionData;
 
         messageSize = partitionData.messages.sizeInBytes();
-        buffer = ByteBuffer.allocate(4 /** partitionId **/ + FetchResponsePartitionData.headerSize);
+        buffer = ByteBuffer.allocate(4 /** partitionId **/
+                        + FetchResponsePartitionData.headerSize);
         buffer.putInt(partitionId);
         buffer.putShort(partitionData.error);
         buffer.putLong(partitionData.hw);
@@ -27,7 +28,6 @@ public class PartitionDataSend extends Send {
     private int messagesSentSize = 0;
 
     private ByteBuffer buffer;
-
 
     @Override
     public boolean complete() {
@@ -46,6 +46,5 @@ public class PartitionDataSend extends Send {
         }
         return written;
     }
-
 
 }

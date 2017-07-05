@@ -44,15 +44,7 @@ public class PartitionStateInfo {
     }
 
     public int sizeInBytes() {
-        return
-                4 /* epoch of the controller that elected the leader */ +
-                        4 /* leader broker id */ +
-                        4 /* leader epoch */ +
-                        4 /* number of replicas in isr */ +
-                        4 * leaderIsrAndControllerEpoch.leaderAndIsr.isr.size() /* replicas in isr */ +
-                        4 /* zk version */ +
-                        4 /* replication factor */ +
-                        allReplicas.size() * 4;
+        return 4 /* epoch of the controller that elected the leader */ + 4 /* leader broker id */ + 4 /* leader epoch */ + 4 /* number of replicas in isr */ + 4 * leaderIsrAndControllerEpoch.leaderAndIsr.isr.size() /* replicas in isr */ + 4 /* zk version */ + 4 /* replication factor */ + allReplicas.size() * 4;
     }
 
     @Override

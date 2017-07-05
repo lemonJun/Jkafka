@@ -27,15 +27,10 @@ public class OffsetRequest extends RequestOrResponse {
     public int replicaId;
 
     public OffsetRequest(Map<TopicAndPartition, PartitionOffsetRequestInfo> requestInfo) {
-        this(requestInfo, OffsetRequestReader.CurrentVersion, 0,
-                OffsetRequestReader.DefaultClientId, Requests.OrdinaryConsumerId);
+        this(requestInfo, OffsetRequestReader.CurrentVersion, 0, OffsetRequestReader.DefaultClientId, Requests.OrdinaryConsumerId);
     }
 
-    public OffsetRequest(Map<TopicAndPartition, PartitionOffsetRequestInfo> requestInfo,
-                         short versionId,
-                         int correlationId,
-                         String clientId,
-                         int replicaId) {
+    public OffsetRequest(Map<TopicAndPartition, PartitionOffsetRequestInfo> requestInfo, short versionId, int correlationId, String clientId, int replicaId) {
         super(RequestKeys.OffsetsKey, correlationId);
         this.requestInfo = requestInfo;
         this.versionId = versionId;
@@ -50,11 +45,8 @@ public class OffsetRequest extends RequestOrResponse {
         });
     }
 
-    public OffsetRequest(Map<TopicAndPartition, PartitionOffsetRequestInfo> requestInfo,
-                         int correlationId,
-                         int replicaId) {
-        this(requestInfo, OffsetRequestReader.CurrentVersion, correlationId,
-                OffsetRequestReader.DefaultClientId, replicaId);
+    public OffsetRequest(Map<TopicAndPartition, PartitionOffsetRequestInfo> requestInfo, int correlationId, int replicaId) {
+        this(requestInfo, OffsetRequestReader.CurrentVersion, correlationId, OffsetRequestReader.DefaultClientId, replicaId);
     }
 
     Table<String, TopicAndPartition, PartitionOffsetRequestInfo> requestInfoGroupedByTopic;
@@ -66,22 +58,19 @@ public class OffsetRequest extends RequestOrResponse {
     @Override
     public int sizeInBytes() {
         return 2 + /* versionId */
-                4 + /* correlationId */
-                shortStringLength(clientId) +
-                4 + /* replicaId */
-                4  /* topic count */
-                + Utils.foldLeft(requestInfoGroupedByTopic, 0, new Function3<Integer, String, Map<TopicAndPartition, PartitionOffsetRequestInfo>, Integer>() {
-            @Override
-            public Integer apply(Integer foldedTopics, String topic, Map<TopicAndPartition, PartitionOffsetRequestInfo> partitionInfos) {
-                return foldedTopics + shortStringLength(topic) +
-                        4 + /* partition count */
-                        partitionInfos.size() * (
-                                4 + /* partition */
-                                        8 + /* time */
-                                        4 /* maxNumOffsets */
-                        );
-            }
-        });
+                        4 + /* correlationId */
+                        shortStringLength(clientId) + 4 + /* replicaId */
+                        4 /* topic count */
+                        + Utils.foldLeft(requestInfoGroupedByTopic, 0, new Function3<Integer, String, Map<TopicAndPartition, PartitionOffsetRequestInfo>, Integer>() {
+                            @Override
+                            public Integer apply(Integer foldedTopics, String topic, Map<TopicAndPartition, PartitionOffsetRequestInfo> partitionInfos) {
+                                return foldedTopics + shortStringLength(topic) + 4 + /* partition count */
+                                partitionInfos.size() * (4 + /* partition */
+                                8 + /* time */
+                                4 /* maxNumOffsets */
+                                );
+                            }
+                        });
     }
 
     @Override
@@ -93,7 +82,7 @@ public class OffsetRequest extends RequestOrResponse {
 
         buffer.putInt(requestInfoGroupedByTopic.size()); // topic count
 
-        Utils.foreach(requestInfoGroupedByTopic, new Callable2<String, Map<TopicAndPartition,PartitionOffsetRequestInfo>>() {
+        Utils.foreach(requestInfoGroupedByTopic, new Callable2<String, Map<TopicAndPartition, PartitionOffsetRequestInfo>>() {
             @Override
             public void apply(String topic, Map<TopicAndPartition, PartitionOffsetRequestInfo> partitionInfos) {
                 writeShortString(buffer, topic);

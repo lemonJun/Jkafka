@@ -29,7 +29,6 @@ public abstract class ShutdownableThread extends Thread {
     public AtomicBoolean isRunning = new AtomicBoolean(true);
     private CountDownLatch shutdownLatch = new CountDownLatch(1);
 
-
     public void shutdown() {
         logger.info("Shutting down");
         isRunning.set(false);

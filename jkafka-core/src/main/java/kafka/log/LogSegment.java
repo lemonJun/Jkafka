@@ -58,11 +58,7 @@ public class LogSegment {
     private int bytesSinceLastIndexEntry = 0;
 
     public LogSegment(File dir, Long startOffset, int indexIntervalBytes, int maxIndexSize, Time time) {
-        this(new FileMessageSet(Logs.logFilename(dir, startOffset)),
-                new OffsetIndex(Logs.indexFilename(dir, startOffset), startOffset, maxIndexSize),
-                startOffset,
-                indexIntervalBytes,
-                time);
+        this(new FileMessageSet(Logs.logFilename(dir, startOffset)), new OffsetIndex(Logs.indexFilename(dir, startOffset), startOffset, maxIndexSize), startOffset, indexIntervalBytes, time);
     }
 
     Logger logger = LoggerFactory.getLogger(LogSegment.class);
@@ -138,19 +134,19 @@ public class LogSegment {
         OffsetPosition startPosition = translateOffset(startOffset);
 
         // if the start position is already off the end of the log, return null
-        if (startPosition == null) return null;
+        if (startPosition == null)
+            return null;
 
         // calculate the length of the message set to read based on whether or not they gave us a maxOffset
         int length;
-        if (maxOffset == null) length = maxSize; // no max offset, just use the max size they gave unmolested
+        if (maxOffset == null)
+            length = maxSize; // no max offset, just use the max size they gave unmolested
         else {
             // there is a max offset, translate it to a file position and use that to calculate the max read size
             if (maxOffset < startOffset)
                 throw new IllegalArgumentException(String.format("Attempt to read with a maximum offset (%d) less than the start offset (%d).", maxOffset, startOffset));
             OffsetPosition mapping = translateOffset(maxOffset, startPosition.position);
-            int endPosition =
-                    mapping == null
-                            ? logSize // the max offset is off the end of the log, use the end of the file
+            int endPosition = mapping == null ? logSize // the max offset is off the end of the log, use the end of the file
                             : mapping.position;
             length = Math.min(endPosition - startPosition.position, maxSize);
         }
@@ -237,7 +233,8 @@ public class LogSegment {
             return baseOffset;
         } else {
             MessageAndOffset last = Utils.lastOption(ms);
-            if (last == null) return baseOffset;
+            if (last == null)
+                return baseOffset;
             return last.nextOffset();
         }
     }

@@ -39,7 +39,6 @@ public class Acceptor extends AbstractServerThread {
 
     Logger logger = LoggerFactory.getLogger(Acceptor.class);
 
-
     public ServerSocketChannel serverChannel;
 
     /**
@@ -57,7 +56,8 @@ public class Acceptor extends AbstractServerThread {
         int currentProcessor = 0;
         while (isRunning()) {
             int ready = Utils.select(selector, 500);
-            if (ready <= 0) continue;
+            if (ready <= 0)
+                continue;
 
             Set<SelectionKey> keys = selector.selectedKeys();
             Iterator<SelectionKey> iter = keys.iterator();
@@ -83,7 +83,6 @@ public class Acceptor extends AbstractServerThread {
         Utils.closeQuietly(selector);
         shutdownComplete();
     }
-
 
     /*
      * Create a server socket to listen for connections on.
@@ -125,10 +124,7 @@ public class Acceptor extends AbstractServerThread {
             socketChannel.socket().setTcpNoDelay(true);
             socketChannel.socket().setSendBufferSize(sendBufferSize);
 
-            logger.debug("Accepted connection from {} on {}. sendBufferSize [actual|requested]: [{}|{}] recvBufferSize [actual|requested]: [{}|{}]",
-                    socketChannel.socket().getInetAddress(), socketChannel.socket().getLocalSocketAddress(),
-                    socketChannel.socket().getSendBufferSize(), sendBufferSize,
-                    socketChannel.socket().getReceiveBufferSize(), recvBufferSize);
+            logger.debug("Accepted connection from {} on {}. sendBufferSize [actual|requested]: [{}|{}] recvBufferSize [actual|requested]: [{}|{}]", socketChannel.socket().getInetAddress(), socketChannel.socket().getLocalSocketAddress(), socketChannel.socket().getSendBufferSize(), sendBufferSize, socketChannel.socket().getReceiveBufferSize(), recvBufferSize);
         } catch (IOException e) {
             throw new KafkaException(e);
         }

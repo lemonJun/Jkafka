@@ -24,38 +24,13 @@ public class LogConfigs {
     public static final String MinCleanableDirtyRatioProp = "min.cleanable.dirty.ratio";
     public static final String CleanupPolicyProp = "cleanup.policy";
 
-    public static Set<String> ConfigNames = Sets.newHashSet(SegmentBytesProp,
-            SegmentMsProp,
-            SegmentIndexBytesProp,
-            FlushMessagesProp,
-            FlushMsProp,
-            RetentionBytesProp,
-            RententionMsProp,
-            MaxMessageBytesProp,
-            IndexIntervalBytesProp,
-            FileDeleteDelayMsProp,
-            DeleteRetentionMsProp,
-            MinCleanableDirtyRatioProp,
-            CleanupPolicyProp);
-
+    public static Set<String> ConfigNames = Sets.newHashSet(SegmentBytesProp, SegmentMsProp, SegmentIndexBytesProp, FlushMessagesProp, FlushMsProp, RetentionBytesProp, RententionMsProp, MaxMessageBytesProp, IndexIntervalBytesProp, FileDeleteDelayMsProp, DeleteRetentionMsProp, MinCleanableDirtyRatioProp, CleanupPolicyProp);
 
     /**
      * Parse the given properties instance into a LogConfig object
      */
     public static LogConfig fromProps(Properties props) {
-        return new LogConfig(/*segmentSize =*/ Integer.parseInt(props.getProperty(SegmentBytesProp)),
-                /*segmentMs =*/ Long.parseLong(props.getProperty(SegmentMsProp)),
-                /*flushInterval =*/ Long.parseLong(props.getProperty(FlushMessagesProp)),
-                /*flushMs =*/ Long.parseLong(props.getProperty(FlushMsProp)),
-                /*retentionSize =*/ Long.parseLong(props.getProperty(RetentionBytesProp)),
-                /*retentionMs =*/ Long.parseLong(props.getProperty(RententionMsProp)),
-                /*maxMessageSize = */ Integer.parseInt(props.getProperty(MaxMessageBytesProp)),
-                /*maxIndexSize =*/ Integer.parseInt(props.getProperty(SegmentIndexBytesProp)),
-                /*indexInterval =*/ Integer.parseInt(props.getProperty(IndexIntervalBytesProp)),
-                /*fileDeleteDelayMs =*/ Integer.parseInt(props.getProperty(FileDeleteDelayMsProp)),
-                /*deleteRetentionMs = */Long.parseLong(props.getProperty(DeleteRetentionMsProp)),
-                /*minCleanableRatio =*/ Double.parseDouble(props.getProperty(MinCleanableDirtyRatioProp)),
-               /* dedupe =*/ props.getProperty(CleanupPolicyProp).trim().toLowerCase() == "dedupe");
+        return new LogConfig(/*segmentSize =*/ Integer.parseInt(props.getProperty(SegmentBytesProp)), /*segmentMs =*/ Long.parseLong(props.getProperty(SegmentMsProp)), /*flushInterval =*/ Long.parseLong(props.getProperty(FlushMessagesProp)), /*flushMs =*/ Long.parseLong(props.getProperty(FlushMsProp)), /*retentionSize =*/ Long.parseLong(props.getProperty(RetentionBytesProp)), /*retentionMs =*/ Long.parseLong(props.getProperty(RententionMsProp)), /*maxMessageSize = */ Integer.parseInt(props.getProperty(MaxMessageBytesProp)), /*maxIndexSize =*/ Integer.parseInt(props.getProperty(SegmentIndexBytesProp)), /*indexInterval =*/ Integer.parseInt(props.getProperty(IndexIntervalBytesProp)), /*fileDeleteDelayMs =*/ Integer.parseInt(props.getProperty(FileDeleteDelayMsProp)), /*deleteRetentionMs = */Long.parseLong(props.getProperty(DeleteRetentionMsProp)), /*minCleanableRatio =*/ Double.parseDouble(props.getProperty(MinCleanableDirtyRatioProp)), /* dedupe =*/ props.getProperty(CleanupPolicyProp).trim().toLowerCase() == "dedupe");
     }
 
     /**

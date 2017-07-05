@@ -124,8 +124,7 @@ public class ReassignPartitionsCommand {
         Utils.foreach(groupedByTopic, new Callable2<String, Map<TopicAndPartition, Collection<Integer>>>() {
             @Override
             public void apply(final String _1, Map<TopicAndPartition, Collection<Integer>> _2) {
-                Multimap<Integer, Integer> assignedReplicas = AdminUtils.assignReplicasToBrokers(brokerListToReassign, _2.size(),
-                        Utils.head(_2)._2.size());
+                Multimap<Integer, Integer> assignedReplicas = AdminUtils.assignReplicasToBrokers(brokerListToReassign, _2.size(), Utils.head(_2)._2.size());
                 Utils.foreach(assignedReplicas, new Callable2<Integer, Collection<Integer>>() {
                     @Override
                     public void apply(Integer _10, Collection<Integer> _20) {
@@ -142,16 +141,14 @@ public class ReassignPartitionsCommand {
             }
         }));
 
-        System.out.println(String.format("Current partition replica assignment\n\n%s",
-                ZkUtils.getPartitionReassignmentZkData(currentPartitionReplicaAssignment)));
+        System.out.println(String.format("Current partition replica assignment\n\n%s", ZkUtils.getPartitionReassignmentZkData(currentPartitionReplicaAssignment)));
         System.out.println(String.format("Proposed partition reassignment configuration\n\n%s", ZkUtils.getPartitionReassignmentZkData(partitionsToBeReassigned)));
     }
 
     public static void executeAssignment(ZkClient zkClient, ReassignPartitionsCommandOptions opts) throws IOException {
         if (!opts.options.has(opts.reassignmentJsonFileOpt)) {
             opts.parser.printHelpOn(System.err);
-            Utils.croak("If --execute option is used, command must include --reassignment-json-file that was output " +
-                    "during the --generate option");
+            Utils.croak("If --execute option is used, command must include --reassignment-json-file that was output " + "during the --generate option");
         }
         String reassignmentJsonFile = opts.options.valueOf(opts.reassignmentJsonFileOpt);
         String reassignmentJsonString = Utils.readFileAsString(reassignmentJsonFile);
@@ -166,8 +163,7 @@ public class ReassignPartitionsCommand {
                 return _1.topic;
             }
         }));
-        System.out.println(String.format("Current partition replica assignment\n\n%s\n\nSave this to use as the --reassignment-json-file option during rollback"
-                , ZkUtils.getPartitionReassignmentZkData(currentPartitionReplicaAssignment)));
+        System.out.println(String.format("Current partition replica assignment\n\n%s\n\nSave this to use as the --reassignment-json-file option during rollback", ZkUtils.getPartitionReassignmentZkData(currentPartitionReplicaAssignment)));
         // start the reassignment
         if (reassignPartitionsCommand.reassignPartitions())
             System.out.println("Successfully started reassignment of partitions %s".format(ZkUtils.getPartitionReassignmentZkData(partitionsToBeReassigned)));
@@ -189,29 +185,24 @@ public class ReassignPartitionsCommand {
         Utils.foreach(partitionsToBeReassigned, new Callable2<TopicAndPartition, Collection<Integer>>() {
             @Override
             public void apply(TopicAndPartition _1, Collection<Integer> _2) {
-                result.put(_1, checkIfPartitionReassignmentSucceeded(zkClient, _1,
-                        _2, partitionsToBeReassigned, partitionsBeingReassigned));
+                result.put(_1, checkIfPartitionReassignmentSucceeded(zkClient, _1, _2, partitionsToBeReassigned, partitionsBeingReassigned));
             }
         });
         return result;
     }
 
-    public static ReassignmentStatus checkIfPartitionReassignmentSucceeded(ZkClient zkClient, TopicAndPartition topicAndPartition,
-                                                                           Collection<Integer> reassignedReplicas,
-                                                                           Multimap<TopicAndPartition, Integer> partitionsToBeReassigned,
-                                                                           Multimap<TopicAndPartition, Integer> partitionsBeingReassigned) {
+    public static ReassignmentStatus checkIfPartitionReassignmentSucceeded(ZkClient zkClient, TopicAndPartition topicAndPartition, Collection<Integer> reassignedReplicas, Multimap<TopicAndPartition, Integer> partitionsToBeReassigned, Multimap<TopicAndPartition, Integer> partitionsBeingReassigned) {
         Collection<Integer> newReplicas = partitionsToBeReassigned.get(topicAndPartition);
         Collection<Integer> partition = partitionsBeingReassigned.get(topicAndPartition);
-        if (partition != null) return ReassignmentStatus.ReassignmentInProgress;
-
+        if (partition != null)
+            return ReassignmentStatus.ReassignmentInProgress;
 
         // check if the current replica assignment matches the expected one after reassignment
         List<Integer> assignedReplicas = ZkUtils.getReplicasForPartition(zkClient, topicAndPartition.topic, topicAndPartition.partition);
         if (assignedReplicas.equals(newReplicas))
             return ReassignmentStatus.ReassignmentCompleted;
         else {
-            System.out.println(String.format("ERROR: Assigned replicas (%s) don't match the list of replicas for reassignment (%s)" +
-                    " for partition %s", assignedReplicas, newReplicas, topicAndPartition));
+            System.out.println(String.format("ERROR: Assigned replicas (%s) don't match the list of replicas for reassignment (%s)" + " for partition %s", assignedReplicas, newReplicas, topicAndPartition));
             return ReassignmentStatus.ReassignmentFailed;
         }
     }
@@ -239,8 +230,7 @@ public class ReassignPartitionsCommand {
             return true;
         } catch (ZkNodeExistsException e) {
             Map<TopicAndPartition, ReassignedPartitionsContext> partitionsBeingReassigned = ZkUtils.getPartitionsBeingReassigned(zkClient);
-            throw new AdminCommandFailedException("Partition reassignment currently in " +
-                    "progress for %s. Aborting operation", partitionsBeingReassigned);
+            throw new AdminCommandFailedException("Partition reassignment currently in " + "progress for %s. Aborting operation", partitionsBeingReassigned);
         } catch (Throwable e) {
             logger.error("Admin command failed", e);
             return false;
@@ -251,8 +241,7 @@ public class ReassignPartitionsCommand {
         // check if partition exists
         Collection<Integer> partitions = ZkUtils.getPartitionsForTopics(zkClient, Lists.newArrayList(topic)).get(topic);
         if (partitions == null) {
-            logger.error("Skipping reassignment of partition " +
-                    "[{},{}] since topic {} doesn't exist", topic, partition, topic);
+            logger.error("Skipping reassignment of partition " + "[{},{}] since topic {} doesn't exist", topic, partition, topic);
             return false;
         }
         if (partitions.contains(partition)) {
@@ -271,32 +260,13 @@ public class ReassignPartitionsCommand {
 
             parser = new OptionParser();
 
-            zkConnectOpt = parser.accepts("zookeeper", "REQUIRED: The connection string for the zookeeper connection in the " +
-                    "form host:port. Multiple URLS can be given to allow fail-over.")
-                    .withRequiredArg()
-                    .describedAs("urls")
-                    .ofType(String.class);
-            generateOpt = parser.accepts("generate", "Generate a candidate partition reassignment configuration." +
-                    " Note that this only generates a candidate assignment, it does not execute it.");
+            zkConnectOpt = parser.accepts("zookeeper", "REQUIRED: The connection string for the zookeeper connection in the " + "form host:port. Multiple URLS can be given to allow fail-over.").withRequiredArg().describedAs("urls").ofType(String.class);
+            generateOpt = parser.accepts("generate", "Generate a candidate partition reassignment configuration." + " Note that this only generates a candidate assignment, it does not execute it.");
             executeOpt = parser.accepts("execute", "Kick off the reassignment as specified by the --reassignment-json-file option.");
             verifyOpt = parser.accepts("verify", "Verify if the reassignment completed as specified by the --reassignment-json-file option.");
-            reassignmentJsonFileOpt = parser.accepts("reassignment-json-file", "The JSON file with the partition reassignment configuration" +
-                    "The format to use is - \n" +
-                    "{\"partitions\":\n\t[{\"topic\": \"foo\",\n\t  \"partition\": 1,\n\t  \"replicas\": [1,2,3] }],\n\"version\":1\n}")
-                    .withRequiredArg()
-                    .describedAs("manual assignment json file path")
-                    .ofType(String.class);
-            topicsToMoveJsonFileOpt = parser.accepts("topics-to-move-json-file", "Generate a reassignment configuration to move the partitions" +
-                    " of the specified topics to the list of brokers specified by the --broker-list option. The format to use is - \n" +
-                    "{\"topics\":\n\t[{\"topic\": \"foo\"},{\"topic\": \"foo1\"}],\n\"version\":1\n}")
-                    .withRequiredArg()
-                    .describedAs("topics to reassign json file path")
-                    .ofType(String.class);
-            brokerListOpt = parser.accepts("broker-list", "The list of brokers to which the partitions need to be reassigned" +
-                    " in the form \"0,1,2\". This is required if --topics-to-move-json-file is used to generate reassignment configuration")
-                    .withRequiredArg()
-                    .describedAs("brokerlist")
-                    .ofType(String.class);
+            reassignmentJsonFileOpt = parser.accepts("reassignment-json-file", "The JSON file with the partition reassignment configuration" + "The format to use is - \n" + "{\"partitions\":\n\t[{\"topic\": \"foo\",\n\t  \"partition\": 1,\n\t  \"replicas\": [1,2,3] }],\n\"version\":1\n}").withRequiredArg().describedAs("manual assignment json file path").ofType(String.class);
+            topicsToMoveJsonFileOpt = parser.accepts("topics-to-move-json-file", "Generate a reassignment configuration to move the partitions" + " of the specified topics to the list of brokers specified by the --broker-list option. The format to use is - \n" + "{\"topics\":\n\t[{\"topic\": \"foo\"},{\"topic\": \"foo1\"}],\n\"version\":1\n}").withRequiredArg().describedAs("topics to reassign json file path").ofType(String.class);
+            brokerListOpt = parser.accepts("broker-list", "The list of brokers to which the partitions need to be reassigned" + " in the form \"0,1,2\". This is required if --topics-to-move-json-file is used to generate reassignment configuration").withRequiredArg().describedAs("brokerlist").ofType(String.class);
 
             options = parser.parse(args);
         }
@@ -320,12 +290,14 @@ public class ReassignPartitionsCommand {
             public int status() {
                 return 1;
             }
-        }, ReassignmentInProgress {
+        },
+        ReassignmentInProgress {
             @Override
             public int status() {
                 return 0;
             }
-        }, ReassignmentFailed {
+        },
+        ReassignmentFailed {
             @Override
             public int status() {
                 return -1;

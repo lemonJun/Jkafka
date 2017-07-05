@@ -35,7 +35,6 @@ public class ProducerConfig extends AsyncProducerConfig {
         }
     }
 
-
     public ProducerConfig(VerifiableProperties props) {
         super(props);
         init();

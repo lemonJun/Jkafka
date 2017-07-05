@@ -16,10 +16,7 @@ public class WildcardTopicCount extends TopicCount {
     public final TopicFilter topicFilter;
     public final int numStreams;
 
-    public WildcardTopicCount(ZkClient zkClient,
-                              String consumerIdString,
-                              TopicFilter topicFilter,
-                              int numStreams) {
+    public WildcardTopicCount(ZkClient zkClient, String consumerIdString, TopicFilter topicFilter, int numStreams) {
         this.zkClient = zkClient;
         this.consumerIdString = consumerIdString;
         this.topicFilter = topicFilter;
@@ -37,7 +34,6 @@ public class WildcardTopicCount extends TopicCount {
                     topicCountMap.put(topic, numStreams);
             }
         }
-
 
         return makeConsumerThreadIdsPerTopic(consumerIdString, topicCountMap);
     }

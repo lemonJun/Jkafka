@@ -26,7 +26,8 @@ public class StringEncoder implements Encoder<String> {
 
     @Override
     public byte[] toBytes(String s) {
-        if (s == null) return null;
+        if (s == null)
+            return null;
         try {
             return s.getBytes(encoding);
         } catch (UnsupportedEncodingException e) {

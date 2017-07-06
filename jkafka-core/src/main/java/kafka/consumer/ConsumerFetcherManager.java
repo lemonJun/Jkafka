@@ -1,7 +1,5 @@
 package kafka.consumer;
 
-import static kafka.utils.ZkUtils.getAllBrokersInCluster;
-
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -33,6 +31,8 @@ import kafka.utils.ShutdownableThread;
 import kafka.utils.SystemTime;
 import kafka.utils.Tuple2;
 import kafka.utils.Utils;
+import kafka.utils.ZkUtils;
+import kafka.xend.GuiceDI;
 
 /**
  * Usage:
@@ -42,13 +42,11 @@ import kafka.utils.Utils;
 public class ConsumerFetcherManager extends AbstractFetcherManager {
     private String consumerIdString;
     private ConsumerConfig config;
-    private ZkClient zkClient;
 
     public ConsumerFetcherManager(String consumerIdString, ConsumerConfig config, ZkClient zkClient) {
         super("ConsumerFetcherManager-" + SystemTime.instance.milliseconds(), config.clientId, 1);
         this.consumerIdString = consumerIdString;
         this.config = config;
-        this.zkClient = zkClient;
     }
 
     private Map<TopicAndPartition, PartitionTopicInfo> partitionMap = null;
@@ -82,7 +80,7 @@ public class ConsumerFetcherManager extends AbstractFetcherManager {
                 }
 
                 logger.trace("Partitions without leader {}", noLeaderPartitionSet);
-                List<Broker> brokers = getAllBrokersInCluster(zkClient);
+                List<Broker> brokers = GuiceDI.getInstance(ZkUtils.class).getAllBrokersInCluster();
                 List<TopicMetadata> topicsMetadata = ClientUtils.fetchTopicMetadata(Utils.mapSet(noLeaderPartitionSet, new Function1<TopicAndPartition, String>() {
                     @Override
                     public String apply(TopicAndPartition m) {

@@ -28,6 +28,7 @@ import kafka.utils.Json;
 import kafka.utils.Utils;
 import kafka.utils.ZKStringSerializer;
 import kafka.utils.ZkUtils;
+import kafka.xend.GuiceDI;
 
 public class PreferredReplicaLeaderElectionCommand {
     public static void main(String[] args) {
@@ -44,7 +45,7 @@ public class PreferredReplicaLeaderElectionCommand {
 
         try {
             zkClient = new ZkClient(zkConnect, 30000, 30000, ZKStringSerializer.instance);
-            Set<TopicAndPartition> partitionsForPreferredReplicaElection = (!options.has(jsonFileOpt)) ? ZkUtils.getAllPartitions(zkClient) : parsePreferredReplicaElectionData(Utils.readFileAsString(options.valueOf(jsonFileOpt)));
+            Set<TopicAndPartition> partitionsForPreferredReplicaElection = (!options.has(jsonFileOpt)) ? GuiceDI.getInstance(ZkUtils.class).getAllPartitions() : parsePreferredReplicaElectionData(Utils.readFileAsString(options.valueOf(jsonFileOpt)));
             PreferredReplicaLeaderElectionCommand preferredReplicaElectionCommand = new PreferredReplicaLeaderElectionCommand(zkClient, partitionsForPreferredReplicaElection);
 
             preferredReplicaElectionCommand.moveLeaderToPreferredReplica();
@@ -97,10 +98,10 @@ public class PreferredReplicaLeaderElectionCommand {
         map.put("partitions", partitionsList);
         String jsonData = Json.encode(map);
         try {
-            ZkUtils.createPersistentPath(zkClient, zkPath, jsonData);
+            GuiceDI.getInstance(ZkUtils.class).createPersistentPath(zkPath, jsonData);
             logger.info("Created preferred replica election path with {}", jsonData);
         } catch (ZkNodeExistsException e) {
-            Set<TopicAndPartition> partitionsUndergoingPreferredReplicaElection1 = PreferredReplicaLeaderElectionCommand.parsePreferredReplicaElectionData(ZkUtils.readData(zkClient, zkPath)._1);
+            Set<TopicAndPartition> partitionsUndergoingPreferredReplicaElection1 = PreferredReplicaLeaderElectionCommand.parsePreferredReplicaElectionData(GuiceDI.getInstance(ZkUtils.class).readData(zkPath)._1);
             throw new AdminOperationException("Preferred replica leader election currently in progress for " + "{}. Aborting operation", partitionsUndergoingPreferredReplicaElection1);
         } catch (Throwable e) {
             throw new AdminOperationException(e.toString());
@@ -133,7 +134,7 @@ public class PreferredReplicaLeaderElectionCommand {
 
     public boolean validatePartition(ZkClient zkClient, String topic, int partition) {
         // check if partition exists
-        Collection<Integer> partitions = ZkUtils.getPartitionsForTopics(zkClient, Lists.newArrayList(topic)).get(topic);
+        Collection<Integer> partitions = GuiceDI.getInstance(ZkUtils.class).getPartitionsForTopics(Lists.newArrayList(topic)).get(topic);
         if (partitions == null) {
             logger.error("Skipping preferred replica leader election for partition " + "[{},{}] since topic {} doesn't exist", topic, partition, topic);
             return false;

@@ -31,6 +31,7 @@ import kafka.utils.Predicate2;
 import kafka.utils.Utils;
 import kafka.utils.ZKStringSerializer;
 import kafka.utils.ZkUtils;
+import kafka.xend.GuiceDI;
 
 public class ReassignPartitionsCommand {
     public static void main(String[] args) throws IOException {
@@ -111,7 +112,7 @@ public class ReassignPartitionsCommand {
         });
         String topicsToMoveJsonString = Utils.readFileAsString(topicsToMoveJsonFile);
         List<String> topicsToReassign = ZkUtils.parseTopicsData(topicsToMoveJsonString);
-        Multimap<TopicAndPartition, Integer> topicPartitionsToReassign = ZkUtils.getReplicaAssignmentForTopics(zkClient, topicsToReassign);
+        Multimap<TopicAndPartition, Integer> topicPartitionsToReassign = GuiceDI.getInstance(ZkUtils.class).getReplicaAssignmentForTopics(topicsToReassign);
 
         final Multimap<TopicAndPartition, Integer> partitionsToBeReassigned = HashMultimap.create();
         Table<String, TopicAndPartition, Collection<Integer>> groupedByTopic = Utils.groupBy(topicPartitionsToReassign, new Function2<TopicAndPartition, Collection<Integer>, String>() {
@@ -134,15 +135,15 @@ public class ReassignPartitionsCommand {
             }
         });
 
-        Multimap<TopicAndPartition, Integer> currentPartitionReplicaAssignment = ZkUtils.getReplicaAssignmentForTopics(zkClient, Utils.mapList(partitionsToBeReassigned, new Function2<TopicAndPartition, Collection<Integer>, String>() {
+        Multimap<TopicAndPartition, Integer> currentPartitionReplicaAssignment = GuiceDI.getInstance(ZkUtils.class).getReplicaAssignmentForTopics(Utils.mapList(partitionsToBeReassigned, new Function2<TopicAndPartition, Collection<Integer>, String>() {
             @Override
             public String apply(TopicAndPartition _1, Collection<Integer> arg2) {
                 return _1.topic;
             }
         }));
 
-        System.out.println(String.format("Current partition replica assignment\n\n%s", ZkUtils.getPartitionReassignmentZkData(currentPartitionReplicaAssignment)));
-        System.out.println(String.format("Proposed partition reassignment configuration\n\n%s", ZkUtils.getPartitionReassignmentZkData(partitionsToBeReassigned)));
+        System.out.println(String.format("Current partition replica assignment\n\n%s", GuiceDI.getInstance(ZkUtils.class).getPartitionReassignmentZkData(currentPartitionReplicaAssignment)));
+        System.out.println(String.format("Proposed partition reassignment configuration\n\n%s", GuiceDI.getInstance(ZkUtils.class).getPartitionReassignmentZkData(partitionsToBeReassigned)));
     }
 
     public static void executeAssignment(ZkClient zkClient, ReassignPartitionsCommandOptions opts) throws IOException {
@@ -157,16 +158,16 @@ public class ReassignPartitionsCommand {
             throw new AdminCommandFailedException("Partition reassignment data file %s is empty", reassignmentJsonFile);
         ReassignPartitionsCommand reassignPartitionsCommand = new ReassignPartitionsCommand(zkClient, partitionsToBeReassigned);
         // before starting assignment, output the current replica assignment to facilitate rollback
-        Multimap<TopicAndPartition, Integer> currentPartitionReplicaAssignment = ZkUtils.getReplicaAssignmentForTopics(zkClient, Utils.mapList(partitionsToBeReassigned, new Function2<TopicAndPartition, Collection<Integer>, String>() {
+        Multimap<TopicAndPartition, Integer> currentPartitionReplicaAssignment = GuiceDI.getInstance(ZkUtils.class).getReplicaAssignmentForTopics(Utils.mapList(partitionsToBeReassigned, new Function2<TopicAndPartition, Collection<Integer>, String>() {
             @Override
             public String apply(TopicAndPartition _1, Collection<Integer> arg2) {
                 return _1.topic;
             }
         }));
-        System.out.println(String.format("Current partition replica assignment\n\n%s\n\nSave this to use as the --reassignment-json-file option during rollback", ZkUtils.getPartitionReassignmentZkData(currentPartitionReplicaAssignment)));
+        System.out.println(String.format("Current partition replica assignment\n\n%s\n\nSave this to use as the --reassignment-json-file option during rollback", GuiceDI.getInstance(ZkUtils.class).getPartitionReassignmentZkData(currentPartitionReplicaAssignment)));
         // start the reassignment
         if (reassignPartitionsCommand.reassignPartitions())
-            System.out.println("Successfully started reassignment of partitions %s".format(ZkUtils.getPartitionReassignmentZkData(partitionsToBeReassigned)));
+            System.out.println("Successfully started reassignment of partitions %s".format(GuiceDI.getInstance(ZkUtils.class).getPartitionReassignmentZkData(partitionsToBeReassigned)));
         else
             System.out.println(String.format("Failed to reassign partitions %s", partitionsToBeReassigned));
     }
@@ -174,7 +175,7 @@ public class ReassignPartitionsCommand {
     private static Map<TopicAndPartition, ReassignmentStatus> checkIfReassignmentSucceeded(final ZkClient zkClient, final Multimap<TopicAndPartition, Integer> partitionsToBeReassigned) {
 
         final Multimap<TopicAndPartition, Integer> partitionsBeingReassigned = HashMultimap.create();
-        Utils.foreach(ZkUtils.getPartitionsBeingReassigned(zkClient), new Callable2<TopicAndPartition, ReassignedPartitionsContext>() {
+        Utils.foreach(GuiceDI.getInstance(ZkUtils.class).getPartitionsBeingReassigned(), new Callable2<TopicAndPartition, ReassignedPartitionsContext>() {
             @Override
             public void apply(TopicAndPartition topicAndPartition, ReassignedPartitionsContext _) {
                 partitionsBeingReassigned.putAll(topicAndPartition, _.newReplicas);
@@ -198,7 +199,7 @@ public class ReassignPartitionsCommand {
             return ReassignmentStatus.ReassignmentInProgress;
 
         // check if the current replica assignment matches the expected one after reassignment
-        List<Integer> assignedReplicas = ZkUtils.getReplicasForPartition(zkClient, topicAndPartition.topic, topicAndPartition.partition);
+        List<Integer> assignedReplicas = GuiceDI.getInstance(ZkUtils.class).getReplicasForPartition(topicAndPartition.topic, topicAndPartition.partition);
         if (assignedReplicas.equals(newReplicas))
             return ReassignmentStatus.ReassignmentCompleted;
         else {
@@ -207,11 +208,9 @@ public class ReassignPartitionsCommand {
         }
     }
 
-    public ZkClient zkClient;
     public Multimap<TopicAndPartition, Integer> partitions;
 
     public ReassignPartitionsCommand(ZkClient zkClient, Multimap<TopicAndPartition, Integer> partitions) {
-        this.zkClient = zkClient;
         this.partitions = partitions;
     }
 
@@ -222,14 +221,14 @@ public class ReassignPartitionsCommand {
             Multimap<TopicAndPartition, Integer> validPartitions = Utils.filter(partitions, new Predicate2<TopicAndPartition, Collection<Integer>>() {
                 @Override
                 public boolean apply(TopicAndPartition _1, Collection<Integer> integers) {
-                    return validatePartition(zkClient, _1.topic, _1.partition);
+                    return validatePartition(_1.topic, _1.partition);
                 }
             });
-            String jsonReassignmentData = ZkUtils.getPartitionReassignmentZkData(validPartitions);
-            ZkUtils.createPersistentPath(zkClient, ZkUtils.ReassignPartitionsPath, jsonReassignmentData);
+            String jsonReassignmentData = GuiceDI.getInstance(ZkUtils.class).getPartitionReassignmentZkData(validPartitions);
+            GuiceDI.getInstance(ZkUtils.class).createPersistentPath(ZkUtils.ReassignPartitionsPath, jsonReassignmentData);
             return true;
         } catch (ZkNodeExistsException e) {
-            Map<TopicAndPartition, ReassignedPartitionsContext> partitionsBeingReassigned = ZkUtils.getPartitionsBeingReassigned(zkClient);
+            Map<TopicAndPartition, ReassignedPartitionsContext> partitionsBeingReassigned = GuiceDI.getInstance(ZkUtils.class).getPartitionsBeingReassigned();
             throw new AdminCommandFailedException("Partition reassignment currently in " + "progress for %s. Aborting operation", partitionsBeingReassigned);
         } catch (Throwable e) {
             logger.error("Admin command failed", e);
@@ -237,9 +236,9 @@ public class ReassignPartitionsCommand {
         }
     }
 
-    public boolean validatePartition(ZkClient zkClient, String topic, int partition) {
+    public boolean validatePartition(String topic, int partition) {
         // check if partition exists
-        Collection<Integer> partitions = ZkUtils.getPartitionsForTopics(zkClient, Lists.newArrayList(topic)).get(topic);
+        Collection<Integer> partitions = GuiceDI.getInstance(ZkUtils.class).getPartitionsForTopics(Lists.newArrayList(topic)).get(topic);
         if (partitions == null) {
             logger.error("Skipping reassignment of partition " + "[{},{}] since topic {} doesn't exist", topic, partition, topic);
             return false;

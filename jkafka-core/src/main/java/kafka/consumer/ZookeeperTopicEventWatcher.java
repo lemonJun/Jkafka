@@ -10,13 +10,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import kafka.utils.ZkUtils;
+import kafka.xend.GuiceDI;
 
 public class ZookeeperTopicEventWatcher {
-    public ZkClient zkClient;
     public TopicEventHandler<String> eventHandler;
 
     public ZookeeperTopicEventWatcher(ZkClient zkClient, TopicEventHandler<String> eventHandler) {
-        this.zkClient = zkClient;
         this.eventHandler = eventHandler;
         startWatchingTopicEvents();
     }
@@ -26,24 +25,24 @@ public class ZookeeperTopicEventWatcher {
 
     private void startWatchingTopicEvents() {
         ZkTopicEventListener topicEventListener = new ZkTopicEventListener();
-        ZkUtils.makeSurePersistentPathExists(zkClient, ZkUtils.BrokerTopicsPath);
+        GuiceDI.getInstance(ZkUtils.class).makeSurePersistentPathExists(ZkUtils.BrokerTopicsPath);
 
-        zkClient.subscribeStateChanges(new ZkSessionExpireListener(topicEventListener));
+        GuiceDI.getInstance(ZkUtils.class).getZkClient().subscribeStateChanges(new ZkSessionExpireListener(topicEventListener));
 
-        List<String> topics = zkClient.subscribeChildChanges(ZkUtils.BrokerTopicsPath, topicEventListener);
+        List<String> topics = GuiceDI.getInstance(ZkUtils.class).getZkClient().subscribeChildChanges(ZkUtils.BrokerTopicsPath, topicEventListener);
 
         // call to bootstrap topic list
         topicEventListener.handleChildChange(ZkUtils.BrokerTopicsPath, topics);
     }
 
     private void stopWatchingTopicEvents() {
-        zkClient.unsubscribeAll();
+        GuiceDI.getInstance(ZkUtils.class).getZkClient().unsubscribeAll();
     }
 
     public void shutdown() {
         synchronized (lock) {
             logger.info("Shutting down topic event watcher.");
-            if (zkClient != null) {
+            if (GuiceDI.getInstance(ZkUtils.class).getZkClient() != null) {
                 stopWatchingTopicEvents();
             } else {
                 logger.warn("Cannot shutdown since the embedded zookeeper client has already closed.");
@@ -57,8 +56,8 @@ public class ZookeeperTopicEventWatcher {
         public void handleChildChange(String s, List<String> strings) {
             synchronized (lock) {
                 try {
-                    if (zkClient != null) {
-                        List<String> latestTopics = zkClient.getChildren(ZkUtils.BrokerTopicsPath);
+                    if (GuiceDI.getInstance(ZkUtils.class).getZkClient() != null) {
+                        List<String> latestTopics = GuiceDI.getInstance(ZkUtils.class).getZkClient().getChildren(ZkUtils.BrokerTopicsPath);
                         logger.debug("all topics: {}", latestTopics);
                         eventHandler.handleTopicEvent(latestTopics);
                     }
@@ -84,9 +83,9 @@ public class ZookeeperTopicEventWatcher {
         @Override
         public void handleNewSession() throws Exception {
             synchronized (lock) {
-                if (zkClient != null) {
+                if (GuiceDI.getInstance(ZkUtils.class).getZkClient() != null) {
                     logger.info("ZK expired: resubscribing topic event listener to topic registry");
-                    zkClient.subscribeChildChanges(ZkUtils.BrokerTopicsPath, topicEventListener);
+                    GuiceDI.getInstance(ZkUtils.class).getZkClient().subscribeChildChanges(ZkUtils.BrokerTopicsPath, topicEventListener);
                 }
             }
         }

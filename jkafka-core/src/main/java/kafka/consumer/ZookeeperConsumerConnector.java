@@ -2,17 +2,7 @@ package kafka.consumer;
 
 import static com.google.common.base.Preconditions.checkState;
 import static kafka.utils.ZkUtils.BrokerTopicsPath;
-import static kafka.utils.ZkUtils.createEphemeralPathExpectConflict;
-import static kafka.utils.ZkUtils.createEphemeralPathExpectConflictHandleZKBug;
-import static kafka.utils.ZkUtils.deletePath;
-import static kafka.utils.ZkUtils.getAllBrokersInCluster;
-import static kafka.utils.ZkUtils.getChildrenParentMayNotExist;
-import static kafka.utils.ZkUtils.getCluster;
 import static kafka.utils.ZkUtils.getConsumerPartitionOwnerPath;
-import static kafka.utils.ZkUtils.getConsumersPerTopic;
-import static kafka.utils.ZkUtils.getPartitionAssignmentForTopics;
-import static kafka.utils.ZkUtils.readDataMaybeNull;
-import static kafka.utils.ZkUtils.updatePersistentPath;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -71,6 +61,7 @@ import kafka.utils.ZKGroupDirs;
 import kafka.utils.ZKGroupTopicDirs;
 import kafka.utils.ZKStringSerializer;
 import kafka.utils.ZkUtils;
+import kafka.xend.GuiceDI;
 
 /**
  * This class handles the consumers interaction with zookeeper
@@ -384,7 +375,7 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
         String timestamp = SystemTime.instance.milliseconds() + "";
         String consumerRegistrationInfo = Json.encode(ImmutableMap.of("version", 1, "subscription", topicCount.getTopicCountMap(), "pattern", topicCount.pattern(), "timestamp", timestamp));
 
-        createEphemeralPathExpectConflictHandleZKBug(zkClient, dirs.consumerRegistryDir() + "/" + consumerIdString, consumerRegistrationInfo, null, new Function2<String, Object, Boolean>() {
+        GuiceDI.getInstance(ZkUtils.class).createEphemeralPathExpectConflictHandleZKBug(dirs.consumerRegistryDir() + "/" + consumerIdString, consumerRegistrationInfo, null, new Function2<String, Object, Boolean>() {
             @Override
             public Boolean apply(String consumerZKString, Object consumer) {
                 return true;
@@ -434,7 +425,7 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
                         long newOffset = info.getConsumeOffset();
                         if (newOffset != checkpointedOffsets.get(new TopicAndPartition(topic, info.partitionId))) {
                             try {
-                                updatePersistentPath(zkClient, topicDirs.consumerOffsetDir() + "/" + info.partitionId, newOffset + "");
+                                GuiceDI.getInstance(ZkUtils.class).updatePersistentPath(topicDirs.consumerOffsetDir() + "/" + info.partitionId, newOffset + "");
                                 checkpointedOffsets.put(new TopicAndPartition(topic, info.partitionId), newOffset);
                             } catch (Throwable t) {
                                 // log it and let it go
@@ -579,7 +570,7 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
         private void deletePartitionOwnershipFromZK(String topic, int partition) {
             ZKGroupTopicDirs topicDirs = new ZKGroupTopicDirs(group, topic);
             String znode = topicDirs.consumerOwnerDir() + "/" + partition;
-            deletePath(zkClient, znode);
+            GuiceDI.getInstance(ZkUtils.class).deletePath(znode);
             logger.debug("Consumer {} releasing {}", consumerIdString, znode);
         }
 
@@ -616,7 +607,7 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
                     boolean done = false;
                     Cluster cluster = null;
                     try {
-                        cluster = getCluster(zkClient);
+                        cluster = GuiceDI.getInstance(ZkUtils.class).getCluster();
                         done = rebalance(cluster);
                     } catch (Throwable e) {
                         /** occasionally, we may hit a ZK exception because the ZK state is changing while we are iterating.
@@ -649,8 +640,8 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
 
         private boolean rebalance(final Cluster cluster) {
             final Map<String, Set<String>> myTopicThreadIdsMap = TopicCounts.constructTopicCount(group, consumerIdString, zkClient).getConsumerThreadIdsPerTopic();
-            final Multimap<String, String> consumersPerTopicMap = getConsumersPerTopic(zkClient, group);
-            List<Broker> brokers = getAllBrokersInCluster(zkClient);
+            final Multimap<String, String> consumersPerTopicMap = GuiceDI.getInstance(ZkUtils.class).getConsumersPerTopic(group);
+            List<Broker> brokers = GuiceDI.getInstance(ZkUtils.class).getAllBrokersInCluster();
             if (brokers.size() == 0) {
                 // This can happen in a rare case when there are no brokers available in the cluster when the consumer is started.
                 // We log an warning and register for child changes on brokers/id so that rebalance can be triggered when the brokers
@@ -659,7 +650,7 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
                 zkClient.subscribeChildChanges(ZkUtils.BrokerIdsPath, loadBalancerListener);
                 return true;
             } else {
-                Map<String, Multimap<Integer, Integer>> partitionsAssignmentPerTopicMap = getPartitionAssignmentForTopics(zkClient, Lists.newArrayList(myTopicThreadIdsMap.keySet()));
+                Map<String, Multimap<Integer, Integer>> partitionsAssignmentPerTopicMap = GuiceDI.getInstance(ZkUtils.class).getPartitionAssignmentForTopics(Lists.newArrayList(myTopicThreadIdsMap.keySet()));
                 final Map<String, List<Integer>> partitionsPerTopicMap = Maps.newHashMap();
                 Utils.foreach(partitionsAssignmentPerTopicMap, new Callable2<String, Multimap<Integer, Integer>>() {
                     @Override
@@ -851,7 +842,7 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
                     Integer partition = _1._2;
                     String partitionOwnerPath = getConsumerPartitionOwnerPath(group, topic, partition);
                     try {
-                        createEphemeralPathExpectConflict(zkClient, partitionOwnerPath, consumerThreadId);
+                        GuiceDI.getInstance(ZkUtils.class).createEphemeralPathExpectConflict(partitionOwnerPath, consumerThreadId);
                         logger.info("{} successfully owned partition {} for topic {}", consumerThreadId, partition, topic);
                         successfullyOwnedPartitions.add(Tuple2.make(topic, partition));
                         return true;
@@ -889,7 +880,7 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
             Pool<Integer, PartitionTopicInfo> partTopicInfoMap = currentTopicRegistry.get(topic);
 
             String znode = topicDirs.consumerOffsetDir() + "/" + partition;
-            String offsetString = readDataMaybeNull(zkClient, znode)._1;
+            String offsetString = GuiceDI.getInstance(ZkUtils.class).readDataMaybeNull(znode)._1;
             // If first time starting a consumer, set the initial offset to -1
             long offset = offsetString != null ? Long.parseLong(offsetString) : PartitionTopicInfo.InvalidOffset;
 
@@ -933,7 +924,7 @@ public class ZookeeperConsumerConnector extends KafkaMetricsGroup implements Con
                 }
             });
 
-            wildcardTopics = Utils.filter(getChildrenParentMayNotExist(zkClient, ZkUtils.BrokerTopicsPath), new Predicate<String>() {
+            wildcardTopics = Utils.filter(GuiceDI.getInstance(ZkUtils.class).getChildrenParentMayNotExist(ZkUtils.BrokerTopicsPath), new Predicate<String>() {
                 @Override
                 public boolean apply(String _) {
                     return topicFilter.isTopicAllowed(_);

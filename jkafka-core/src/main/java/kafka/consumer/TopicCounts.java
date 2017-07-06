@@ -15,6 +15,7 @@ import kafka.utils.Tuple2;
 import kafka.utils.Utils;
 import kafka.utils.ZKGroupDirs;
 import kafka.utils.ZkUtils;
+import kafka.xend.GuiceDI;
 
 public class TopicCounts {
     public static final String whiteListPattern = "white_list";
@@ -25,7 +26,7 @@ public class TopicCounts {
 
     public static TopicCount constructTopicCount(String group, String consumerId, ZkClient zkClient) {
         ZKGroupDirs dirs = new ZKGroupDirs(group);
-        String topicCountString = ZkUtils.readData(zkClient, dirs.consumerRegistryDir() + "/" + consumerId)._1;
+        String topicCountString = GuiceDI.getInstance(ZkUtils.class).readData(dirs.consumerRegistryDir() + "/" + consumerId)._1;
         String subscriptionPattern = null;
         Map<String, Integer> topMap = null;
         try {

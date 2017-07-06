@@ -32,6 +32,7 @@ import kafka.utils.Tuple2;
 import kafka.utils.Utils;
 import kafka.utils.ZKStringSerializer;
 import kafka.utils.ZkUtils;
+import kafka.xend.GuiceDI;
 
 public class TopicCommand {
     public static void main(String[] args) throws IOException {
@@ -75,7 +76,7 @@ public class TopicCommand {
     private static List<String> getTopics(ZkClient zkClient, TopicCommandOptions opts) {
         String topicsSpec = opts.options.valueOf(opts.topicOpt);
         final Whitelist topicsFilter = new Whitelist(topicsSpec);
-        Set<String> allTopics = ZkUtils.getAllTopics(zkClient);
+        Set<String> allTopics = GuiceDI.getInstance(ZkUtils.class).getAllTopics();
         final List<String> result = Lists.newArrayList();
 
         Utils.foreach(allTopics, new Callable1<String>() {
@@ -154,14 +155,14 @@ public class TopicCommand {
 
     public static void listTopics(final ZkClient zkClient, TopicCommandOptions opts) {
         if (opts.options.has(opts.topicsWithOverridesOpt)) {
-            List<String> allTopics = Lists.newArrayList(ZkUtils.getAllTopics(zkClient));
+            List<String> allTopics = Lists.newArrayList(GuiceDI.getInstance(ZkUtils.class).getAllTopics());
             Collections.sort(allTopics);
             Utils.foreach(allTopics, new Callable1<String>() {
                 @Override
                 public void apply(String topic) {
                     Properties configs = AdminUtils.fetchTopicConfig(zkClient, topic);
                     if (configs.size() != 0) {
-                        Multimap<TopicAndPartition, Integer> replicaAssignment = ZkUtils.getReplicaAssignmentForTopics(zkClient, Lists.newArrayList(topic));
+                        Multimap<TopicAndPartition, Integer> replicaAssignment = GuiceDI.getInstance(ZkUtils.class).getReplicaAssignmentForTopics(Lists.newArrayList(topic));
                         int numPartitions = replicaAssignment.size();
                         int replicationFactor = Utils.head(replicaAssignment)._2.size();
                         System.out.println(String.format("\nTopic:%s\tPartitionCount:%d\tReplicationFactor:%d\tConfigs:%s", topic, numPartitions, replicationFactor, configs));
@@ -169,7 +170,7 @@ public class TopicCommand {
                 }
             });
         } else {
-            List<String> allTopics = Lists.newArrayList(ZkUtils.getAllTopics(zkClient));
+            List<String> allTopics = Lists.newArrayList(GuiceDI.getInstance(ZkUtils.class).getAllTopics());
             Collections.sort(allTopics);
             Utils.foreach(allTopics, new Callable1<String>() {
                 @Override
@@ -184,14 +185,14 @@ public class TopicCommand {
         List<String> topics = getTopics(zkClient, opts);
         boolean reportUnderReplicatedPartitions = opts.options.has(opts.reportUnderReplicatedPartitionsOpt);
         boolean reportUnavailablePartitions = opts.options.has(opts.reportUnavailablePartitionsOpt);
-        Set<Integer> liveBrokers = Utils.mapSet(ZkUtils.getAllBrokersInCluster(zkClient), new Function1<Broker, Integer>() {
+        Set<Integer> liveBrokers = Utils.mapSet(GuiceDI.getInstance(ZkUtils.class).getAllBrokersInCluster(), new Function1<Broker, Integer>() {
             @Override
             public Integer apply(Broker _) {
                 return _.id;
             }
         });
         for (String topic : topics) {
-            Multimap<Integer, Integer> topicPartitionAssignment = ZkUtils.getPartitionAssignmentForTopics(zkClient, Lists.newArrayList(topic)).get(topic);
+            Multimap<Integer, Integer> topicPartitionAssignment = GuiceDI.getInstance(ZkUtils.class).getPartitionAssignmentForTopics(Lists.newArrayList(topic)).get(topic);
             if (topicPartitionAssignment == null) {
                 System.out.println("topic " + topic + " doesn't exist!");
                 return;
@@ -218,8 +219,8 @@ public class TopicCommand {
                 Integer partitionId = tuple2._1;
                 Collection<Integer> assignedReplicas = tuple2._2;
 
-                List<Integer> inSyncReplicas = ZkUtils.getInSyncReplicasForPartition(zkClient, topic, partitionId);
-                Integer leader = ZkUtils.getLeaderForPartition(zkClient, topic, partitionId);
+                List<Integer> inSyncReplicas = GuiceDI.getInstance(ZkUtils.class).getInSyncReplicasForPartition(topic, partitionId);
+                Integer leader = GuiceDI.getInstance(ZkUtils.class).getLeaderForPartition(topic, partitionId);
                 if ((!reportUnderReplicatedPartitions && !reportUnavailablePartitions) || (reportUnderReplicatedPartitions && inSyncReplicas.size() < assignedReplicas.size()) || (reportUnavailablePartitions && (leader != null || !liveBrokers.contains(leader)))) {
                     System.out.print("\t\ttopic: " + topic);
                     System.out.print("\tpartition: " + partitionId);

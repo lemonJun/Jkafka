@@ -42,11 +42,14 @@ import kafka.utils.Predicate2;
 import kafka.utils.Tuple2;
 import kafka.utils.Utils;
 import kafka.utils.ZkUtils;
+import kafka.xend.GuiceDI;
 
 public class AdminUtils {
     public static Random rand = new Random();
     public static String TopicConfigChangeZnodePrefix = "config_change_";
     static Logger logger = LoggerFactory.getLogger(AdminUtils.class);
+
+    private static final ZkUtils zkutil = GuiceDI.getInstance(ZkUtils.class);
 
     /**
      * There are 2 goals of replica assignment:
@@ -97,7 +100,7 @@ public class AdminUtils {
     }
 
     public static void addPartitions(ZkClient zkClient, String topic, int numPartitions /* = 1*/, String replicaAssignmentStr/* = ""*/) {
-        Multimap<TopicAndPartition, Integer> existingPartitionsReplicaList = ZkUtils.getReplicaAssignmentForTopics(zkClient, Lists.newArrayList(topic));
+        Multimap<TopicAndPartition, Integer> existingPartitionsReplicaList = zkutil.getReplicaAssignmentForTopics(Lists.newArrayList(topic));
         if (existingPartitionsReplicaList.size() == 0)
             throw new AdminOperationException("The topic %s does not exist", topic);
 
@@ -107,7 +110,7 @@ public class AdminUtils {
             throw new AdminOperationException("The number of partitions for a topic can only be increased");
 
         // create the new partition replication list
-        List<Integer> brokerList = ZkUtils.getSortedBrokerList(zkClient);
+        List<Integer> brokerList = zkutil.getSortedBrokerList();
         Multimap<Integer, Integer> newPartitionReplicaList = (replicaAssignmentStr == null || replicaAssignmentStr == "") ? assignReplicasToBrokers(brokerList, partitionsToAdd, existingReplicaList.size(), Utils.head(existingReplicaList), existingPartitionsReplicaList.size()) : getManualReplicaAssignment(replicaAssignmentStr, Sets.newHashSet(brokerList), existingPartitionsReplicaList.size());
 
         // check if manual assignment has the right replication factor
@@ -162,7 +165,7 @@ public class AdminUtils {
 
     public static void deleteTopic(ZkClient zkClient, String topic) {
         zkClient.deleteRecursive(ZkUtils.getTopicPath(topic));
-        zkClient.deleteRecursive(ZkUtils.getTopicConfigPath(topic));
+        zkClient.deleteRecursive(zkutil.getTopicConfigPath(topic));
     }
 
     public static Boolean topicExists(ZkClient zkClient, String topic) {
@@ -170,7 +173,7 @@ public class AdminUtils {
     }
 
     public static void createTopic(ZkClient zkClient, String topic, int partitions, int replicationFactor, Properties topicConfig /*= new Properties*/) {
-        List<Integer> brokerList = ZkUtils.getSortedBrokerList(zkClient);
+        List<Integer> brokerList = zkutil.getSortedBrokerList();
         Multimap<Integer, Integer> replicaAssignment = assignReplicasToBrokers(brokerList, partitions, replicationFactor);
         createOrUpdateTopicPartitionAssignmentPathInZK(zkClient, topic, replicaAssignment, topicConfig, false);
     }
@@ -220,10 +223,10 @@ public class AdminUtils {
 
             if (!update) {
                 logger.info("Topic creation {}", jsonPartitionData);
-                ZkUtils.createPersistentPath(zkClient, zkPath, jsonPartitionData);
+                zkutil.createPersistentPath(zkPath, jsonPartitionData);
             } else {
                 logger.info("Topic update {}", jsonPartitionData);
-                ZkUtils.updatePersistentPath(zkClient, zkPath, jsonPartitionData);
+                zkutil.updatePersistentPath(zkPath, jsonPartitionData);
             }
             logger.debug("Updated path {} with {} for replica assignment", zkPath, jsonPartitionData);
         } catch (ZkNodeExistsException e) {
@@ -263,14 +266,14 @@ public class AdminUtils {
         map.put("version", 1);
         map.put("config", config);
 
-        ZkUtils.updatePersistentPath(zkClient, ZkUtils.getTopicConfigPath(topic), Json.encode(map));
+        zkutil.updatePersistentPath(zkutil.getTopicConfigPath(topic), Json.encode(map));
     }
 
     /**
      * Read the topic config (if any) from zk
      */
     public static Properties fetchTopicConfig(ZkClient zkClient, String topic) {
-        String str = zkClient.readData(ZkUtils.getTopicConfigPath(topic), true);
+        String str = zkClient.readData(zkutil.getTopicConfigPath(topic), true);
         Properties props = new Properties();
         if (str != null) {
             JSONObject map = Json.parseFull(str);
@@ -292,7 +295,7 @@ public class AdminUtils {
     }
 
     public static Map<String, Properties> fetchAllTopicConfigs(final ZkClient zkClient) {
-        return Utils.map(ZkUtils.getAllTopics(zkClient), new Function1<String, Tuple2<String, Properties>>() {
+        return Utils.map(zkutil.getAllTopics(), new Function1<String, Tuple2<String, Properties>>() {
             @Override
             public Tuple2<String, Properties> apply(String topic) {
                 return Tuple2.make(topic, fetchTopicConfig(zkClient, topic));
@@ -316,8 +319,8 @@ public class AdminUtils {
     }
 
     private static TopicMetadata fetchTopicMetadataFromZk(final String topic, final ZkClient zkClient, final Map<Integer, Broker> cachedBrokerInfo) {
-        if (ZkUtils.pathExists(zkClient, ZkUtils.getTopicPath(topic))) {
-            Multimap<Integer, Integer> topicPartitionAssignment = ZkUtils.getPartitionAssignmentForTopics(zkClient, Lists.newArrayList(topic)).get(topic);
+        if (zkutil.pathExists(zkutil.getTopicPath(topic))) {
+            Multimap<Integer, Integer> topicPartitionAssignment = zkutil.getPartitionAssignmentForTopics(Lists.newArrayList(topic)).get(topic);
             List<Tuple2<Integer, Collection<Integer>>> sortedPartitions = Utils.sortWith(Utils.toList(topicPartitionAssignment), new Comparator<Tuple2<Integer, Collection<Integer>>>() {
                 @Override
                 public int compare(Tuple2<Integer, Collection<Integer>> m1, Tuple2<Integer, Collection<Integer>> m2) {
@@ -329,8 +332,8 @@ public class AdminUtils {
                 public PartitionMetadata apply(Tuple2<Integer, Collection<Integer>> partitionMap) {
                     int partition = partitionMap._1;
                     Collection<Integer> replicas = partitionMap._2;
-                    List<Integer> inSyncReplicas = ZkUtils.getInSyncReplicasForPartition(zkClient, topic, partition);
-                    Integer leader = ZkUtils.getLeaderForPartition(zkClient, topic, partition);
+                    List<Integer> inSyncReplicas = zkutil.getInSyncReplicasForPartition(topic, partition);
+                    Integer leader = zkutil.getLeaderForPartition(topic, partition);
                     logger.debug("replicas = " + replicas + ", in sync replicas = " + inSyncReplicas + ", leader = " + leader);
 
                     Broker leaderInfo = null;
@@ -383,7 +386,9 @@ public class AdminUtils {
                         }
 
                         return new PartitionMetadata(partition, leaderInfo, replicaInfo, isrInfo, ErrorMapping.NoError);
-                    } catch (Throwable e) {
+                    } catch (
+
+                    Throwable e) {
                         logger.debug("Error while fetching metadata for partition [{},{}]", topic, partition, e);
                         return new PartitionMetadata(partition, leaderInfo, replicaInfo, isrInfo, ErrorMapping.codeFor(e.getClass()));
                     }
@@ -408,7 +413,7 @@ public class AdminUtils {
                     return brokerInfo; // return broker info from the cache
 
                 // fetch it from zookeeper
-                brokerInfo = ZkUtils.getBrokerInfo(zkClient, id);
+                brokerInfo = zkutil.getBrokerInfo(id);
                 if (brokerInfo != null) {
                     cachedBrokerInfo.put(id, brokerInfo);
                     return brokerInfo;

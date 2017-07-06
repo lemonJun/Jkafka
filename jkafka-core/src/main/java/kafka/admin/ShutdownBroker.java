@@ -24,6 +24,7 @@ import kafka.utils.CommandLineUtils;
 import kafka.utils.Json;
 import kafka.utils.ZKStringSerializer;
 import kafka.utils.ZkUtils;
+import kafka.xend.GuiceDI;
 
 public class ShutdownBroker {
     static class ShutdownParams {
@@ -42,8 +43,8 @@ public class ShutdownBroker {
         ZkClient zkClient = null;
         try {
             zkClient = new ZkClient(params.zkConnect, 30000, 30000, ZKStringSerializer.instance);
-            int controllerBrokerId = ZkUtils.getController(zkClient);
-            String controllerInfo = ZkUtils.readDataMaybeNull(zkClient, ZkUtils.BrokerIdsPath + "/" + controllerBrokerId)._1;
+            int controllerBrokerId = GuiceDI.getInstance(ZkUtils.class).getController();
+            String controllerInfo = GuiceDI.getInstance(ZkUtils.class).readDataMaybeNull(ZkUtils.BrokerIdsPath + "/" + controllerBrokerId)._1;
             if (controllerInfo == null) {
                 throw new BrokerNotAvailableException("Broker id %d does not exist", controllerBrokerId);
             }

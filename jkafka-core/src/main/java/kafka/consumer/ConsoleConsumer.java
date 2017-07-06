@@ -29,6 +29,7 @@ import kafka.utils.Utils;
 import kafka.utils.VerifiableProperties;
 import kafka.utils.ZKStringSerializer;
 import kafka.utils.ZkUtils;
+import kafka.xend.GuiceDI;
 
 /**
  * Consumer that dumps messages out to standard out.
@@ -112,7 +113,7 @@ public class ConsoleConsumer {
         final ConsumerConnector connector = Consumer.create(config);
 
         if (options.has(resetBeginningOpt))
-            ZkUtils.maybeDeletePath(options.valueOf(zkConnectOpt), "/consumers/" + options.valueOf(groupIdOpt));
+            GuiceDI.getInstance(ZkUtils.class).maybeDeletePath(options.valueOf(zkConnectOpt), "/consumers/" + options.valueOf(groupIdOpt));
 
         Runtime.getRuntime().addShutdownHook(new Thread() {
             @Override
@@ -120,7 +121,7 @@ public class ConsoleConsumer {
                 connector.shutdown();
                 // if there is no group specified then avoid polluting zookeeper with persistent group data, this is a hack
                 if (!options.has(groupIdOpt))
-                    ZkUtils.maybeDeletePath(options.valueOf(zkConnectOpt), "/consumers/" + options.valueOf(groupIdOpt));
+                    GuiceDI.getInstance(ZkUtils.class).maybeDeletePath(options.valueOf(zkConnectOpt), "/consumers/" + options.valueOf(groupIdOpt));
             }
         });
 

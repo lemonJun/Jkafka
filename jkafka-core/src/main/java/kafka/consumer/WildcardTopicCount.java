@@ -9,15 +9,14 @@ import org.I0Itec.zkclient.ZkClient;
 import com.google.common.collect.Maps;
 
 import kafka.utils.ZkUtils;
+import kafka.xend.GuiceDI;
 
 public class WildcardTopicCount extends TopicCount {
-    public final ZkClient zkClient;
     public final String consumerIdString;
     public final TopicFilter topicFilter;
     public final int numStreams;
 
     public WildcardTopicCount(ZkClient zkClient, String consumerIdString, TopicFilter topicFilter, int numStreams) {
-        this.zkClient = zkClient;
         this.consumerIdString = consumerIdString;
         this.topicFilter = topicFilter;
         this.numStreams = numStreams;
@@ -25,7 +24,7 @@ public class WildcardTopicCount extends TopicCount {
 
     @Override
     public Map<String, Set<String>> getConsumerThreadIdsPerTopic() {
-        List<String> children = ZkUtils.getChildrenParentMayNotExist(zkClient, ZkUtils.BrokerTopicsPath);
+        List<String> children = GuiceDI.getInstance(ZkUtils.class).getChildrenParentMayNotExist(ZkUtils.BrokerTopicsPath);
 
         Map<String, Integer> topicCountMap = Maps.newHashMap();
         if (children != null) {

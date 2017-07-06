@@ -128,7 +128,7 @@ public class ZkUtils {
         return TopicConfigPath + "/" + topic;
     }
 
-    public int getController(ZkClient zkClient) {
+    public int getController() {
         String controller = readDataMaybeNull(ControllerPath)._1;
         if (controller != null)
             return KafkaControllers.parseControllerId(controller);
@@ -569,7 +569,7 @@ public class ZkUtils {
         return path.substring(path.lastIndexOf('/') + 1);
     }
 
-    public Cluster getCluster(ZkClient zkClient) {
+    public Cluster getCluster() {
         Cluster cluster = new Cluster();
         List<String> nodes = getChildrenParentMayNotExist(BrokerIdsPath);
         for (String node : nodes) {
@@ -656,7 +656,7 @@ public class ZkUtils {
         return ret;
     }
 
-    public Multimap<String, Integer> getPartitionsForTopics(ZkClient zkClient, List<String> topics) {
+    public Multimap<String, Integer> getPartitionsForTopics(List<String> topics) {
         Map<String, Multimap<Integer, Integer>> partitionAssignmentForTopics = getPartitionAssignmentForTopics(topics);
 
         Multimap<String, Integer> ret = HashMultimap.create();
@@ -832,7 +832,7 @@ public class ZkUtils {
         return getChildren(dirs.consumerRegistryDir());
     }
 
-    public Multimap<String, String> getConsumersPerTopic(ZkClient zkClient, String group) {
+    public Multimap<String, String> getConsumersPerTopic(String group) {
         ZKGroupDirs dirs = new ZKGroupDirs(group);
         List<String> consumers = getChildrenParentMayNotExist(dirs.consumerRegistryDir());
         Multimap<String, String> consumersPerTopicMap = HashMultimap.create();

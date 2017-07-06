@@ -17,6 +17,7 @@
 	<modules>
 		<module>jkafka-core</module>
 		<module>jkafka-client</module>
+		<module>jkafka-console</module>
 	</modules>
 
 	<properties>

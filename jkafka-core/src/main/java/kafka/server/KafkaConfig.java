@@ -92,7 +92,7 @@ public class KafkaConfig {
 
         /* hostname of broker. If this is set, it will only bind to this address. If this is not set,
          * it will bind to all interfaces */
-        hostName = props.getString("host.name", null);
+        hostName = props.getString("host.name", "localhost");
 
         /* hostname to publish to ZooKeeper for clients to use. In IaaS environments, this may
          * need to be different from the interface to which the broker binds. If this is not set,

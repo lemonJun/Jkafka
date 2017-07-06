@@ -1,6 +1,8 @@
 package kafka.server;
 
 import java.io.File;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -8,6 +10,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.I0Itec.zkclient.exception.ZkNodeExistsException;
 import org.apache.log4j.PropertyConfigurator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +18,7 @@ import org.slf4j.LoggerFactory;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
+import kafka.cluster.Broker;
 import kafka.controller.KafkaController;
 import kafka.coordinator.GroupCoordinator;
 import kafka.log.CleanerConfig;
@@ -106,6 +110,8 @@ public class KafkaServer {
             /** 启动zookeeper */
             initZk();
             GuiceDI.getInstance(ZkUtils.class).setupCommonPaths();
+            GuiceDI.getInstance(ZkUtils.class).registerBrokerInZk(config.brokerId, config.hostName, config.port, //
+                            6000, 0);
 
             /** 启动日志管理器 */
             logManager = createLogManager(null);

@@ -31,6 +31,7 @@ import kafka.utils.Predicate2;
 import kafka.utils.Tuple3;
 import kafka.utils.Utils;
 import kafka.utils.ZkUtils;
+import kafka.xend.GuiceDI;
 
 /**
  * This class represents the state machine for replicas. It defines the states that a replica can be in, and
@@ -53,7 +54,6 @@ public class ReplicaStateMachine {
 
         controllerContext = controller.controllerContext;
         controllerId = controller.config.brokerId;
-        zkClient = controllerContext.zkClient;
         brokerRequestBatch = new ControllerBrokerRequestBatch(controller.controllerContext, new Callable3<Integer, RequestOrResponse, Callable1<RequestOrResponse>>() {
             @Override
             public void apply(Integer integer, RequestOrResponse requestOrResponse, Callable1<RequestOrResponse> requestOrResponseCallable1) {
@@ -143,7 +143,7 @@ public class ReplicaStateMachine {
                 case NewReplica:
                     assertValidPreviousStates(topic, partition, replicaId, Lists.newArrayList(ReplicaState.NonExistentReplica), targetState);
                     // start replica as a follower to the current leader for its partition
-                    LeaderIsrAndControllerEpoch leaderIsrAndControllerEpoch = ZkUtils.getLeaderIsrAndEpochForPartition(zkClient, topic, partition);
+                    LeaderIsrAndControllerEpoch leaderIsrAndControllerEpoch = GuiceDI.getInstance(ZkUtils.class).getLeaderIsrAndEpochForPartition(topic, partition);
                     if (leaderIsrAndControllerEpoch != null) {
                         if (leaderIsrAndControllerEpoch.leaderAndIsr.leader == replicaId)
                             throw new StateChangeFailedException(String.format("Replica %d for partition %s cannot be moved to NewReplica", replicaId, topicAndPartition) + "state as it is being requested to become leader");
@@ -318,7 +318,7 @@ public class ReplicaStateMachine {
                                 List<Broker> newBrokerInfo = Utils.mapList(newBrokerIds, new Function1<Integer, Broker>() {
                                     @Override
                                     public Broker apply(Integer _) {
-                                        return ZkUtils.getBrokerInfo(zkClient, _);
+                                        return GuiceDI.getInstance(ZkUtils.class).getBrokerInfo(_);
                                     }
                                 });
 
@@ -335,7 +335,7 @@ public class ReplicaStateMachine {
                                 controllerContext.liveBrokers(Sets.newHashSet(Utils.filter(Utils.mapList(curBrokerIds, new Function1<Integer, Broker>() {
                                     @Override
                                     public Broker apply(Integer _) {
-                                        return ZkUtils.getBrokerInfo(zkClient, _);
+                                        return GuiceDI.getInstance(ZkUtils.class).getBrokerInfo(_);
                                     }
                                 }), new Predicate<Broker>() {
                                     @Override

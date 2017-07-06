@@ -1,9 +1,5 @@
 package kafka.controller;
 
-import static kafka.utils.ZkUtils.getAllReplicasOnBroker;
-import static kafka.utils.ZkUtils.getLeaderAndIsrForPartition;
-import static kafka.utils.ZkUtils.getPartitionsAssignedToBroker;
-
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -53,21 +49,22 @@ import kafka.utils.Predicate2;
 import kafka.utils.Tuple2;
 import kafka.utils.Utils;
 import kafka.utils.ZkUtils;
+import kafka.xend.GuiceDI;
 
 public class KafkaController extends KafkaMetricsGroup implements KafkaControllerMBean {
     public KafkaConfig config;
-    public ZkClient zkClient;
+    //    public ZkClient zkClient;
+    public ZkUtils zkUtil;
 
-    public KafkaController(KafkaConfig config, ZkClient zkClient) {
+    public KafkaController(KafkaConfig config) {
         this.config = config;
-        this.zkClient = zkClient;
-
+        this.zkUtil = GuiceDI.getInstance(ZkUtils.class);
         init();
     }
 
     private void init() {
         logger = LoggerFactory.getLogger(KafkaController.class + "[Controller " + config.brokerId + "]: ");
-        controllerContext = new ControllerContext(zkClient, config.zkSessionTimeoutMs);
+        controllerContext = new ControllerContext(zkUtil, config.zkSessionTimeoutMs);
         controllerElector = new ZookeeperLeaderElector(controllerContext, ZkUtils.ControllerPath, new Callable0() {
             @Override
             public void apply() {
@@ -183,11 +180,11 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
 
             Map<TopicAndPartition, Integer> allPartitionsAndReplicationFactorOnBroker;
             synchronized (controllerContext.controllerLock) {
-                allPartitionsAndReplicationFactorOnBroker = Utils.map(getPartitionsAssignedToBroker(zkClient, Lists.newArrayList(controllerContext.allTopics), id), new Function1<Tuple2<String, Integer>, Tuple2<TopicAndPartition, Integer>>() {
+                allPartitionsAndReplicationFactorOnBroker = Utils.map(zkUtil.getPartitionsAssignedToBroker(Lists.newArrayList(controllerContext.allTopics), id), new Function1<Tuple2<String, Integer>, Tuple2<TopicAndPartition, Integer>>() {
                     @Override
-                    public Tuple2<TopicAndPartition, Integer> apply(Tuple2<String, Integer> _) {
-                        String topic = _._1;
-                        int partition = _._2;
+                    public Tuple2<TopicAndPartition, Integer> apply(Tuple2<String, Integer> tuple) {
+                        String topic = tuple._1;
+                        int partition = tuple._2;
                         TopicAndPartition topicAndPartition = new TopicAndPartition(topic, partition);
 
                         return Tuple2.make(topicAndPartition, controllerContext.partitionReplicaAssignment.get(topicAndPartition).size());
@@ -196,6 +193,7 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
             }
 
             Utils.foreach(allPartitionsAndReplicationFactorOnBroker, new Callable2<TopicAndPartition, Integer>() {
+
                 @Override
                 public void apply(TopicAndPartition topicAndPartition, Integer replicationFactor) {
                     // Move leadership serially to relinquish lock.
@@ -260,7 +258,7 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
         if (isRunning) {
             logger.info("Broker {} starting become controller state transition", config.brokerId);
             // increment the controller epoch
-            incrementControllerEpoch(zkClient);
+            incrementControllerEpoch();
             // before reading source of truth from zookeeper, register the listeners to get broker/topic callbacks
             registerReassignedPartitionsListener();
             registerPreferredReplicaElectionListener();
@@ -327,7 +325,7 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
         sendUpdateMetadataRequest(newBrokersSet);
         // the very first thing to do when a new broker comes up is send it the entire list of partitions that it is
         // supposed to host. Based on that the broker starts the high watermark threads for the input list of partitions
-        replicaStateMachine.handleStateChanges(getAllReplicasOnBroker(zkClient, Lists.newArrayList(controllerContext.allTopics), Lists.newArrayList(newBrokersSet)), ReplicaState.OnlineReplica);
+        replicaStateMachine.handleStateChanges(zkUtil.getAllReplicasOnBroker(Lists.newArrayList(controllerContext.allTopics), Lists.newArrayList(newBrokersSet)), ReplicaState.OnlineReplica);
         // when a new broker comes up, the controller needs to trigger leader election for all new and offline partitions
         // to see if these brokers can become leaders for some/all of those
         partitionStateMachine.triggerOnlinePartitionStateChange();
@@ -337,8 +335,8 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
             public boolean apply(Map.Entry<TopicAndPartition, ReassignedPartitionsContext> input) {
                 return Utils.exists(input.getValue().newReplicas, new Function1<Integer, Boolean>() {
                     @Override
-                    public Boolean apply(Integer _) {
-                        return newBrokersSet.contains(_);
+                    public Boolean apply(Integer value) {
+                        return newBrokersSet.contains(value);
                     }
                 });
             }
@@ -388,7 +386,7 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
         // trigger OnlinePartition state changes for offline or new partitions
         partitionStateMachine.triggerOnlinePartitionStateChange();
         // handle dead replicas
-        replicaStateMachine.handleStateChanges(getAllReplicasOnBroker(zkClient, Lists.newArrayList(controllerContext.allTopics), deadBrokers), ReplicaState.OfflineReplica);
+        replicaStateMachine.handleStateChanges(zkUtil.getAllReplicasOnBroker(Lists.newArrayList(controllerContext.allTopics), deadBrokers), ReplicaState.OfflineReplica);
     }
 
     /**
@@ -494,7 +492,7 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
         ReassignedPartitionsIsrChangeListener isrChangeListener = new ReassignedPartitionsIsrChangeListener(this, topic, partition, Sets.newHashSet(reassignedReplicas));
         reassignedPartitionContext.isrChangeListener = isrChangeListener;
         // register listener on the leader and isr path to wait until they catch up with the current leader
-        zkClient.subscribeDataChanges(ZkUtils.getTopicPartitionLeaderAndIsrPath(topic, partition), isrChangeListener);
+        zkUtil.getZkClient().subscribeDataChanges(zkUtil.getTopicPartitionLeaderAndIsrPath(topic, partition), isrChangeListener);
     }
 
     public void initiateReassignReplicasForTopicPartition(TopicAndPartition topicAndPartition, ReassignedPartitionsContext reassignedPartitionContext) {
@@ -591,10 +589,10 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
         controllerContext.controllerChannelManager.sendRequest(brokerId, request, callback);
     }
 
-    public void incrementControllerEpoch(ZkClient zkClient) {
+    public void incrementControllerEpoch() {
         try {
             int newControllerEpoch = controllerContext.epoch + 1;
-            Tuple2<Boolean, Integer> result = ZkUtils.conditionalUpdatePersistentPathIfExists(zkClient, ZkUtils.ControllerEpochPath, newControllerEpoch + "", controllerContext.epochZkVersion);
+            Tuple2<Boolean, Integer> result = zkUtil.conditionalUpdatePersistentPathIfExists(ZkUtils.ControllerEpochPath, newControllerEpoch + "", controllerContext.epochZkVersion);
             boolean updateSucceeded = result._1;
             Integer newVersion = result._2;
             if (!updateSucceeded)
@@ -608,7 +606,7 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
             // the following call can still fail if another controller gets elected between checking if the path exists and
             // trying to create the controller epoch path
             try {
-                zkClient.createPersistent(ZkUtils.ControllerEpochPath, KafkaControllers.InitialControllerEpoch + "");
+                zkUtil.createPersistentPath(ZkUtils.ControllerEpochPath, KafkaControllers.InitialControllerEpoch + "");
                 controllerContext.epoch = KafkaControllers.InitialControllerEpoch;
                 controllerContext.epochZkVersion = KafkaControllers.InitialControllerEpochZkVersion;
             } catch (ZkNodeExistsException e1) {
@@ -624,13 +622,13 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
     }
 
     private void registerSessionExpirationListener() {
-        zkClient.subscribeStateChanges(new SessionExpirationListener());
+        zkUtil.getZkClient().subscribeStateChanges(new SessionExpirationListener());
     }
 
     private void initializeControllerContext() {
-        controllerContext.liveBrokers(Sets.newHashSet(ZkUtils.getAllBrokersInCluster(zkClient)));
-        controllerContext.allTopics = ZkUtils.getAllTopics(zkClient);
-        controllerContext.partitionReplicaAssignment = ZkUtils.getReplicaAssignmentForTopics(zkClient, Lists.newArrayList(controllerContext.allTopics));
+        controllerContext.liveBrokers(Sets.newHashSet(zkUtil.getAllBrokersInCluster()));
+        controllerContext.allTopics = zkUtil.getAllTopics();
+        controllerContext.partitionReplicaAssignment = zkUtil.getReplicaAssignmentForTopics(Lists.newArrayList(controllerContext.allTopics));
         controllerContext.partitionLeadershipInfo = Maps.newHashMap();
         controllerContext.shuttingDownBrokerIds = Sets.newHashSet();
         // update the leader and isr cache for all existing partitions from Zookeeper
@@ -644,7 +642,7 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
 
     private void initializeAndMaybeTriggerPartitionReassignment() {
         // read the partitions being reassigned from zookeeper path /admin/reassign_partitions
-        Map<TopicAndPartition, ReassignedPartitionsContext> partitionsBeingReassigned = ZkUtils.getPartitionsBeingReassigned(zkClient);
+        Map<TopicAndPartition, ReassignedPartitionsContext> partitionsBeingReassigned = zkUtil.getPartitionsBeingReassigned();
         // check if they are already completed
         Set<TopicAndPartition> reassignedPartitions = Utils.filter(partitionsBeingReassigned, new Predicate2<TopicAndPartition, ReassignedPartitionsContext>() {
             @Override
@@ -678,7 +676,7 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
 
     private void initializeAndMaybeTriggerPreferredReplicaElection() {
         // read the partitions undergoing preferred replica election from zookeeper path
-        Set<TopicAndPartition> partitionsUndergoingPreferredReplicaElection = ZkUtils.getPartitionsUndergoingPreferredReplicaElection(zkClient);
+        Set<TopicAndPartition> partitionsUndergoingPreferredReplicaElection = zkUtil.getPartitionsUndergoingPreferredReplicaElection();
         // check if they are already completed
         List<TopicAndPartition> partitionsThatCompletedPreferredReplicaElection = Utils.filter(partitionsUndergoingPreferredReplicaElection, new Predicate<TopicAndPartition>() {
             @Override
@@ -701,7 +699,7 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
     }
 
     private void updateLeaderAndIsrCache() {
-        Map<TopicAndPartition, LeaderIsrAndControllerEpoch> leaderAndIsrInfo = ZkUtils.getPartitionLeaderAndIsrForTopics(zkClient, controllerContext.partitionReplicaAssignment.keySet());
+        Map<TopicAndPartition, LeaderIsrAndControllerEpoch> leaderAndIsrInfo = zkUtil.getPartitionLeaderAndIsrForTopics(controllerContext.partitionReplicaAssignment.keySet());
         Utils.foreach(leaderAndIsrInfo, new Callable2<TopicAndPartition, LeaderIsrAndControllerEpoch>() {
             @Override
             public void apply(TopicAndPartition topicPartition, LeaderIsrAndControllerEpoch leaderIsrAndControllerEpoch) {
@@ -711,7 +709,7 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
     }
 
     private boolean areReplicasInIsr(String topic, int partition, Collection<Integer> replicas) {
-        final LeaderAndIsr leaderAndIsr = getLeaderAndIsrForPartition(zkClient, topic, partition);
+        final LeaderAndIsr leaderAndIsr = zkUtil.getLeaderAndIsrForPartition(topic, partition);
         if (leaderAndIsr != null) {
             List<Integer> replicasNotInIsr = Utils.filter(replicas, new Predicate<Integer>() {
                 @Override
@@ -809,31 +807,31 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
     }
 
     private void registerReassignedPartitionsListener() {
-        zkClient.subscribeDataChanges(ZkUtils.ReassignPartitionsPath, new PartitionsReassignedListener(this));
+        zkUtil.getZkClient().subscribeDataChanges(ZkUtils.ReassignPartitionsPath, new PartitionsReassignedListener(this));
     }
 
     private void registerPreferredReplicaElectionListener() {
-        zkClient.subscribeDataChanges(ZkUtils.PreferredReplicaLeaderElectionPath, new PreferredReplicaElectionListener(this));
+        zkUtil.getZkClient().subscribeDataChanges(ZkUtils.PreferredReplicaLeaderElectionPath, new PreferredReplicaElectionListener(this));
     }
 
     private void registerControllerChangedListener() {
-        zkClient.subscribeDataChanges(ZkUtils.ControllerEpochPath, new ControllerEpochListener(this));
+        zkUtil.getZkClient().subscribeDataChanges(ZkUtils.ControllerEpochPath, new ControllerEpochListener(this));
     }
 
     public void removePartitionFromReassignedPartitions(TopicAndPartition topicAndPartition) {
         if (controllerContext.partitionsBeingReassigned.get(topicAndPartition) != null) {
             // stop watching the ISR changes for this partition
-            zkClient.unsubscribeDataChanges(ZkUtils.getTopicPartitionLeaderAndIsrPath(topicAndPartition.topic, topicAndPartition.partition), controllerContext.partitionsBeingReassigned.get(topicAndPartition).isrChangeListener);
+            zkUtil.getZkClient().unsubscribeDataChanges(zkUtil.getTopicPartitionLeaderAndIsrPath(topicAndPartition.topic, topicAndPartition.partition), controllerContext.partitionsBeingReassigned.get(topicAndPartition).isrChangeListener);
         }
         // read the current list of reassigned partitions from zookeeper
-        Map<TopicAndPartition, ReassignedPartitionsContext> partitionsBeingReassigned = ZkUtils.getPartitionsBeingReassigned(zkClient);
+        Map<TopicAndPartition, ReassignedPartitionsContext> partitionsBeingReassigned = zkUtil.getPartitionsBeingReassigned();
         // remove this partition from that list
         Map<TopicAndPartition, ReassignedPartitionsContext> updatedPartitionsBeingReassigned = Utils.minus(partitionsBeingReassigned, topicAndPartition);
         // write the new list to zookeeper
-        ZkUtils.updatePartitionReassignmentData(zkClient, Utils.mapValues(updatedPartitionsBeingReassigned, new Function1<ReassignedPartitionsContext, Collection<Integer>>() {
+        zkUtil.updatePartitionReassignmentData(Utils.mapValues(updatedPartitionsBeingReassigned, new Function1<ReassignedPartitionsContext, Collection<Integer>>() {
             @Override
-            public Collection<Integer> apply(ReassignedPartitionsContext _) {
-                return _.newReplicas;
+            public Collection<Integer> apply(ReassignedPartitionsContext cont) {
+                return cont.newReplicas;
             }
         }));
         // update the cache. NO-OP if the partition's reassignment was never started
@@ -849,7 +847,7 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
                     return Tuple2.make(_1.partition + "", _2);
                 }
             }));
-            ZkUtils.updatePersistentPath(zkClient, zkPath, jsonPartitionMap);
+            zkUtil.updatePersistentPath(zkPath, jsonPartitionMap);
             logger.debug("Updated path {} with {} for replica assignment", zkPath, jsonPartitionMap);
         } catch (ZkNoNodeException e) {
             throw new IllegalStateException(String.format("Topic %s doesn't exist", topicAndPartition.topic));
@@ -869,7 +867,7 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
                 logger.warn("Partition {} failed to complete preferred replica leader election. Leader is {}", partition, currentLeader);
             }
         }
-        ZkUtils.deletePath(zkClient, ZkUtils.PreferredReplicaLeaderElectionPath);
+        zkUtil.deletePath(ZkUtils.PreferredReplicaLeaderElectionPath);
         controllerContext.partitionsUndergoingPreferredReplicaElection.removeAll(partitionsToBeRemoved);
     }
 
@@ -925,7 +923,7 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
         boolean zkWriteCompleteOrUnnecessary = false;
         while (!zkWriteCompleteOrUnnecessary) {
             // refresh leader and isr from zookeeper again
-            LeaderIsrAndControllerEpoch leaderIsrAndEpoch = ZkUtils.getLeaderIsrAndEpochForPartition(zkClient, topic, partition);
+            LeaderIsrAndControllerEpoch leaderIsrAndEpoch = zkUtil.getLeaderIsrAndEpochForPartition(topic, partition);
             if (leaderIsrAndEpoch == null) {
                 logger.warn("Cannot remove replica {} from ISR of {} - leaderAndIsr is empty.", replicaId, topicAndPartition);
                 zkWriteCompleteOrUnnecessary = true;
@@ -945,7 +943,7 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
                         }
                     }), leaderAndIsr.zkVersion + 1);
                     // update the new leadership decision in zookeeper or retry
-                    Tuple2<Boolean, Integer> booleanIntegerTuple2 = ZkUtils.conditionalUpdatePersistentPath(zkClient, ZkUtils.getTopicPartitionLeaderAndIsrPath(topic, partition), ZkUtils.leaderAndIsrZkData(newLeaderAndIsr, epoch()), leaderAndIsr.zkVersion);
+                    Tuple2<Boolean, Integer> booleanIntegerTuple2 = zkUtil.conditionalUpdatePersistentPath(zkUtil.getTopicPartitionLeaderAndIsrPath(topic, partition), ZkUtils.leaderAndIsrZkData(newLeaderAndIsr, epoch()), leaderAndIsr.zkVersion);
                     Boolean updateSucceeded = booleanIntegerTuple2._1;
                     Integer newVersion = booleanIntegerTuple2._2;
                     newLeaderAndIsr.zkVersion = newVersion;
@@ -981,7 +979,7 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
         boolean zkWriteCompleteOrUnnecessary = false;
         while (!zkWriteCompleteOrUnnecessary) {
             // refresh leader and isr from zookeeper again
-            LeaderIsrAndControllerEpoch leaderIsrAndEpoch = ZkUtils.getLeaderIsrAndEpochForPartition(zkClient, topic, partition);
+            LeaderIsrAndControllerEpoch leaderIsrAndEpoch = zkUtil.getLeaderIsrAndEpochForPartition(topic, partition);
 
             if (leaderIsrAndEpoch == null) {
                 throw new IllegalStateException(String.format("Cannot update leader epoch for partition %s as leaderAndIsr path is empty. " + "This could mean we somehow tried to reassign a partition that doesn't exist", topicAndPartition));
@@ -995,7 +993,7 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
             // assigned replica list
             LeaderAndIsr newLeaderAndIsr = new LeaderAndIsr(leaderAndIsr.leader, leaderAndIsr.leaderEpoch + 1, leaderAndIsr.isr, leaderAndIsr.zkVersion + 1);
             // update the new leadership decision in zookeeper or retry
-            Tuple2<Boolean, Integer> booleanIntegerTuple2 = ZkUtils.conditionalUpdatePersistentPath(zkClient, ZkUtils.getTopicPartitionLeaderAndIsrPath(topic, partition), ZkUtils.leaderAndIsrZkData(newLeaderAndIsr, epoch()), leaderAndIsr.zkVersion);
+            Tuple2<Boolean, Integer> booleanIntegerTuple2 = zkUtil.conditionalUpdatePersistentPath(zkUtil.getTopicPartitionLeaderAndIsrPath(topic, partition), ZkUtils.leaderAndIsrZkData(newLeaderAndIsr, epoch()), leaderAndIsr.zkVersion);
             Boolean updateSucceeded = booleanIntegerTuple2._1;
             Integer newVersion = booleanIntegerTuple2._2;
             newLeaderAndIsr.zkVersion = newVersion;
@@ -1003,7 +1001,6 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
             if (updateSucceeded)
                 logger.info("Updated leader epoch for partition {} to {}", topicAndPartition, newLeaderAndIsr.leaderEpoch);
             zkWriteCompleteOrUnnecessary = updateSucceeded;
-
         }
 
         return finalLeaderIsrAndControllerEpoch;
@@ -1060,6 +1057,7 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
         logger.debug("preferred replicas by broker {}", preferredReplicasForTopicsByBrokers);
         // for each broker, check if a preferred replica election needs to be triggered
         Utils.foreach(preferredReplicasForTopicsByBrokers, new Callable2<Integer, Map<TopicAndPartition, Collection<Integer>>>() {
+
             @Override
             public void apply(final Integer leaderBroker, Map<TopicAndPartition, Collection<Integer>> topicAndPartitionsForBroker) {
                 double imbalanceRatio = 0;
@@ -1088,6 +1086,7 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
                             String zkPath = ZkUtils.PreferredReplicaLeaderElectionPath;
                             final List<Map<String, Object>> partitionsList = Lists.newArrayList();
                             Utils.foreach(topicsNotInPreferredReplica.keySet(), new Callable1<TopicAndPartition>() {
+
                                 @Override
                                 public void apply(TopicAndPartition e) {
                                     Map<String, Object> map = Maps.newHashMap();
@@ -1104,10 +1103,10 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
 
                             String jsonData = Json.encode(jsonMap);
                             try {
-                                ZkUtils.createPersistentPath(zkClient, zkPath, jsonData);
+                                zkUtil.createPersistentPath(zkPath, jsonData);
                                 logger.info("Created preferred replica election path with {}", jsonData);
                             } catch (ZkNodeExistsException e) {
-                                Set<TopicAndPartition> partitionsUndergoingPreferredReplicaElection = PreferredReplicaLeaderElectionCommand.parsePreferredReplicaElectionData(ZkUtils.readData(zkClient, zkPath)._1);
+                                Set<TopicAndPartition> partitionsUndergoingPreferredReplicaElection = PreferredReplicaLeaderElectionCommand.parsePreferredReplicaElectionData(zkUtil.readData(zkPath)._1);
                                 logger.error("Preferred replica leader election currently in progress for " + "{}. Aborting operation", partitionsUndergoingPreferredReplicaElection);
                             } catch (Throwable e) {
                                 logger.error("Error while trying to auto rebalance topics {}", topicsNotInPreferredReplica.keySet());
@@ -1137,8 +1136,6 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
 
         PartitionsReassignedListener(KafkaController controller) {
             this.controller = controller;
-
-            zkClient = controller.controllerContext.zkClient;
             controllerContext = controller.controllerContext;
             logger = LoggerFactory.getLogger(PartitionsReassignedListener.class + "[PartitionsReassignedListener on " + controller.config.brokerId + "]: ");
         }
@@ -1188,7 +1185,6 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
             this.partition = partition;
             this.reassignedReplicas = reassignedReplicas;
 
-            zkClient = controller.controllerContext.zkClient;
             controllerContext = controller.controllerContext;
             logger = LoggerFactory.getLogger(ReassignedPartitionsIsrChangeListener.class + "[ReassignedPartitionsIsrChangeListener on controller " + controller.config.brokerId + "]: ");
         }
@@ -1208,7 +1204,7 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
                     ReassignedPartitionsContext reassignedPartitionContext = controllerContext.partitionsBeingReassigned.get(topicAndPartition);
                     if (reassignedPartitionContext != null) {
                         // need to re-read leader and isr from zookeeper since the zkclient callback doesn't return the Stat object
-                        LeaderAndIsr leaderAndIsr = ZkUtils.getLeaderAndIsrForPartition(zkClient, topic, partition);
+                        LeaderAndIsr leaderAndIsr = GuiceDI.getInstance(ZkUtils.class).getLeaderAndIsrForPartition(topic, partition);
                         if (leaderAndIsr != null) { // check if new replicas have joined ISR
                             Set<Integer> caughtUpReplicas = Utils.and(reassignedReplicas, leaderAndIsr.isr);
                             if (caughtUpReplicas.equals(reassignedReplicas)) {
@@ -1244,7 +1240,6 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
         public PreferredReplicaElectionListener(KafkaController controller) {
             this.controller = controller;
 
-            zkClient = controller.controllerContext.zkClient;
             controllerContext = controller.controllerContext;
             logger = LoggerFactory.getLogger(PreferredReplicaElectionListener.class + "[PreferredReplicaElectionListener on " + controller.config.brokerId + "]: ");
 
@@ -1305,8 +1300,8 @@ public class KafkaController extends KafkaMetricsGroup implements KafkaControlle
 
         private void readControllerEpochFromZookeeper() {
             // initialize the controller epoch and zk version by reading from zookeeper
-            if (ZkUtils.pathExists(controllerContext.zkClient, ZkUtils.ControllerEpochPath)) {
-                Tuple2<String, Stat> epochData = ZkUtils.readData(controllerContext.zkClient, ZkUtils.ControllerEpochPath);
+            if (GuiceDI.getInstance(ZkUtils.class).pathExists(ZkUtils.ControllerEpochPath)) {
+                Tuple2<String, Stat> epochData = GuiceDI.getInstance(ZkUtils.class).readData(ZkUtils.ControllerEpochPath);
                 controllerContext.epoch = Integer.parseInt(epochData._1);
                 controllerContext.epochZkVersion = epochData._2.getVersion();
                 logger.info("Initialized controller epoch to {} and zk version {}", controllerContext.epoch, controllerContext.epochZkVersion);

@@ -1,16 +1,20 @@
 package kafka.server;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.I0Itec.zkclient.ZkClient;
-import org.apache.kafka.common.security.JaasUtils;
+import org.apache.log4j.PropertyConfigurator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,6 +31,7 @@ import kafka.utils.KafkaScheduler;
 import kafka.utils.SystemTime;
 import kafka.utils.Time;
 import kafka.utils.ZkUtils;
+import kafka.xend.GuiceDI;
 
 /**
  * 该类是kafka broker运行控制的核心入口类，它采用门面模式设计的
@@ -67,18 +72,24 @@ public class KafkaServer {
     private BrokerState brokerState;
 
     public KafkaServer(KafkaConfig config) {
-        this.config = config;
-        metricConfig = new MetricConfig().samples(config.metricNumSamples).timeWindow(config.metricSampleWindowMs, TimeUnit.MILLISECONDS);
-        kafkaScheduler = new KafkaScheduler(10);
-        kafkaMetricsTime = new SystemTime();
-        reporters = new ArrayList<MetricsReporter>();
-        //        reporters.add(new JmxReporter(jmxPrefix));
-        brokerState = null;
+        try {
+            PropertyConfigurator.configure("config/log4j.properties");
+            GuiceDI.init();
+
+            this.config = new KafkaConfig(loadProperty("config/server.properties"));
+            metricConfig = new MetricConfig().samples(config.metricNumSamples).timeWindow(config.metricSampleWindowMs, TimeUnit.MILLISECONDS);
+            kafkaScheduler = new KafkaScheduler(10);
+            kafkaMetricsTime = new SystemTime();
+            reporters = new ArrayList<MetricsReporter>();
+            brokerState = null;
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.exit(-1);
+        }
     }
 
     public void startup() {
         logger.info("starting");
-
         if (isShuttingDown.get()) {
             throw new IllegalStateException("Kafka server is still shutting down, cannot re-start!");
         }
@@ -95,8 +106,8 @@ public class KafkaServer {
             kafkaScheduler.startup();
 
             /** 启动zookeeper */
-            zkUtils = initZk();
-            zkUtils.setupCommonPaths();
+            initZk();
+            GuiceDI.getInstance(ZkUtils.class).setupCommonPaths();
 
             /** 启动日志管理器 */
             logManager = createLogManager(zkUtils.zkClient, null);
@@ -106,16 +117,16 @@ public class KafkaServer {
             this.logIdent = "[Kafka Server " + config.brokerId + "],";
 
             socketServer = new SocketServer(config, metrics, kafkaMetricsTime);
-            socketServer.startup(); 
-            
-            KafkaController kafkaController = new KafkaController(config, zkUtils, brokerState, kafkaMetricsTime, metrics, threadNamePrefix);
-            kafkaController.startup();
+            socketServer.startup();
+
+            //            KafkaController kafkaController = new KafkaController(config, zkUtils, brokerState, kafkaMetricsTime, metrics, threadNamePrefix);
+            //            kafkaController.startup();
             //   
             //   replicaManager = new ReplicaManager();
             //   replicaManager.startup();
             //   
-            //   kafkaController = new KafkaController(config, zkUtils);
-            //   kafkaController.startup();
+            kafkaController = new KafkaController(config);
+            kafkaController.startup();
 
             //   apis = new KafkaApis();
 
@@ -141,7 +152,7 @@ public class KafkaServer {
         System.out.println("关闭kafka...");
     }
 
-    private ZkUtils initZk() {
+    private void initZk() {
         logger.info("Connecting to zookeeper on ");
 
         String chroot = config.zkConnect.indexOf("/") > 0 ? config.zkConnect.substring(config.zkConnect.indexOf("/")) : "";
@@ -150,14 +161,12 @@ public class KafkaServer {
         //            //        throw new java.lang.SecurityException("zkEnableSecureAcls is true, but the verification of the JAAS login file failed.");
         //        }
 
+        ZkUtils zkUtils = GuiceDI.getInstance(ZkUtils.class);
+        zkUtils.init(config.zkConnect, config.zkSessionTimeoutMs, 6000, false);
         if (chroot.length() > 1) {
-            String zkConnForChrootCreation = config.zkConnect.substring(0, config.zkConnect.indexOf("/"));
-            ZkUtils zkClientForChrootCreation = ZkUtils.getInstance(config.zkConnect, config.zkSessionTimeoutMs, 3000, false);
-            zkClientForChrootCreation.makeSurePersistentPathExists(chroot);
+            zkUtils.makeSurePersistentPathExists(chroot);
             //   logger.info("Created zookeeper path " + chroot);
         }
-        ZkUtils zkUtils = ZkUtils.getInstance(config.zkConnect, config.zkSessionTimeoutMs, 6000, false);
-        return zkUtils;
     }
 
     public LogManager createLogManager(ZkClient zkClient, BrokerState brokerState) {
@@ -165,6 +174,25 @@ public class KafkaServer {
         logDirs.add(new File("D:/kafka-logs"));
         Map map = new HashMap<>();
         return new LogManager(logDirs, map, null, null, 3000L, 3000L, 6000L, kafkaScheduler, new SystemTime());
+    }
+
+    private Properties loadProperty(String filePath) throws Exception {
+        FileInputStream fin = null;
+        Properties pro = new Properties();
+        try {
+            fin = new FileInputStream(filePath);
+        } catch (FileNotFoundException e) {
+            throw e;
+        }
+        try {
+            if (fin != null) {
+                pro.load(fin);
+                fin.close();
+            }
+        } catch (IOException e) {
+            throw e;
+        }
+        return pro;
     }
 
 }

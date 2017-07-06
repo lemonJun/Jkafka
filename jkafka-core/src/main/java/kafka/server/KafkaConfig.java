@@ -5,6 +5,8 @@ import static com.google.common.base.Preconditions.checkState;
 import java.util.List;
 import java.util.Properties;
 
+import javax.inject.Singleton;
+
 import kafka.consumer.ConsumerConfigs;
 import kafka.message.MessageSets;
 import kafka.message.Messages;
@@ -17,6 +19,7 @@ import kafka.utils.ZKConfig;
  * 
  * Configuration settings for the kafka server
  */
+@Singleton
 public class KafkaConfig extends ZKConfig {
     public VerifiableProperties props;
 
@@ -24,7 +27,7 @@ public class KafkaConfig extends ZKConfig {
         this(new VerifiableProperties(originalProps));
         props.verify();
     }
-
+    
     public static KafkaConfig fromProps(Properties originalProps) {
         KafkaConfig config = new KafkaConfig(new VerifiableProperties(originalProps));
         return config;
@@ -46,7 +49,6 @@ public class KafkaConfig extends ZKConfig {
 
         brokerId = props.getIntInRange("broker.id", Range.make(0, Integer.MAX_VALUE));
         messageMaxBytes = props.getIntInRange("message.max.bytes", 1000000 + MessageSets.LogOverhead, Range.make(0, Integer.MAX_VALUE));
-        numNetworkThreads = props.getIntInRange("num.network.threads", 3, Range.make(1, Integer.MAX_VALUE));
 
         /* the number of network threads that the server uses for handling network requests */
         numNetworkThreads = props.getIntInRange("num.network.threads", 3, Range.make(1, Integer.MAX_VALUE));

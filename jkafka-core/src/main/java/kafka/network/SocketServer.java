@@ -3,6 +3,8 @@ package kafka.network;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import kafka.metrics.Metrics;
+import kafka.server.KafkaConfig;
 import kafka.utils.SystemTime;
 import kafka.utils.Time;
 import kafka.utils.Utils;
@@ -22,6 +24,11 @@ public class SocketServer {
     public int sendBufferSize;
     public int recvBufferSize;
     public int maxRequestSize;
+
+    public SocketServer(KafkaConfig config, Metrics metrics, Time kafkaMetricsTime) {
+        this(config.brokerId, "", config.port, config.numNetworkThreads, config.queuedMaxRequests, //
+                        config.socketSendBufferBytes, config.socketReceiveBufferBytes, Integer.MAX_VALUE);
+    }
 
     public SocketServer(int brokerId, String host, int port, int numProcessorThreads, int maxQueuedRequests, int sendBufferSize, int recvBufferSize) {
         this(brokerId, host, port, numProcessorThreads, maxQueuedRequests, sendBufferSize, recvBufferSize, Integer.MAX_VALUE);
@@ -57,7 +64,7 @@ public class SocketServer {
             processors[i] = new Processor(i, time, maxRequestSize, requestChannel);
             Utils.newThread(String.format("kafka-processor-%d-%d", port, i), processors[i], false).start();
         }
-        
+
         // register the processor threads for notification of responses
         requestChannel.addResponseListener(new ResponseListener() {
             @Override

@@ -8,7 +8,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.I0Itec.zkclient.IZkChildListener;
 import org.I0Itec.zkclient.IZkDataListener;
-import org.I0Itec.zkclient.ZkClient;
 import org.I0Itec.zkclient.exception.ZkNodeExistsException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,6 +30,7 @@ import kafka.utils.Callable3;
 import kafka.utils.Tuple2;
 import kafka.utils.Utils;
 import kafka.utils.ZkUtils;
+import kafka.xend.GuiceDI;
 
 /**
  * This class represents the state machine for partitions. It defines the states that a partition can be in, and
@@ -52,7 +52,6 @@ public class PartitionStateMachine {
 
         controllerContext = controller.controllerContext;
         controllerId = controller.config.brokerId;
-        zkClient = controllerContext.zkClient;
         brokerRequestBatch = new ControllerBrokerRequestBatch(controller.controllerContext, new Callable3<Integer, RequestOrResponse, Callable1<RequestOrResponse>>() {
             @Override
             public void apply(Integer integer, RequestOrResponse requestOrResponse, Callable1<RequestOrResponse> requestOrResponseCallable1) {
@@ -66,7 +65,6 @@ public class PartitionStateMachine {
 
     private ControllerContext controllerContext;
     private int controllerId;
-    private ZkClient zkClient;
     public Map<TopicAndPartition, PartitionState> partitionState = Maps.newHashMap();
     public ControllerBrokerRequestBatch brokerRequestBatch;
     private AtomicBoolean hasStarted = new AtomicBoolean(false);
@@ -118,7 +116,6 @@ public class PartitionStateMachine {
             brokerRequestBatch.sendRequestsToBrokers(controller.epoch(), controllerContext.correlationId.getAndIncrement());
         } catch (Throwable e) {
             logger.error("Error while moving some partitions to the online state", e);
-            // TODO: It is not enough to bail out and log an error, it is important to trigger leader election for those partitions
         }
     }
 
@@ -146,7 +143,6 @@ public class PartitionStateMachine {
             brokerRequestBatch.sendRequestsToBrokers(controller.epoch(), controllerContext.correlationId.getAndIncrement());
         } catch (Throwable e) {
             logger.error("Error while moving some partitions to {} state", targetState, e);
-            // TODO: It is not enough to bail out and log an error, it is important to trigger state changes for those partitions
         }
     }
 
@@ -254,7 +250,7 @@ public class PartitionStateMachine {
      * @param partition The partition whose replica assignment is to be cached
      */
     private void assignReplicasToPartitions(String topic, int partition) {
-        List<Integer> assignedReplicas = ZkUtils.getReplicasForPartition(controllerContext.zkClient, topic, partition);
+        List<Integer> assignedReplicas = GuiceDI.getInstance(ZkUtils.class).getReplicasForPartition(topic, partition);
         controllerContext.partitionReplicaAssignment.putAll(new TopicAndPartition(topic, partition), assignedReplicas);
     }
 
@@ -286,7 +282,7 @@ public class PartitionStateMachine {
                 LeaderIsrAndControllerEpoch leaderIsrAndControllerEpoch = new LeaderIsrAndControllerEpoch(new LeaderAndIsr(leader, liveAssignedReplicas), controller.epoch());
                 logger.debug("Initializing leader and isr for partition {} to {}", topicAndPartition, leaderIsrAndControllerEpoch);
                 try {
-                    ZkUtils.createPersistentPath(controllerContext.zkClient, ZkUtils.getTopicPartitionLeaderAndIsrPath(topicAndPartition.topic, topicAndPartition.partition), ZkUtils.leaderAndIsrZkData(leaderIsrAndControllerEpoch.leaderAndIsr, controller.epoch()));
+                    GuiceDI.getInstance(ZkUtils.class).createPersistentPath(GuiceDI.getInstance(ZkUtils.class).getTopicPartitionLeaderAndIsrPath(topicAndPartition.topic, topicAndPartition.partition), GuiceDI.getInstance(ZkUtils.class).leaderAndIsrZkData(leaderIsrAndControllerEpoch.leaderAndIsr, controller.epoch()));
                     // NOTE: the above write can fail only if the current controller lost its zk session and the new controller
                     // took over and initialized this partition. This can happen if the current controller went into a long
                     // GC pause
@@ -294,7 +290,7 @@ public class PartitionStateMachine {
                     brokerRequestBatch.addLeaderAndIsrRequestForBrokers(liveAssignedReplicas, topicAndPartition.topic, topicAndPartition.partition, leaderIsrAndControllerEpoch, Sets.newHashSet(replicaAssignment));
                 } catch (ZkNodeExistsException e) {
                     // read the controller epoch
-                    LeaderIsrAndControllerEpoch leaderIsrAndEpoch = ZkUtils.getLeaderIsrAndEpochForPartition(zkClient, topicAndPartition.topic, topicAndPartition.partition);
+                    LeaderIsrAndControllerEpoch leaderIsrAndEpoch = GuiceDI.getInstance(ZkUtils.class).getLeaderIsrAndEpochForPartition(topicAndPartition.topic, topicAndPartition.partition);
                     failMsg = String.format("encountered error while changing partition %s's state from New to Online since LeaderAndIsr path already " + "exists with value %s and controller epoch %d", topicAndPartition, leaderIsrAndEpoch.leaderAndIsr.toString(), leaderIsrAndEpoch.controllerEpoch);
                     stateChangeLogger.error(String.format("Controller %d epoch %d ", controllerId, controller.epoch()) + failMsg);
                     throw new StateChangeFailedException(failMsg);
@@ -332,7 +328,7 @@ public class PartitionStateMachine {
                 LeaderAndIsr leaderAndIsr = tuple2._1;
                 List<Integer> replicas = tuple2._2;
 
-                Tuple2<Boolean, Integer> ret = ZkUtils.conditionalUpdatePersistentPath(zkClient, ZkUtils.getTopicPartitionLeaderAndIsrPath(topic, partition), ZkUtils.leaderAndIsrZkData(leaderAndIsr, controller.epoch()), currentLeaderAndIsr.zkVersion);
+                Tuple2<Boolean, Integer> ret = GuiceDI.getInstance(ZkUtils.class).conditionalUpdatePersistentPath(GuiceDI.getInstance(ZkUtils.class).getTopicPartitionLeaderAndIsrPath(topic, partition), GuiceDI.getInstance(ZkUtils.class).leaderAndIsrZkData(leaderAndIsr, controller.epoch()), currentLeaderAndIsr.zkVersion);
                 Boolean updateSucceeded = ret._1;
                 Integer newVersion = ret._2;
                 newLeaderAndIsr = leaderAndIsr;
@@ -360,16 +356,16 @@ public class PartitionStateMachine {
     }
 
     private void registerTopicChangeListener() {
-        zkClient.subscribeChildChanges(ZkUtils.BrokerTopicsPath, new TopicChangeListener());
+        GuiceDI.getInstance(ZkUtils.class).getZkClient().subscribeChildChanges(ZkUtils.BrokerTopicsPath, new TopicChangeListener());
     }
 
     public void registerPartitionChangeListener(String topic) {
-        zkClient.subscribeDataChanges(ZkUtils.getTopicPath(topic), new AddPartitionsListener(topic));
+        GuiceDI.getInstance(ZkUtils.class).getZkClient().subscribeDataChanges(ZkUtils.getTopicPath(topic), new AddPartitionsListener(topic));
     }
 
     private LeaderIsrAndControllerEpoch getLeaderIsrAndEpochOrThrowException(String topic, int partition) {
         TopicAndPartition topicAndPartition = new TopicAndPartition(topic, partition);
-        LeaderIsrAndControllerEpoch currentLeaderIsrAndEpoch = ZkUtils.getLeaderIsrAndEpochForPartition(zkClient, topic, partition);
+        LeaderIsrAndControllerEpoch currentLeaderIsrAndEpoch = GuiceDI.getInstance(ZkUtils.class).getLeaderIsrAndEpochForPartition(topic, partition);
         if (currentLeaderIsrAndEpoch != null)
             return currentLeaderIsrAndEpoch;
 
@@ -399,7 +395,7 @@ public class PartitionStateMachine {
                         //        val deletedPartitionReplicaAssignment = replicaAssignment.filter(p => deletedTopics.contains(p._1._1))
                         controllerContext.allTopics = currentChildren;
 
-                        Multimap<TopicAndPartition, Integer> addedPartitionReplicaAssignment = ZkUtils.getReplicaAssignmentForTopics(zkClient, Lists.newArrayList(newTopics));
+                        Multimap<TopicAndPartition, Integer> addedPartitionReplicaAssignment = GuiceDI.getInstance(ZkUtils.class).getReplicaAssignmentForTopics(Lists.newArrayList(newTopics));
                         controllerContext.partitionReplicaAssignment = Utils.filter(controllerContext.partitionReplicaAssignment, new Predicate<Map.Entry<TopicAndPartition, Integer>>() {
                             @Override
                             public boolean apply(Map.Entry<TopicAndPartition, Integer> p) {
@@ -433,7 +429,7 @@ public class PartitionStateMachine {
             synchronized (controllerContext.controllerLock) {
                 try {
                     logger.info("Add Partition triggered {} for path {}", data.toString(), dataPath);
-                    Multimap<TopicAndPartition, Integer> partitionReplicaAssignment = ZkUtils.getReplicaAssignmentForTopics(zkClient, Lists.newArrayList(topic));
+                    Multimap<TopicAndPartition, Integer> partitionReplicaAssignment = GuiceDI.getInstance(ZkUtils.class).getReplicaAssignmentForTopics(Lists.newArrayList(topic));
                     Multimap<TopicAndPartition, Integer> partitionsRemainingToBeAdded = Utils.filter(partitionReplicaAssignment, new Predicate<Map.Entry<TopicAndPartition, Integer>>() {
                         @Override
                         public boolean apply(Map.Entry<TopicAndPartition, Integer> p) {

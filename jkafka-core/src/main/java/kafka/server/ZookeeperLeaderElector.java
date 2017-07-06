@@ -1,8 +1,5 @@
 package kafka.server;
 
-import static kafka.utils.ZkUtils.deletePath;
-import static kafka.utils.ZkUtils.readDataMaybeNull;
-
 import org.I0Itec.zkclient.IZkDataListener;
 import org.I0Itec.zkclient.exception.ZkNodeExistsException;
 import org.slf4j.Logger;
@@ -17,6 +14,7 @@ import kafka.utils.Callable0;
 import kafka.utils.Function2;
 import kafka.utils.SystemTime;
 import kafka.utils.ZkUtils;
+import kafka.xend.GuiceDI;
 
 /**
  * This class handles zookeeper based leader election based on an ephemeral path. The election module does not handle
@@ -29,16 +27,17 @@ public class ZookeeperLeaderElector implements LeaderElector {
     public String electionPath;
     public Callable0 onBecomingLeader;
     public int brokerId;
+    public ZkUtils zkutil;
 
     public ZookeeperLeaderElector(ControllerContext controllerContext, String electionPath, Callable0 onBecomingLeader, int brokerId) {
         this.controllerContext = controllerContext;
         this.electionPath = electionPath;
         this.onBecomingLeader = onBecomingLeader;
         this.brokerId = brokerId;
-
+        zkutil = GuiceDI.getInstance(ZkUtils.class);
         index = electionPath.lastIndexOf("/");
         if (index > 0)
-            zmakeSurePersistentPathExists(electionPath.substring(0, index));
+            controllerContext.getZkUtil().makeSurePersistentPathExists(electionPath.substring(0, index));
     }
 
     public int leaderId = -1;
@@ -51,7 +50,7 @@ public class ZookeeperLeaderElector implements LeaderElector {
     @Override
     public void startup() {
         synchronized (controllerContext.controllerLock) {
-            controllerContext.zkClient.subscribeDataChanges(electionPath, leaderChangeListener);
+            zkutil.getZkClient().subscribeDataChanges(electionPath, leaderChangeListener);
             elect();
         }
     }
@@ -67,7 +66,7 @@ public class ZookeeperLeaderElector implements LeaderElector {
         String electString = JSON.toJSONString(ImmutableMap.of("version", 1, "brokerid", brokerId, "timestamp", timestamp));
 
         try {
-            ZkUtils.createEphemeralPathExpectConflictHandleZKBug(controllerContext.zkClient, electionPath, electString, brokerId, new Function2<String, Object, Boolean>() {
+            zkutil.createEphemeralPathExpectConflictHandleZKBug(electionPath, electString, brokerId, new Function2<String, Object, Boolean>() {
                 @Override
                 public Boolean apply(String controllerString, Object leaderId) {
                     return KafkaControllers.parseControllerId(controllerString) == (int) leaderId;
@@ -78,7 +77,7 @@ public class ZookeeperLeaderElector implements LeaderElector {
             onBecomingLeader.apply();
         } catch (ZkNodeExistsException e) {
             // If someone else has written the path, then
-            String controller = readDataMaybeNull(controllerContext.zkClient, electionPath)._1;
+            String controller = zkutil.readDataMaybeNull(electionPath)._1;
             if (controller != null) {
                 leaderId = KafkaControllers.parseControllerId(controller);
             } else {
@@ -103,7 +102,7 @@ public class ZookeeperLeaderElector implements LeaderElector {
 
     public void resign() {
         leaderId = -1;
-        deletePath(controllerContext.zkClient, electionPath);
+        zkutil.deletePath(electionPath);
     }
 
     /**

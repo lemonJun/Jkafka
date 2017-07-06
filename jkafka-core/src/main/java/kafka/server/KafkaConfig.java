@@ -2,10 +2,15 @@ package kafka.server;
 
 import static com.google.common.base.Preconditions.checkState;
 
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.util.List;
 import java.util.Properties;
 
 import javax.inject.Singleton;
+
+import com.google.inject.Inject;
 
 import kafka.consumer.ConsumerConfigs;
 import kafka.message.MessageSets;
@@ -13,24 +18,24 @@ import kafka.message.Messages;
 import kafka.utils.Range;
 import kafka.utils.Utils;
 import kafka.utils.VerifiableProperties;
-import kafka.utils.ZKConfig;
 
 /**
  * 
  * Configuration settings for the kafka server
  */
 @Singleton
-public class KafkaConfig extends ZKConfig {
+public class KafkaConfig {
     public VerifiableProperties props;
 
-    public KafkaConfig(Properties originalProps) {
-        this(new VerifiableProperties(originalProps));
-        props.verify();
+    @Inject
+    private KafkaConfig() {
+
     }
-    
-    public static KafkaConfig fromProps(Properties originalProps) {
-        KafkaConfig config = new KafkaConfig(new VerifiableProperties(originalProps));
-        return config;
+
+    public void init() throws Exception {
+        props = new VerifiableProperties(loadProperty("config/server.properties"));
+        props.verify();
+        init(props);
     }
 
     private long getLogRetentionTimeMillis() {
@@ -43,8 +48,26 @@ public class KafkaConfig extends ZKConfig {
         }
     }
 
-    public KafkaConfig(VerifiableProperties props) {
-        super(props);
+    private Properties loadProperty(String filePath) throws Exception {
+        FileInputStream fin = null;
+        Properties pro = new Properties();
+        try {
+            fin = new FileInputStream(filePath);
+        } catch (FileNotFoundException e) {
+            throw e;
+        }
+        try {
+            if (fin != null) {
+                pro.load(fin);
+                fin.close();
+            }
+        } catch (IOException e) {
+            throw e;
+        }
+        return pro;
+    }
+
+    public void init(VerifiableProperties props) {
         this.props = props;
 
         brokerId = props.getIntInRange("broker.id", Range.make(0, Integer.MAX_VALUE));
@@ -243,6 +266,11 @@ public class KafkaConfig extends ZKConfig {
 
         /* the maximum size for a metadata entry associated with an offset commit */
         offsetMetadataMaxSize = props.getInt("offset.metadata.max.bytes", 1024);
+
+        zkConnect = props.getString("zookeeper.connect");
+        zkSessionTimeoutMs = props.getInt("zookeeper.session.timeout.ms", 6000);
+        zkConnectionTimeoutMs = props.getInt("zookeeper.connection.timeout.ms", zkSessionTimeoutMs);
+        zkSyncTimeMs = props.getInt("zookeeper.sync.time.ms", 2000);
     }
 
     /**
@@ -462,4 +490,21 @@ public class KafkaConfig extends ZKConfig {
 
     /* the maximum size for a metadata entry associated with an offset commit */
     public int offsetMetadataMaxSize;
+
+    public String zkConnect;
+
+    /**
+     * zookeeper session timeout
+     */
+    public int zkSessionTimeoutMs;
+
+    /**
+     * the max time that the client waits to establish a connection to zookeeper
+     */
+    public int zkConnectionTimeoutMs;
+
+    /**
+     * how far a ZK follower can be behind a ZK leader
+     */
+    public int zkSyncTimeMs;
 }

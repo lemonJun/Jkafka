@@ -1,27 +1,24 @@
 package kafka.server;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.I0Itec.zkclient.ZkClient;
 import org.apache.log4j.PropertyConfigurator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 
 import kafka.controller.KafkaController;
 import kafka.coordinator.GroupCoordinator;
+import kafka.log.CleanerConfig;
+import kafka.log.LogConfig;
 import kafka.log.LogManager;
 import kafka.metrics.MetricConfig;
 import kafka.metrics.Metrics;
@@ -71,12 +68,13 @@ public class KafkaServer {
     private String threadNamePrefix;
     private BrokerState brokerState;
 
-    public KafkaServer(KafkaConfig config) {
+    public KafkaServer() {
         try {
             PropertyConfigurator.configure("config/log4j.properties");
             GuiceDI.init();
 
-            this.config = new KafkaConfig(loadProperty("config/server.properties"));
+            this.config = GuiceDI.getInstance(KafkaConfig.class);
+            config.init();
             metricConfig = new MetricConfig().samples(config.metricNumSamples).timeWindow(config.metricSampleWindowMs, TimeUnit.MILLISECONDS);
             kafkaScheduler = new KafkaScheduler(10);
             kafkaMetricsTime = new SystemTime();
@@ -88,7 +86,7 @@ public class KafkaServer {
         }
     }
 
-    public void startup() {
+    public void startup() throws Exception {
         logger.info("starting");
         if (isShuttingDown.get()) {
             throw new IllegalStateException("Kafka server is still shutting down, cannot re-start!");
@@ -110,7 +108,7 @@ public class KafkaServer {
             GuiceDI.getInstance(ZkUtils.class).setupCommonPaths();
 
             /** 启动日志管理器 */
-            logManager = createLogManager(zkUtils.zkClient, null);
+            logManager = createLogManager(null);
             logManager.startup();
             //   
 
@@ -125,7 +123,7 @@ public class KafkaServer {
             //   replicaManager = new ReplicaManager();
             //   replicaManager.startup();
             //   
-            kafkaController = new KafkaController(config);
+            kafkaController = new KafkaController();
             kafkaController.startup();
 
             //   apis = new KafkaApis();
@@ -169,30 +167,13 @@ public class KafkaServer {
         }
     }
 
-    public LogManager createLogManager(ZkClient zkClient, BrokerState brokerState) {
+    public LogManager createLogManager(BrokerState brokerState) {
         List<File> logDirs = Lists.newArrayList();
-        logDirs.add(new File("D:/kafka-logs"));
-        Map map = new HashMap<>();
-        return new LogManager(logDirs, map, null, null, 3000L, 3000L, 6000L, kafkaScheduler, new SystemTime());
-    }
-
-    private Properties loadProperty(String filePath) throws Exception {
-        FileInputStream fin = null;
-        Properties pro = new Properties();
-        try {
-            fin = new FileInputStream(filePath);
-        } catch (FileNotFoundException e) {
-            throw e;
+        for (String str : config.logDirs) {
+            logDirs.add(new File(str));
         }
-        try {
-            if (fin != null) {
-                pro.load(fin);
-                fin.close();
-            }
-        } catch (IOException e) {
-            throw e;
-        }
-        return pro;
+        Map<String, LogConfig> map = Maps.newHashMap();
+        return new LogManager(logDirs, map, GuiceDI.getInstance(LogConfig.class), GuiceDI.getInstance(CleanerConfig.class), 3000L, 3000L, 6000L, kafkaScheduler, new SystemTime());
     }
 
 }

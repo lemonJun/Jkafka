@@ -37,7 +37,7 @@ public class ZookeeperLeaderElector implements LeaderElector {
         zkutil = GuiceDI.getInstance(ZkUtils.class);
         index = electionPath.lastIndexOf("/");
         if (index > 0)
-            controllerContext.getZkUtil().makeSurePersistentPathExists(electionPath.substring(0, index));
+            zkutil.makeSurePersistentPathExists(electionPath.substring(0, index));
     }
 
     public int leaderId = -1;

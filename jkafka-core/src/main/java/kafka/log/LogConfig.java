@@ -2,8 +2,11 @@ package kafka.log;
 
 import java.util.Properties;
 
+import javax.inject.Singleton;
+
 import kafka.cluster.LogConfigs;
 
+@Singleton
 public class LogConfig implements Cloneable {
     public int segmentSize = 1024 * 1024;
     public long segmentMs = Long.MAX_VALUE;

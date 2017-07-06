@@ -7,7 +7,6 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.I0Itec.zkclient.IZkChildListener;
-import org.I0Itec.zkclient.ZkClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,7 +50,6 @@ public class ReplicaStateMachine {
 
     public ReplicaStateMachine(final KafkaController controller) {
         this.controller = controller;
-
         controllerContext = controller.controllerContext;
         controllerId = controller.config.brokerId;
         brokerRequestBatch = new ControllerBrokerRequestBatch(controller.controllerContext, new Callable3<Integer, RequestOrResponse, Callable1<RequestOrResponse>>() {
@@ -66,7 +64,6 @@ public class ReplicaStateMachine {
 
     private ControllerContext controllerContext;
     private int controllerId;
-    private ZkClient zkClient;
     public Map<Tuple3<String, Integer, Integer>, ReplicaState> replicaState = Maps.newHashMap();
     ControllerBrokerRequestBatch brokerRequestBatch;
     private AtomicBoolean hasStarted = new AtomicBoolean(false);
@@ -233,7 +230,7 @@ public class ReplicaStateMachine {
     }
 
     private void registerBrokerChangeListener() {
-        zkClient.subscribeChildChanges(ZkUtils.BrokerIdsPath, new BrokerChangeListener());
+        GuiceDI.getInstance(ZkUtils.class).getZkClient().subscribeChildChanges(ZkUtils.BrokerIdsPath, new BrokerChangeListener());
     }
 
     /**
@@ -241,17 +238,18 @@ public class ReplicaStateMachine {
      * in zookeeper
      */
     private void initializeReplicaState() {
-        for (Map.Entry<TopicAndPartition, Integer> entry : controllerContext.partitionReplicaAssignment.entries()) {
-            TopicAndPartition topicPartition = entry.getKey();
-            Integer replicaId = entry.getValue();
+        if (controllerContext != null)
+            for (Map.Entry<TopicAndPartition, Integer> entry : controllerContext.partitionReplicaAssignment.entries()) {
+                TopicAndPartition topicPartition = entry.getKey();
+                Integer replicaId = entry.getValue();
 
-            String topic = topicPartition.topic;
-            int partition = topicPartition.partition;
+                String topic = topicPartition.topic;
+                int partition = topicPartition.partition;
 
-            boolean contains = controllerContext.liveBrokerIds().contains(replicaId);
+                boolean contains = controllerContext.liveBrokerIds().contains(replicaId);
 
-            replicaState.put(Tuple3.make(topic, partition, replicaId), contains ? ReplicaState.OnlineReplica : ReplicaState.OfflineReplica);
-        }
+                replicaState.put(Tuple3.make(topic, partition, replicaId), contains ? ReplicaState.OnlineReplica : ReplicaState.OfflineReplica);
+            }
     }
 
     private Set<PartitionAndReplica> getAllReplicasOnBroker(final Set<String> topics, final Set<Integer> brokerIds) {

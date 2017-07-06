@@ -27,6 +27,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+import com.google.inject.Inject;
 
 import kafka.admin.AdminOperationException;
 import kafka.admin.PreferredReplicaLeaderElectionCommand;
@@ -75,6 +76,7 @@ public class ZkUtils {
     private static List<String> persistentZkPaths = new ArrayList<String>();
     private static List<ACL> DefaultAcls;
 
+    @Inject
     private ZkUtils() {
         persistentZkPaths.add(ConsumersPath);
         persistentZkPaths.add(BrokerIdsPath);

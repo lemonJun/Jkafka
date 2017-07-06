@@ -52,12 +52,10 @@ import kafka.utils.ZkUtils;
 import kafka.xend.GuiceDI;
 
 public class KafkaController extends KafkaMetricsGroup implements KafkaControllerMBean {
-    public KafkaConfig config;
-    //    public ZkClient zkClient;
+    public KafkaConfig config = GuiceDI.getInstance(KafkaConfig.class);
     public ZkUtils zkUtil;
 
-    public KafkaController(KafkaConfig config) {
-        this.config = config;
+    public KafkaController() {
         this.zkUtil = GuiceDI.getInstance(ZkUtils.class);
         init();
     }

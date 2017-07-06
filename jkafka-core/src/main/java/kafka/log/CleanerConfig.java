@@ -1,5 +1,8 @@
 package kafka.log;
 
+import javax.inject.Singleton;
+
+@Singleton
 public class CleanerConfig {
     public int numThreads = 1;
     public long dedupeBufferSize = 4 * 1024 * 1024L;
